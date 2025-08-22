@@ -13,3 +13,61 @@ datasource db {
   provider = "mysql"
   url      = env("DATABASE_URL")
 }
+
+enum Role {
+  user
+  admin
+}
+
+model User {
+  id            String          @id @default(cuid())
+  name          String?
+  username      String?         @unique
+  password      String?
+  email         String?         @unique
+  emailVerified DateTime?
+  image         String?
+  role          Role          @default(admin)
+  accounts      Account[]
+  
+  // Optional for WebAuthn support
+  
+ 
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+ 
+model Account {
+  id                       String  @id @default(cuid())
+  userId                   String  @unique
+  type                     String
+  provider                 String
+  providerAccountId        String
+  refresh_token            String? @db.Text
+  access_token             String? @db.Text
+  expires_at               Int?
+  token_type               String?
+  scope                    String?
+  id_token                 String? @db.Text
+  session_state            String?
+  refresh_token_expires_in Int?
+  user                     User?   @relation(fields: [userId], references: [id])
+ 
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+ 
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+ 
+
+ 
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+ 
+  @@unique([identifier, token])
+}
+ 
+// Optional for WebAuthn support

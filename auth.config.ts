@@ -1,6 +1,9 @@
 
+import { loginSchema } from "@/lib/zod";
 import type { NextAuthConfig } from "next-auth"
 import Credentials from "next-auth/providers/credentials"
+import { db } from "@/lib/db";
+import bcrypt from "bcryptjs";
 // Notice this is only an object, not a full Auth.js instance
 export default {
   providers: [Credentials({
@@ -8,16 +11,30 @@ export default {
       // e.g. domain, username, password, 2FA token, etc.
      
       authorize: async (credentials) => {
-        console.log({credentials});
-        if (credentials.email !== 'test@test.com') {
-            throw new Error('Credenciales inválidas');
+        const {data, success} = loginSchema.safeParse(credentials);
+
+        if (!success) {
+          throw new Error("Credenciales Inválidas");
+        }
+        //verificar si existe el usuario en la BD
+        const user = await db.user.findUnique({
+          where: {
+            email: data.email,
+          }
+
+        });
+        if (!user || !user.password) {
+          throw new Error("Usuario no encontrado");
         }
 
-        return {
-            id: '1',
-            name: 'Test User',
-            email: 'test@test.com',
+        //verificar si la contraseña es correcta
+        const isValid = await bcrypt.compare(data.password, user.password);
+
+        if (!isValid) {
+          throw new Error("Contraseña Incorrecta");
         }
+
+        return user;
       },
     }),],
-} satisfies NextAuthConfig
+} satisfies NextAuthConfig;

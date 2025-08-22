@@ -1,6 +1,6 @@
 'use client'
 
-import React from 'react'
+import React, { useState, useTransition } from 'react'
 import { z } from "zod"
 import { loginSchema } from '@/lib/zod'
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -19,9 +19,12 @@ import {
 import { Input } from "@/components/ui/input"
 
 import { loginAction } from '@/actions/auth-action'
+import { useRouter } from 'next/navigation'
 
 const FormLogin = () => {
-  
+  const [error, setError] = useState<string | null >(null);
+  const [isPending, startTransition] = useTransition();
+  const router = useRouter();
     // 1. Define your form.
   const form = useForm<z.infer<typeof loginSchema>>({
     resolver: zodResolver(loginSchema),
@@ -33,9 +36,19 @@ const FormLogin = () => {
 
   // 2. Define a submit handler.
   async function onSubmit(values: z.infer<typeof loginSchema>) {
+    setError(null);
     // Do something with the form values.
     // ✅ This will be type-safe and validated.
-    await loginAction(values);
+    startTransition(async () => {
+      const response =await loginAction(values);
+      if (response.error) {
+        setError(response.error);
+      } else{
+        router.push("/dashboard");
+      }
+
+    });
+    
   }
     
     return (
@@ -73,7 +86,15 @@ const FormLogin = () => {
             </FormItem>
           )}
         />
-        <Button type="submit">Iniciar Sesión</Button>
+        {
+          error && <FormMessage> {error} </FormMessage>
+        }
+        <Button 
+        type="submit" 
+        disabled = {isPending}
+        >
+          Iniciar Sesión
+          </Button>
       </form>
     </Form>
     </div>
