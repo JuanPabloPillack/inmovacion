@@ -24,7 +24,7 @@ model User {
   name          String?
   username      String?         @unique
   password      String?
-  email         String?         @unique
+  email         String         @unique
   emailVerified DateTime?
   image         String?
   role          Role          @default(admin)
@@ -63,11 +63,11 @@ model Account {
 
  
 model VerificationToken {
-  identifier String
+  identifier String @unique
   token      String
   expires    DateTime
  
-  @@unique([identifier, token])
+  @@id([identifier, token])
 }
  
 // Optional for WebAuthn support
