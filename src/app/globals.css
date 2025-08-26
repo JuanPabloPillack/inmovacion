@@ -1,2 +1,36 @@
 @import "tailwindcss";
 
+body {
+  @apply bg-gray-100 text-gray-800 font-sans;
+}
+
+/* Header */
+.main-header {
+  @apply bg-gray-700 flex items-center justify-between px-8 py-4;
+}
+
+.logo img {
+  @apply h-12 w-auto;
+}
+
+.menu ul {
+  @apply flex gap-8 list-none;
+}
+
+.menu a {
+  @apply text-white font-bold hover:underline;
+}
+
+/* Footer */
+.main-footer {
+  @apply bg-gray-700 text-white text-center py-4;
+}
+
+/* Botones de filtros */
+.filter-tag {
+  @apply bg-blue-400 text-white rounded-full px-4 py-1 font-medium flex items-center gap-2;
+}
+
+.filter-tag button {
+  @apply text-sm font-bold;
+}

@@ -1,12 +1,5 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
-  output   = "../src/generated/prisma"
 }
 
 datasource db {
@@ -14,253 +7,134 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-
-// Modelo Cliente: Almacena información de los clientes de la inmobiliaria
 model Cliente {
-  id_cliente          Int           @id @default(autoincrement())
-  apellido           String        @db.VarChar(50)
-  nombre             String        @db.VarChar(50)
-  documento          String        @db.VarChar(50)
-  correo_electronico String        @db.VarChar(150) @unique
-  telefono           String        @db.VarChar(20)
-  descripcion        String?       @db.VarChar(200)
-  cliente_tipo_cliente Cliente_Tipo_cliente[]
-  inmuebles          Inmueble[]
-  contratos          Contrato[]
-  cobranzas          Cobranza[]
-  rendiciones        Rendicion[]
-  historial          Historial[]   @relation("HistorialCliente")
-  @@index([nombre, apellido], name: "idx_cliente_nombre")
+  id_cliente   Int        @id @default(autoincrement())
+  nombre       String     @db.VarChar(100)
+  email        String?    @db.VarChar(100)
+  telefono     String?    @db.VarChar(50)
+  inmuebles    Inmueble[]
+  contratos    Contrato[]
+  cobranzas    Cobranza[]
+  pagos        Pago[]
+  historial    Historial[] @relation("HistorialCliente")
 }
 
-// Modelo Tipo_cliente: Almacena los tipos de clientes (por ejemplo, propietario, inquilino)
-model Tipo_cliente {
-  id_tipo_cliente    Int           @id @default(autoincrement())
-  nombre             String        @db.VarChar(50)
-  cliente_tipo_cliente Cliente_Tipo_cliente[]
-}
-
-// Modelo Rol: Almacena los roles de los usuarios del sistema
-model Rol {
-  id_rol             Int           @id @default(autoincrement())
-  nombre             String        @db.VarChar(50)
-  usuarios           Usuario[]
-}
-
-// Modelo Medio_pago: Almacena los medios de pago disponibles
-model Medio_pago {
-  id_medio_pago      Int           @id @default(autoincrement())
-  nombre             String        @db.VarChar(50)
-  cobranzas          Cobranza[]
-  pagos              Pago[]
-}
-
-// Modelo Provincia: Almacena las provincias
-model Provincia {
-  id_provincia       Int           @id @default(autoincrement())
-  nombre             String        @db.VarChar(50)
-  localidades        Localidad[]
-}
-
-// Modelo Tipo_inmueble: Almacena los tipos de inmuebles (por ejemplo, casa, departamento)
 model Tipo_inmueble {
-  id_tipo_inmueble   Int           @id @default(autoincrement())
-  nombre             String        @db.VarChar(50)
-  inmuebles          Inmueble[]
+  id_tipo_inmueble Int        @id @default(autoincrement())
+  nombre           String     @db.VarChar(100)
+  inmuebles        Inmueble[]
 }
 
-// Modelo Estado: Almacena los estados de los inmuebles (por ejemplo, disponible, vendido)
-model Estado {
-  id_estado          Int           @id @default(autoincrement())
-  nombre             String        @db.VarChar(50)
-  inmuebles          Inmueble[]
-}
-
-// Modelo Estado_rendicion: Almacena los estados de las rendiciones (por ejemplo, pendiente, aprobada)
-model Estado_rendicion {
-  id_estado_rendicion Int           @id @default(autoincrement())
-  nombre             String        @db.VarChar(50)
-  rendiciones        Rendicion[]
-}
-
-// Modelo Proveedor: Almacena información de los proveedores
-model Proveedor {
-  id_proveedor       Int           @id @default(autoincrement())
-  nombre             String        @db.VarChar(50)
-  apellido           String        @db.VarChar(50)
-  razon_social       String        @db.VarChar(150)
-  correo_electronico String        @db.VarChar(150) @unique
-  telefono           String        @db.VarChar(20)
-  pagos              Pago[]
-}
-
-// Modelo Cliente_Tipo_cliente: Relación muchos-a-muchos entre Cliente y Tipo_cliente
-model Cliente_Tipo_cliente {
-  id_cliente         Int
-  id_tipo_cliente    Int
-  cliente            Cliente       @relation(fields: [id_cliente], references: [id_cliente], onDelete: Cascade, onUpdate: Cascade)
-  tipo_cliente       Tipo_cliente   @relation(fields: [id_tipo_cliente], references: [id_tipo_cliente], onDelete: Cascade, onUpdate: Cascade)
-  @@id([id_cliente, id_tipo_cliente])
-}
-
-// Modelo Usuario: Almacena información de los usuarios del sistema (solo administradores)
-model Usuario {
-  id_usuario         Int           @id @default(autoincrement())
-  id_rol             Int
-  rol                Rol           @relation(fields: [id_rol], references: [id_rol], onDelete: Restrict, onUpdate: Cascade)
-  nombre             String        @db.VarChar(50)
-  correo_electronico String        @db.VarChar(150) @unique
-  telefono           String?       @db.VarChar(20)
-  contrasena         String        @db.VarChar(255)
-  fecha_registro     DateTime      @db.Date
-  contratos          Contrato[]
-  cobranzas          Cobranza[]
-  pagos              Pago[]
-  historial          Historial[]
-}
-
-// Modelo Localidad: Almacena las localidades dentro de una provincia
 model Localidad {
-  id_localidad       Int           @id @default(autoincrement())
-  id_provincia       Int
-  provincia          Provincia     @relation(fields: [id_provincia], references: [id_provincia], onDelete: Restrict, onUpdate: Cascade)
-  nombre             String        @db.VarChar(50)
-  barrios            Barrio[]
+  id_localidad Int     @id @default(autoincrement())
+  nombre       String  @db.VarChar(100)
+  barrios      Barrio[]
 }
 
-// Modelo Barrio: Almacena los barrios dentro de una localidad
 model Barrio {
-  id_barrio          Int           @id @default(autoincrement())
-  id_localidad       Int
-  localidad          Localidad     @relation(fields: [id_localidad], references: [id_localidad], onDelete: Restrict, onUpdate: Cascade)
-  nombre             String        @db.VarChar(50)
-  ubicaciones        Ubicacion[]
+  id_barrio    Int       @id @default(autoincrement())
+  nombre       String    @db.VarChar(100)
+  id_localidad Int
+  localidad    Localidad @relation(fields: [id_localidad], references: [id_localidad], onDelete: Restrict, onUpdate: Cascade)
+  ubicaciones  Ubicacion[]
 }
 
-// Modelo Ubicacion: Almacena las direcciones específicas de los inmuebles
 model Ubicacion {
-  id_ubicacion       Int           @id @default(autoincrement())
-  id_barrio          Int
-  barrio             Barrio        @relation(fields: [id_barrio], references: [id_barrio], onDelete: Restrict, onUpdate: Cascade)
-  nombre_calle       String        @db.VarChar(100)
-  numero             Int
-  inmuebles          Inmueble[]
+  id_ubicacion Int      @id @default(autoincrement())
+  direccion    String   @db.VarChar(200)
+  ciudad       String?  @db.VarChar(100)
+  provincia    String?  @db.VarChar(100)
+  id_barrio    Int?
+  barrio       Barrio?  @relation(fields: [id_barrio], references: [id_barrio], onDelete: Restrict, onUpdate: Cascade)
+  inmuebles    Inmueble[]
 }
 
-// Modelo Inmueble: Almacena información de los inmuebles
+model Estado {
+  id_estado Int        @id @default(autoincrement())
+  nombre    String     @db.VarChar(100)
+  inmuebles Inmueble[]
+}
+
 model Inmueble {
-  id_inmueble        Int           @id @default(autoincrement())
-  id_tipo_inmueble   Int
-  tipo_inmueble      Tipo_inmueble @relation(fields: [id_tipo_inmueble], references: [id_tipo_inmueble], onDelete: Restrict, onUpdate: Cascade)
-  id_ubicacion       Int
-  ubicacion          Ubicacion     @relation(fields: [id_ubicacion], references: [id_ubicacion], onDelete: Restrict, onUpdate: Cascade)
-  id_estado          Int
-  estado             Estado        @relation(fields: [id_estado], references: [id_estado], onDelete: Restrict, onUpdate: Cascade)
-  id_cliente         Int
-  cliente            Cliente       @relation(fields: [id_cliente], references: [id_cliente], onDelete: Restrict, onUpdate: Cascade)
-  superficie_total   Decimal       @db.Decimal(10, 2)
-  superficie_cubierta Decimal?      @db.Decimal(10, 2)
-  cantidad_ambientes Int?
-  antiguedad         Int?
-  precio             Decimal       @db.Decimal(10, 2)
-  foto               String        @db.VarChar(200)
-  detalles           String?       @db.VarChar(255)
-  contratos          Contrato[]
-  cobranzas          Cobranza[]
-  rendiciones        Rendicion[]
-  pagos              Pago[]
-  historial          Historial[]   @relation("HistorialInmueble")
+  id_inmueble         Int               @id @default(autoincrement())
+  id_tipo_inmueble    Int
+  tipo_inmueble       Tipo_inmueble     @relation(fields: [id_tipo_inmueble], references: [id_tipo_inmueble], onDelete: Restrict, onUpdate: Cascade)
+  id_ubicacion        Int
+  ubicacion           Ubicacion         @relation(fields: [id_ubicacion], references: [id_ubicacion], onDelete: Restrict, onUpdate: Cascade)
+  id_estado           Int
+  estado              Estado            @relation(fields: [id_estado], references: [id_estado], onDelete: Restrict, onUpdate: Cascade)
+  id_cliente          Int
+  cliente             Cliente           @relation(fields: [id_cliente], references: [id_cliente], onDelete: Restrict, onUpdate: Cascade)
+  superficie_total    Decimal           @db.Decimal(10, 2)
+  superficie_cubierta Decimal?          @db.Decimal(10, 2)
+  cantidad_ambientes  Int?
+  antiguedad          Int?
+  precio              Decimal           @db.Decimal(10, 2)
+  foto                String?           @db.VarChar(200) // foto principal (opcional)
+  detalles            String?           @db.VarChar(255)
+  contratos           Contrato[]
+  cobranzas           Cobranza[]
+  rendiciones         Rendicion[]
+  pagos               Pago[]
+  historial           Historial[]       @relation("HistorialInmueble")
+  imagenes            InmuebleImagen[]
 }
 
-// Modelo Contrato: Almacena los contratos asociados a clientes e inmuebles
+model InmuebleImagen {
+  id          Int       @id @default(autoincrement())
+  url         String    @db.VarChar(255)
+  principal   Boolean   @default(false) // permite marcar una imagen como principal
+  inmueble    Inmueble  @relation(fields: [inmuebleId], references: [id_inmueble], onDelete: Cascade)
+  inmuebleId  Int
+
+  @@index([inmuebleId], name: "idx_inmueble_imagen_inmuebleId")
+}
+
 model Contrato {
-  id_contrato        Int           @id @default(autoincrement())
-  id_cliente         Int
-  cliente            Cliente       @relation(fields: [id_cliente], references: [id_cliente], onDelete: Cascade, onUpdate: Cascade)
-  id_inmueble        Int
-  inmueble           Inmueble      @relation(fields: [id_inmueble], references: [id_inmueble], onDelete: Cascade, onUpdate: Cascade)
-  id_usuario         Int
-  usuario            Usuario       @relation(fields: [id_usuario], references: [id_usuario], onDelete: Restrict, onUpdate: Cascade)
-  archivo            String        @db.VarChar(200)
+  id_contrato  Int        @id @default(autoincrement())
+  id_inmueble  Int
+  inmueble     Inmueble   @relation(fields: [id_inmueble], references: [id_inmueble])
+  id_cliente   Int
+  cliente      Cliente    @relation(fields: [id_cliente], references: [id_cliente])
+  fecha_inicio DateTime
+  fecha_fin    DateTime
+  monto        Decimal    @db.Decimal(10, 2)
 }
 
-// Modelo Cobranza: Almacena las cobranzas realizadas
 model Cobranza {
-  id_cobranza        Int           @id @default(autoincrement())
-  id_cliente         Int
-  cliente            Cliente       @relation(fields: [id_cliente], references: [id_cliente], onDelete: Cascade, onUpdate: Cascade)
-  id_inmueble        Int
-  inmueble           Inmueble      @relation(fields: [id_inmueble], references: [id_inmueble], onDelete: Cascade, onUpdate: Cascade)
-  id_medio_pago      Int
-  medio_pago         Medio_pago    @relation(fields: [id_medio_pago], references: [id_medio_pago], onDelete: Restrict, onUpdate: Cascade)
-  id_usuario         Int
-  usuario            Usuario       @relation(fields: [id_usuario], references: [id_usuario], onDelete: Restrict, onUpdate: Cascade)
-  fecha              DateTime      @db.Date
-  descripcion        String        @db.VarChar(200)
-  monto              Decimal       @db.Decimal(10, 2)
-  rendicion_cobranza Rendicion_Cobranza[]
-  historial          Historial[]   @relation("HistorialCobranza")
-  @@index([fecha], name: "idx_cobranza_fecha")
+  id_cobranza Int        @id @default(autoincrement())
+  id_inmueble Int
+  inmueble    Inmueble   @relation(fields: [id_inmueble], references: [id_inmueble])
+  id_cliente  Int
+  cliente     Cliente    @relation(fields: [id_cliente], references: [id_cliente])
+  monto       Decimal    @db.Decimal(10, 2)
+  fecha       DateTime
 }
 
-// Modelo Rendicion: Almacena las rendiciones generadas
 model Rendicion {
-  id_rendicion       Int           @id @default(autoincrement())
-  id_cliente         Int
-  cliente            Cliente       @relation(fields: [id_cliente], references: [id_cliente], onDelete: Cascade, onUpdate: Cascade)
-  id_inmueble        Int
-  inmueble           Inmueble      @relation(fields: [id_inmueble], references: [id_inmueble], onDelete: Cascade, onUpdate: Cascade)
-  id_estado_rendicion Int
-  estado_rendicion   Estado_rendicion @relation(fields: [id_estado_rendicion], references: [id_estado_rendicion], onDelete: Restrict, onUpdate: Cascade)
-  fecha_inicio       DateTime      @db.Date
-  fecha_final        DateTime      @db.Date
-  fecha_generacion   DateTime      @db.Date
-  monto_total        Decimal       @db.Decimal(10, 2)
-  rendicion_cobranza Rendicion_Cobranza[]
-  historial          Historial[]   @relation("HistorialRendicion")
+  id_rendicion Int        @id @default(autoincrement())
+  id_inmueble  Int
+  inmueble     Inmueble   @relation(fields: [id_inmueble], references: [id_inmueble])
+  fecha        DateTime
+  monto_total  Decimal    @db.Decimal(10, 2)
 }
 
-// Modelo Rendicion_Cobranza: Relación muchos-a-muchos entre Rendicion y Cobranza
-model Rendicion_Cobranza {
-  id_rendicion       Int
-  id_cobranza        Int
-  rendicion          Rendicion     @relation(fields: [id_rendicion], references: [id_rendicion], onDelete: Cascade, onUpdate: Cascade)
-  cobranza           Cobranza      @relation(fields: [id_cobranza], references: [id_cobranza], onDelete: Cascade, onUpdate: Cascade)
-  @@id([id_rendicion, id_cobranza])
-}
-
-// Modelo Pago: Almacena los pagos realizados a proveedores
 model Pago {
-  id_pago            Int           @id @default(autoincrement())
-  id_proveedor       Int
-  proveedor          Proveedor     @relation(fields: [id_proveedor], references: [id_proveedor], onDelete: Cascade, onUpdate: Cascade)
-  id_medio_pago      Int
-  medio_pago         Medio_pago    @relation(fields: [id_medio_pago], references: [id_medio_pago], onDelete: Restrict, onUpdate: Cascade)
-  id_inmueble        Int
-  inmueble           Inmueble      @relation(fields: [id_inmueble], references: [id_inmueble], onDelete: Cascade, onUpdate: Cascade)
-  id_usuario         Int
-  usuario            Usuario       @relation(fields: [id_usuario], references: [id_usuario], onDelete: Restrict, onUpdate: Cascade)
-  fecha              DateTime      @db.Date
-  descripcion        String        @db.VarChar(200)
-  monto              Decimal       @db.Decimal(10, 2)
-  historial          Historial[]   @relation("HistorialPago")
+  id_pago     Int        @id @default(autoincrement())
+  id_inmueble Int
+  inmueble    Inmueble   @relation(fields: [id_inmueble], references: [id_inmueble])
+  id_cliente  Int
+  cliente     Cliente    @relation(fields: [id_cliente], references: [id_cliente])
+  monto       Decimal    @db.Decimal(10, 2)
+  fecha       DateTime
 }
 
-// Modelo Historial: Almacena el historial de cambios en las tablas principales
 model Historial {
-  id_historial       Int           @id @default(autoincrement())
-  id_usuario         Int
-  usuario            Usuario       @relation(fields: [id_usuario], references: [id_usuario], onDelete: Restrict, onUpdate: Cascade, map: "fk_historial_usuario")
-  tabla              String        @db.VarChar(50)
-  id_registro        Int
-  fecha_hora         DateTime
-  campo_modificado   String        @db.VarChar(255)
-  valor_antiguo      String?       @db.Text
-  valor_nuevo        String?       @db.Text
-  cliente            Cliente?      @relation("HistorialCliente", fields: [id_registro], references: [id_cliente], onDelete: Restrict, onUpdate: Cascade, map: "fk_historial_cliente")
-  inmueble           Inmueble?     @relation("HistorialInmueble", fields: [id_registro], references: [id_inmueble], onDelete: Restrict, onUpdate: Cascade, map: "fk_historial_inmueble")
-  cobranza           Cobranza?     @relation("HistorialCobranza", fields: [id_registro], references: [id_cobranza], onDelete: Restrict, onUpdate: Cascade, map: "fk_historial_cobranza")
-  rendicion          Rendicion?    @relation("HistorialRendicion", fields: [id_registro], references: [id_rendicion], onDelete: Restrict, onUpdate: Cascade, map: "fk_historial_rendicion")
-  pago               Pago?         @relation("HistorialPago", fields: [id_registro], references: [id_pago], onDelete: Restrict, onUpdate: Cascade, map: "fk_historial_pago")
-  @@index([tabla, id_registro], name: "idx_historial_tabla")
+  id_historial  Int        @id @default(autoincrement())
+  descripcion   String     @db.VarChar(255)
+  fecha         DateTime
+  id_inmueble   Int?
+  inmueble      Inmueble?  @relation("HistorialInmueble", fields: [id_inmueble], references: [id_inmueble])
+  id_cliente    Int?
+  cliente       Cliente?   @relation("HistorialCliente", fields: [id_cliente], references: [id_cliente])
 }
