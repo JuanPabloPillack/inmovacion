@@ -3,14 +3,17 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Image from "next/image";
-import { Inmueble } from "@/types/inmuebles";
+import { InmuebleDTO } from "@/types/inmuebles";
+import { FaWhatsapp, FaInstagram } from "react-icons/fa";
 
 export default function InmuebleDetalle() {
   const params = useParams();
   const { id } = params as { id: string };
-  const [inmueble, setInmueble] = useState<Inmueble | null>(null);
+  const [inmueble, setInmueble] = useState<InmuebleDTO | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  const [currentIndex, setCurrentIndex] = useState(0);
 
   useEffect(() => {
     async function fetchInmueble() {
@@ -23,7 +26,7 @@ export default function InmuebleDetalle() {
           setInmueble(null);
           return;
         }
-        const data: Inmueble = await res.json();
+        const data: InmuebleDTO = await res.json();
         setInmueble(data);
       } catch (err) {
         console.error(err);
@@ -39,47 +42,63 @@ export default function InmuebleDetalle() {
   if (error) return <p className="text-red-500">{error}</p>;
   if (!inmueble) return <p>Inmueble no encontrado.</p>;
 
-  const fotoPrincipal = inmueble.fotoPrincipal || inmueble.imagenes?.[0]?.url || "/placeholder.jpg";
+  // fotos
+  const fotos = inmueble.imagenes?.map((img) => img.url) || ["/placeholder.jpg"];
+  const fotoActual = fotos[currentIndex];
+
+  const nextFoto = () => setCurrentIndex((prev) => (prev + 1) % fotos.length);
+  const prevFoto = () => setCurrentIndex((prev) => (prev - 1 + fotos.length) % fotos.length);
 
   return (
-    <div className="max-w-4xl mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-4">
-        {inmueble.tipo_inmueble?.nombre || "Tipo desconocido"}
+    <div className="max-w-5xl mx-auto p-4">
+      {/* Título */}
+      <h1 className="text-3xl font-bold mb-4 text-center">
+        {inmueble.tipo_inmueble?.nombre} – {inmueble.ubicacion?.direccion}
       </h1>
 
-      <p className="mb-2">
-        Precio:{" "}
-        <span className="font-bold">
-          {inmueble.precio != null ? `$${inmueble.precio.toLocaleString()}` : "N/A"}
-        </span>
-      </p>
-
-      <p className="mb-2">
-        Ubicación: {inmueble.ubicacion?.barrio?.localidad?.nombre || "Desconocida"}
-      </p>
-
-      <p className="mb-4">{inmueble.detalles || "Sin detalles"}</p>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {/* Carrusel */}
+      <div className="relative w-full h-[400px] flex justify-center items-center bg-gray-100 rounded overflow-hidden">
+        <button
+          onClick={prevFoto}
+          className="absolute left-2 bg-white p-2 rounded-full shadow"
+        >
+          ←
+        </button>
         <Image
-          src={fotoPrincipal}
-          alt="Foto principal del inmueble"
-          width={500}
-          height={300}
+          src={fotoActual}
+          alt="Foto del inmueble"
+          width={800}
+          height={400}
           className="object-cover rounded"
         />
-        {inmueble.imagenes
-          ?.filter((img) => img.url !== inmueble.fotoPrincipal)
-          .map((img) => (
-            <Image
-              key={img.id}
-              src={img.url || "/placeholder.jpg"}
-              alt="Imagen adicional"
-              width={500}
-              height={300}
-              className="object-cover rounded"
-            />
-          ))}
+        <button
+          onClick={nextFoto}
+          className="absolute right-2 bg-white p-2 rounded-full shadow"
+        >
+          →
+        </button>
+      </div>
+
+      {/* Descripción */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+        <div className="md:col-span-2 bg-gray-100 p-4 rounded shadow">
+          <h2 className="font-bold text-xl mb-2">Descripción</h2>
+          <p className="mb-2">
+            Alquiler departamento {inmueble.cantidad_ambientes || "N/A"} ambientes.
+          </p>
+          <p>{inmueble.detalles || "Sin detalles adicionales"}</p>
+        </div>
+
+        {/* Contacto */}
+        <div className="bg-gray-100 p-4 rounded shadow">
+          <h2 className="font-bold text-xl mb-2">Contacto</h2>
+          <p className="flex items-center gap-2 mb-2">
+            <FaWhatsapp className="text-green-500" /> +54 343-6205284
+          </p>
+          <p className="flex items-center gap-2">
+            <FaInstagram className="text-pink-500" /> gbsyasociados
+          </p>
+        </div>
       </div>
     </div>
   );
