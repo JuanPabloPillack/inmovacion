@@ -30,14 +30,18 @@ export default function InmuebleCard({ inmueble }: Props) {
 
     try {
       // Subir a Cloudinary
-      const uploadRes = await fetch("/api/upload", { method: "POST", body: formData });
+      const uploadRes = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
       if (!uploadRes.ok) throw new Error("Error al subir imagen a Cloudinary");
 
       const uploadData = await uploadRes.json();
-      const imageUrl = uploadData.url;
+      const imageUrl: string = uploadData.url;
+
       setFoto(imageUrl);
 
-      // Guardar la imagen en la BD (ajusta si usas otro endpoint)
+      // Guardar la imagen en la BD
       const saveRes = await fetch("/api/inmuebles", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -45,6 +49,7 @@ export default function InmuebleCard({ inmueble }: Props) {
           action: "addImage",
           inmuebleId: inmueble.id_inmueble,
           url: imageUrl,
+          principal: false, // 👈 si querés que no sea principal por defecto
         }),
       });
 
@@ -81,7 +86,9 @@ export default function InmuebleCard({ inmueble }: Props) {
         <p className="text-gray-700">
           Precio:{" "}
           <span className="font-bold">
-            {inmueble.precio != null ? `$${inmueble.precio.toLocaleString()}` : "N/A"}
+            {inmueble.precio != null
+              ? `$${inmueble.precio.toLocaleString()}`
+              : "N/A"}
           </span>
         </p>
 

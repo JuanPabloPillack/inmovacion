@@ -43,6 +43,3 @@ export interface InmuebleDTO {
     inmuebleId: number;
   }[];
 }
-
-// También exportamos el tipo original por compatibilidad
-export type Inmueble = InmuebleDTO;

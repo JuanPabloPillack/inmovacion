@@ -4,7 +4,7 @@
 import { useState, useEffect } from "react";
 import Filtros from "../components/Filtros";
 import InmuebleCard from "../components/InmuebleCard";
-import { Inmueble } from "@/types/inmuebles";
+import { InmuebleDTO } from "@/types/inmuebles";
 import { FiltrosInmueble } from "@/types/filtros";
 
 export default function HomePage() {
@@ -16,7 +16,7 @@ export default function HomePage() {
     precioMax: "",
   });
 
-  const [inmuebles, setInmuebles] = useState<Inmueble[]>([]);
+  const [inmuebles, setInmuebles] = useState<InmuebleDTO[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -26,7 +26,7 @@ export default function HomePage() {
     try {
       const res = await fetch("/api/inmuebles");
       if (!res.ok) throw new Error("Error al obtener inmuebles");
-      const data: Inmueble[] = await res.json();
+      const data: InmuebleDTO[] = await res.json();
       setInmuebles(data);
     } catch (err: any) {
       console.error(err);
