@@ -5,9 +5,9 @@ import Link from "next/link";
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="es">
-      <body className="bg-gray-200">
+      <body>
         {/* Header */}
-        <header className="main-header flex items-center justify-between px-6 py-4 bg-gray-700 text-white">
+        <header className="main-header">
           <div className="logo flex items-center">
             <Link href="/">
               <Image src="/logo.png" alt="Logo" width={120} height={50} priority />
@@ -38,7 +38,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <main className="main-content max-w-6xl mx-auto py-8 px-4">{children}</main>
 
         {/* Footer */}
-        <footer className="main-footer bg-gray-700 text-white text-center py-4 mt-8">
+        <footer className="main-footer">
           <p>© 2025 GBS&Asociados</p>
         </footer>
       </body>

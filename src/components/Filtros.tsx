@@ -20,10 +20,10 @@ export default function Filtros({ filtros, setFiltros, onApply }: FiltrosProps) 
   const buscar = () => onApply?.();
 
   return (
-    <div className="w-full max-w-6xl mx-auto my-6">
+    <div className="w-full">
       {/* Encabezado filtros */}
       <div
-        className="flex justify-between items-center bg-gray-100 p-4 rounded-xl shadow-md cursor-pointer hover:bg-gray-200 transition"
+        className="bg-gray-200 p-4 rounded-xl shadow-md cursor-pointer hover:bg-gray-300 transition flex justify-between items-center"
         onClick={() => setOpen(!open)}
       >
         <h3 className="font-semibold text-gray-800 text-lg">Filtros</h3>
@@ -84,7 +84,7 @@ export default function Filtros({ filtros, setFiltros, onApply }: FiltrosProps) 
           <div className="col-span-full flex justify-end">
             <button
               onClick={buscar}
-              className="bg-blue-600 text-white px-5 py-2 rounded-lg hover:bg-blue-700 transition"
+              className="filter-tag hover:bg-blue-500 transition"
             >
               Aplicar filtros
             </button>
@@ -95,33 +95,33 @@ export default function Filtros({ filtros, setFiltros, onApply }: FiltrosProps) 
       {/* Mostrar filtros activos */}
       <div className="flex flex-wrap gap-2 mt-4">
         {filtros.estado && (
-          <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-sm flex items-center gap-2">
+          <span className="filter-tag">
             Estado: {filtros.estado}
-            <button onClick={() => handleRemove("estado")} className="font-bold hover:text-red-500">
+            <button onClick={() => handleRemove("estado")} className="text-sm font-bold hover:text-red-500">
               ×
             </button>
           </span>
         )}
         {filtros.tipo && (
-          <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-sm flex items-center gap-2">
+          <span className="filter-tag">
             Tipo: {filtros.tipo}
-            <button onClick={() => handleRemove("tipo")} className="font-bold hover:text-red-500">
+            <button onClick={() => handleRemove("tipo")} className="text-sm font-bold hover:text-red-500">
               ×
             </button>
           </span>
         )}
         {filtros.precioMin && (
-          <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-sm flex items-center gap-2">
+          <span className="filter-tag">
             Min: ${filtros.precioMin}
-            <button onClick={() => handleRemove("precioMin")} className="font-bold hover:text-red-500">
+            <button onClick={() => handleRemove("precioMin")} className="text-sm font-bold hover:text-red-500">
               ×
             </button>
           </span>
         )}
         {filtros.precioMax && (
-          <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-sm flex items-center gap-2">
+          <span className="filter-tag">
             Max: ${filtros.precioMax}
-            <button onClick={() => handleRemove("precioMax")} className="font-bold hover:text-red-500">
+            <button onClick={() => handleRemove("precioMax")} className="text-sm font-bold hover:text-red-500">
               ×
             </button>
           </span>

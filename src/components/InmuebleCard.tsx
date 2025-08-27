@@ -10,13 +10,26 @@ interface Props {
 }
 
 export default function InmuebleCard({ inmueble }: Props) {
-  const tipo = inmueble.tipo_inmueble?.nombre ?? "Tipo desconocido";
+  const tipo = inmueble.tipo_inmueble.nombre || "Tipo desconocido";
   const localidad =
-    inmueble.ubicacion?.barrio?.localidad?.nombre ?? "Ubicación desconocida";
+    inmueble.ubicacion.barrio?.localidad?.nombre ?? "Ubicación desconocida";
   const estado = inmueble.estado === "venta" ? "Venta" : "Alquiler";
 
+  // Use actual fields from InmuebleDTO
+  const metrosCuadrados = inmueble.superficie_cubierta
+    ? `${inmueble.superficie_cubierta} m²`
+    : inmueble.superficie_total
+    ? `${inmueble.superficie_total} m²`
+    : "N/A";
+  const ambientes = inmueble.cantidad_ambientes
+    ? `${inmueble.cantidad_ambientes} Ambientes`
+    : "N/A";
+
   const [foto, setFoto] = useState<string>(
-    inmueble.fotoPrincipal || inmueble.foto || "/placeholder.jpg"
+    inmueble.imagenes.find((img) => img.principal)?.url ||
+    inmueble.fotoPrincipal ||
+    inmueble.foto ||
+    "/placeholder.jpg"
   );
   const [loading, setLoading] = useState(false);
 
@@ -45,6 +58,7 @@ export default function InmuebleCard({ inmueble }: Props) {
           action: "addImage",
           inmuebleId: inmueble.id_inmueble,
           url: uploadData.url,
+          principal: !inmueble.imagenes.some((img) => img.principal), // Set as principal if no principal exists
         }),
       });
       if (!saveRes.ok) throw new Error("Error al guardar imagen");
@@ -59,42 +73,37 @@ export default function InmuebleCard({ inmueble }: Props) {
   };
 
   return (
-    <div className="inmueble-card bg-white border rounded-lg shadow hover:shadow-lg transition overflow-hidden">
-      <div className="relative h-48 w-full">
+    <div className="inmueble-card bg-gray-200 p-4 rounded-xl shadow-md flex flex-col md:flex-row items-center">
+      <div className="relative w-full md:w-1/2 h-48">
         <Image
           src={foto}
           alt={tipo}
           fill
-          className="object-cover"
+          className="object-cover rounded-lg"
           onError={() => setFoto("/placeholder.jpg")}
         />
       </div>
-
-      <div className="p-4 space-y-2">
-        <h3 className="text-lg font-semibold">
-          {tipo} en {localidad} - {estado}
+      <div className="md:ml-4 mt-4 md:mt-0 w-full md:w-1/2 space-y-2">
+        <h3 className="text-xl font-bold">
+          {tipo} {localidad && `en ${localidad}`}
         </h3>
-
+        <p className="text-gray-600">{metrosCuadrados}</p>
+        <p className="text-gray-600">{ambientes}</p>
         <p className="text-gray-700">
           Precio:{" "}
           <span className="font-bold">
-            {inmueble.precio != null
-              ? `$${inmueble.precio.toLocaleString()}`
-              : "N/A"}
+            {inmueble.precio != null ? `$${inmueble.precio.toLocaleString()}` : "N/A"}
           </span>
         </p>
-
         {inmueble.detalles && (
           <p className="text-sm text-gray-500">{inmueble.detalles}</p>
         )}
-
         <Link
           href={`/inmuebles/${inmueble.id_inmueble}`}
-          className="inline-block mt-2 text-blue-600 hover:underline"
+          className="filter-tag info inline-block mt-2 text-black hover:bg-yellow-500"
         >
-          Ver detalle →
+          Más información
         </Link>
-
         <div className="mt-3">
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Cambiar foto del inmueble:

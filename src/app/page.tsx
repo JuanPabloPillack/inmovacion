@@ -25,7 +25,6 @@ export default function HomePage() {
 
     try {
       const query = new URLSearchParams();
-
       if (filtros.tipo) query.append("tipo", filtros.tipo);
       if (filtros.estado) query.append("estado", filtros.estado);
       if (filtros.precioMin) query.append("precioMin", filtros.precioMin);
@@ -33,7 +32,6 @@ export default function HomePage() {
 
       const res = await fetch(`/api/inmuebles?${query.toString()}`);
       if (!res.ok) throw new Error("Error al obtener inmuebles");
-
       const data: InmuebleDTO[] = await res.json();
       setInmuebles(data);
     } catch (err: any) {
@@ -50,10 +48,9 @@ export default function HomePage() {
   }, [buscarInmuebles]);
 
   return (
-    <section className="p-0">
+    <div className="main-content max-w-6xl mx-auto py-8 px-4">
       <Filtros filtros={filtros} setFiltros={setFiltros} onApply={buscarInmuebles} />
-
-      <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
+      <div className="space-y-6">
         {loading ? (
           <p className="text-center">Cargando inmuebles...</p>
         ) : error ? (
@@ -61,13 +58,13 @@ export default function HomePage() {
         ) : inmuebles.length === 0 ? (
           <p className="text-center">No hay inmuebles disponibles con este filtro.</p>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="space-y-6">
             {inmuebles.map((i) => (
               <InmuebleCard key={i.id_inmueble} inmueble={i} />
             ))}
           </div>
         )}
       </div>
-    </section>
+    </div>
   );
 }
