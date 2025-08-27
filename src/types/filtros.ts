@@ -1,7 +1,7 @@
-export type FiltrosInmueble = {
-  localidad: string;
+// types/filtros.ts
+export interface FiltrosInmueble {
+  estado: "" | "alquiler" | "venta";
   tipo: string;
-  operacion?: string; // opcional
   precioMin: string;
   precioMax: string;
-};
+}

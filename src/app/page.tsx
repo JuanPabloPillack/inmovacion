@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Filtros from "../components/Filtros";
 import InmuebleCard from "../components/InmuebleCard";
 import { InmuebleDTO } from "@/types/inmuebles";
@@ -9,9 +9,8 @@ import { FiltrosInmueble } from "@/types/filtros";
 
 export default function HomePage() {
   const [filtros, setFiltros] = useState<FiltrosInmueble>({
-    localidad: "",
+    estado: "",
     tipo: "",
-    operacion: "",
     precioMin: "",
     precioMax: "",
   });
@@ -20,12 +19,21 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const buscarInmuebles = async () => {
+  const buscarInmuebles = useCallback(async () => {
     setLoading(true);
     setError("");
+
     try {
-      const res = await fetch("/api/inmuebles");
+      const query = new URLSearchParams();
+
+      if (filtros.tipo) query.append("tipo", filtros.tipo);
+      if (filtros.estado) query.append("estado", filtros.estado);
+      if (filtros.precioMin) query.append("precioMin", filtros.precioMin);
+      if (filtros.precioMax) query.append("precioMax", filtros.precioMax);
+
+      const res = await fetch(`/api/inmuebles?${query.toString()}`);
       if (!res.ok) throw new Error("Error al obtener inmuebles");
+
       const data: InmuebleDTO[] = await res.json();
       setInmuebles(data);
     } catch (err: any) {
@@ -35,26 +43,29 @@ export default function HomePage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filtros]);
 
   useEffect(() => {
     buscarInmuebles();
-  }, []);
-
-  if (loading) return <p className="text-center">Cargando inmuebles...</p>;
-  if (error) return <p className="text-center text-red-500">{error}</p>;
+  }, [buscarInmuebles]);
 
   return (
     <section className="p-0">
       <Filtros filtros={filtros} setFiltros={setFiltros} onApply={buscarInmuebles} />
 
       <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
-        {inmuebles.length === 0 ? (
-          <p className="text-center text-gray-600">No hay resultados disponibles.</p>
+        {loading ? (
+          <p className="text-center">Cargando inmuebles...</p>
+        ) : error ? (
+          <p className="text-center text-red-500">{error}</p>
+        ) : inmuebles.length === 0 ? (
+          <p className="text-center">No hay inmuebles disponibles con este filtro.</p>
         ) : (
-          inmuebles.map((inmueble) => (
-            <InmuebleCard key={inmueble.id_inmueble} inmueble={inmueble} />
-          ))
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {inmuebles.map((i) => (
+              <InmuebleCard key={i.id_inmueble} inmueble={i} />
+            ))}
+          </div>
         )}
       </div>
     </section>

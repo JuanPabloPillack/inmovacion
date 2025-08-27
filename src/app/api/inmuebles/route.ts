@@ -8,21 +8,38 @@ import type {
   Ubicacion as PrismaUbicacion,
   Barrio as PrismaBarrio,
   Localidad as PrismaLocalidad,
+  Estado as PrismaEstado,
 } from "@prisma/client";
 
 type InmuebleWithRelations = PrismaInmueble & {
   tipo_inmueble: PrismaTipo;
+  estado: PrismaEstado;
   ubicacion: PrismaUbicacion & {
     barrio?: PrismaBarrio & { localidad?: PrismaLocalidad } | null;
   };
   imagenes: PrismaInmuebleImagen[];
 };
 
-export const GET = async () => {
+export const GET = async (req: Request) => {
   try {
+    const url = new URL(req.url);
+    const params = url.searchParams;
+
+    const estadoFiltro = params.get("estado"); // "alquiler" o "venta"
+    const tipoFiltro = params.get("tipo");
+    const precioMin = params.get("precioMin") ? Number(params.get("precioMin")) : undefined;
+    const precioMax = params.get("precioMax") ? Number(params.get("precioMax")) : undefined;
+
     const rows = (await prisma.inmueble.findMany({
+      where: {
+        ...(tipoFiltro ? { tipo_inmueble: { nombre: tipoFiltro } } : {}),
+        ...(estadoFiltro ? { estado: { nombre: estadoFiltro === "venta" ? "Venta" : "Alquiler" } } : {}),
+        ...(precioMin !== undefined ? { precio: { gte: precioMin } } : {}),
+        ...(precioMax !== undefined ? { precio: { lte: precioMax } } : {}),
+      },
       include: {
         tipo_inmueble: true,
+        estado: true,
         ubicacion: {
           include: {
             barrio: {
@@ -35,7 +52,6 @@ export const GET = async () => {
     })) as InmuebleWithRelations[];
 
     const data: InmuebleDTO[] = rows.map((i) => {
-      // mapeo de imágenes con tipado seguro
       const imagenes = (i.imagenes || []).map((img) => ({
         id: img.id,
         url: img.url,
@@ -64,11 +80,12 @@ export const GET = async () => {
           : null,
       };
 
-      const dto: InmuebleDTO = {
+      return {
         id_inmueble: i.id_inmueble,
         id_tipo_inmueble: i.id_tipo_inmueble,
         id_ubicacion: i.id_ubicacion,
         id_estado: i.id_estado,
+        estado: i.estado.nombre.toLowerCase() as "venta" | "alquiler",
         id_cliente: i.id_cliente,
         precio: Number(i.precio),
         superficie_total: Number(i.superficie_total),
@@ -84,9 +101,7 @@ export const GET = async () => {
         },
         ubicacion,
         imagenes,
-      };
-
-      return dto;
+      } as InmuebleDTO;
     });
 
     return NextResponse.json(data);

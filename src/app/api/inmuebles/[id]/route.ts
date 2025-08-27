@@ -8,10 +8,12 @@ import type {
   Ubicacion as PrismaUbicacion,
   Barrio as PrismaBarrio,
   Localidad as PrismaLocalidad,
+  Estado as PrismaEstado,
 } from "@prisma/client";
 
 type InmuebleWithRelations = PrismaInmueble & {
   tipo_inmueble: PrismaTipo;
+  estado: PrismaEstado;
   ubicacion: PrismaUbicacion & {
     barrio?: PrismaBarrio & { localidad?: PrismaLocalidad } | null;
   };
@@ -27,6 +29,7 @@ export const GET = async (_req: Request, { params }: { params: { id: string } })
       where: { id_inmueble: id },
       include: {
         tipo_inmueble: true,
+        estado: true,
         ubicacion: {
           include: {
             barrio: { include: { localidad: true } },
@@ -71,6 +74,7 @@ export const GET = async (_req: Request, { params }: { params: { id: string } })
       id_tipo_inmueble: i.id_tipo_inmueble,
       id_ubicacion: i.id_ubicacion,
       id_estado: i.id_estado,
+      estado: i.estado.nombre.toLowerCase() as "venta" | "alquiler",
       id_cliente: i.id_cliente,
       precio: Number(i.precio),
       superficie_total: Number(i.superficie_total),

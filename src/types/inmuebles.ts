@@ -1,9 +1,9 @@
-// types/inmuebles.ts
 export interface InmuebleDTO {
   id_inmueble: number;
   id_tipo_inmueble: number;
   id_ubicacion: number;
   id_estado: number;
+  estado: "alquiler" | "venta"; // <-- nuevo campo
   id_cliente: number;
   precio: number;
   superficie_total: number;
@@ -39,7 +39,7 @@ export interface InmuebleDTO {
   imagenes: {
     id: number;
     url: string;
-    principal: boolean;
     inmuebleId: number;
+    principal: boolean;
   }[];
 }
