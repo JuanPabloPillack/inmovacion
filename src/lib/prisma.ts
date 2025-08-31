@@ -1,4 +1,4 @@
-import { PrismaClient } from '@/generated/prisma'; // Importa PrismaClient desde la carpeta generada por Prisma
+import { PrismaClient } from '@prisma/client'; // Importa PrismaClient desde el paquete oficial de Prisma
 
 /**
  * Extiende el objeto globalThis para incluir una propiedad opcional 'prisma' que almacena la instancia de PrismaClient.
