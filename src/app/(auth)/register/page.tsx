@@ -1,3 +1,5 @@
+// src/app/auth/register/page.tsx
+
 import FormRegister from '@/components/ui/FormRegisterUser';
 import React from 'react'
 

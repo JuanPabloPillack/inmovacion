@@ -1,3 +1,6 @@
+//src/app/api/auth/verify-email/route.ts
+
+
 import { db } from '@/lib/db';
 import { redirect } from 'next/navigation';
 import { type NextRequest } from 'next/server'
