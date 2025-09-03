@@ -1,12 +1,15 @@
-'use client'
+// Archivo: src/app/(protected)/register/page.tsx (o donde esté FormRegister)
+// Descripción: Formulario para registrar usuarios.
+// Proyecto: inmovacion (GBS y Asociados), sistema inmobiliario.
 
-import React, { useState, useTransition } from 'react'
-import { z } from "zod"
-import { registerSchema } from '@/lib/zod'
-import { zodResolver } from "@hookform/resolvers/zod"
-import { useForm } from "react-hook-form"
+'use client';
 
-import { Button } from "@/components/ui/button"
+import React, { useState, useTransition } from 'react';
+import { z } from "zod";
+import { registerSchema } from '@/lib/zod';
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import { Button } from "@/components/ui/button";
 import {
   Form,
   FormControl,
@@ -14,12 +17,18 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-} from "@/components/ui/form"
-import { Input } from "@/components/ui/input"
-
-import { registerAction } from '@/actions/auth-action'
-import { useRouter } from 'next/navigation'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { registerAction } from '@/actions/auth-action';
+import { useRouter } from 'next/navigation';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"; // Asegúrate de tener este componente (puede venir de un paquete como shadcn/ui)
 
 const FormRegister = () => {
   const [error, setError] = useState<string | null>(null);
@@ -34,7 +43,7 @@ const FormRegister = () => {
       confirmPassword: "",
       name: "",
       phone: "",
-      role: "",
+      role: "user", // Valor por defecto para el select
     },
   });
 
@@ -181,12 +190,15 @@ const FormRegister = () => {
                     Rol
                   </FormLabel>
                   <FormControl>
-                    <Input
-                      placeholder="Ej: admin, user, manager"
-                      {...field}
-                      type="text"
-                      className="h-11 rounded-lg border-gray-300 focus:border-[#63bae9] focus:ring-[#63bae9]/40"
-                    />
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <SelectTrigger className="h-11 rounded-lg border-gray-300 focus:border-[#63bae9] focus:ring-[#63bae9]/40">
+                        <SelectValue placeholder="Selecciona un rol" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="user">Usuario</SelectItem>
+                        <SelectItem value="admin">Administrador</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </FormControl>
                   <FormMessage className="text-red-500 text-sm" />
                 </FormItem>

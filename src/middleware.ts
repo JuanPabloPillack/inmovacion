@@ -1,3 +1,5 @@
+// src/middleware.ts
+
 import NextAuth from "next-auth"
 import { NextResponse } from "next/server";
 import authConfig from "../auth.config"
@@ -9,6 +11,9 @@ const publicRoutes = [
     "/register",
     "/login",
     "/api/auth/verify-email",
+    "/forgot-password",
+    "/api/auth/reset-password",
+    "/reset-password",
     
     
 

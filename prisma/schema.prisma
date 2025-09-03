@@ -1,3 +1,4 @@
+// prisma/schema.prisma
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
@@ -27,14 +28,11 @@ model User {
   email         String         @unique
   emailVerified DateTime?
   image         String?
-  role          Role          @default(admin)
+  role          Role          @default(admin) // Usa el enum con valor por defecto admin
+  phone         String?         // Añadido como campo opcional
   accounts      Account[]
-  
-  // Optional for WebAuthn support
-  
- 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
 }
  
 model Account {

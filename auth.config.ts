@@ -1,4 +1,4 @@
-
+// auth.config.ts
 import { loginSchema } from "@/lib/zod";
 import type { NextAuthConfig } from "next-auth"
 import Credentials from "next-auth/providers/credentials"

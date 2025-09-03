@@ -1,3 +1,4 @@
+// types/next-auth.d.ts
 import NextAuth, {DefaultSessionç} from "next-auth";
 import { JWT } from "next-auth/jwt";
 
