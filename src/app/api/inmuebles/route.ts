@@ -1,112 +1,112 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import type { InmuebleDTO } from "@/types/inmuebles";
-import type {
-  Inmueble as PrismaInmueble,
-  InmuebleImagen as PrismaInmuebleImagen,
-  Tipo_inmueble as PrismaTipo,
-  Ubicacion as PrismaUbicacion,
-  Barrio as PrismaBarrio,
-  Localidad as PrismaLocalidad,
-  Estado as PrismaEstado,
-} from "@prisma/client";
 
-type InmuebleWithRelations = PrismaInmueble & {
-  tipo_inmueble: PrismaTipo;
-  estado: PrismaEstado;
-  ubicacion: PrismaUbicacion & {
-    barrio?: PrismaBarrio & { localidad?: PrismaLocalidad } | null;
-  };
-  imagenes: PrismaInmuebleImagen[];
-};
-
-export const GET = async (req: Request) => {
+export async function POST(req: Request) {
   try {
-    const url = new URL(req.url);
-    const params = url.searchParams;
+    const body = await req.json();
 
-    const estadoFiltro = params.get("estado"); // "alquiler" o "venta"
-    const tipoFiltro = params.get("tipo");
-    const precioMin = params.get("precioMin") ? Number(params.get("precioMin")) : undefined;
-    const precioMax = params.get("precioMax") ? Number(params.get("precioMax")) : undefined;
+    const {
+      id_tipo_inmueble,
+      id_estado,
+      id_cliente,
+      id_operacion,
+      superficie_total,
+      superficie_cubierta,
+      cantidad_ambientes,
+      antiguedad,
+      precio,
+      detalles,
+      direccion,
+      ciudad,
+      provincia,
+      barrio: nombreBarrio,
+      imagenes,
+    } = body;
 
-    const rows = (await prisma.inmueble.findMany({
-      where: {
-        ...(tipoFiltro ? { tipo_inmueble: { nombre: tipoFiltro } } : {}),
-        ...(estadoFiltro ? { estado: { nombre: estadoFiltro === "venta" ? "Venta" : "Alquiler" } } : {}),
-        ...(precioMin !== undefined ? { precio: { gte: precioMin } } : {}),
-        ...(precioMax !== undefined ? { precio: { lte: precioMax } } : {}),
-      },
-      include: {
-        tipo_inmueble: true,
-        estado: true,
-        ubicacion: {
-          include: {
-            barrio: {
-              include: { localidad: true },
-            },
-          },
-        },
-        imagenes: true,
-      },
-    })) as InmuebleWithRelations[];
+    if (!id_tipo_inmueble || !id_estado || !id_cliente || !id_operacion || !superficie_total || !direccion || !nombreBarrio) {
+      return NextResponse.json({ error: "Faltan campos obligatorios" }, { status: 400 });
+    }
 
-    const data: InmuebleDTO[] = rows.map((i) => {
-      const imagenes = (i.imagenes || []).map((img) => ({
-        id: img.id,
-        url: img.url,
-        inmuebleId: img.inmuebleId,
-        principal: Boolean(img.principal),
-      }));
+    let barrioId: number | null = null;
+    const barrioExistente = await prisma.barrio.findFirst({ where: { nombre: nombreBarrio } });
 
-      const fotoPrincipal = imagenes.find((img) => img.principal)?.url || i.foto || "/placeholder.jpg";
+    if (barrioExistente) {
+      barrioId = barrioExistente.id_barrio;
+    } else {
+      const barrioNuevo = await prisma.barrio.create({ data: { nombre: nombreBarrio, id_localidad: 1 } });
+      barrioId = barrioNuevo.id_barrio;
+    }
 
-      const ubicacion = {
-        id_ubicacion: i.ubicacion.id_ubicacion,
-        direccion: i.ubicacion.direccion,
-        ciudad: i.ubicacion?.barrio?.localidad?.nombre ?? null,
-        provincia: null,
-        id_barrio: i.ubicacion.id_barrio ?? null,
-        barrio: i.ubicacion.barrio
-          ? {
-              id_barrio: i.ubicacion.barrio.id_barrio,
-              nombre: i.ubicacion.barrio.nombre,
-              id_localidad: i.ubicacion.barrio.id_localidad,
-              localidad: {
-                id_localidad: i.ubicacion.barrio.localidad?.id_localidad ?? 0,
-                nombre: i.ubicacion.barrio.localidad?.nombre ?? "",
-              },
-            }
-          : null,
-      };
-
-      return {
-        id_inmueble: i.id_inmueble,
-        id_tipo_inmueble: i.id_tipo_inmueble,
-        id_ubicacion: i.id_ubicacion,
-        id_estado: i.id_estado,
-        estado: i.estado.nombre.toLowerCase() as "venta" | "alquiler",
-        id_cliente: i.id_cliente,
-        precio: Number(i.precio),
-        superficie_total: Number(i.superficie_total),
-        superficie_cubierta: i.superficie_cubierta != null ? Number(i.superficie_cubierta) : null,
-        cantidad_ambientes: i.cantidad_ambientes ?? null,
-        antiguedad: i.antiguedad ?? null,
-        foto: i.foto ?? null,
-        fotoPrincipal,
-        detalles: i.detalles ?? null,
-        tipo_inmueble: {
-          id_tipo_inmueble: i.tipo_inmueble.id_tipo_inmueble,
-          nombre: i.tipo_inmueble.nombre,
-        },
-        ubicacion,
-        imagenes,
-      } as InmuebleDTO;
+    const ubicacion = await prisma.ubicacion.create({
+      data: { direccion, ciudad: ciudad ?? null, provincia: provincia ?? null, id_barrio: barrioId },
     });
 
-    return NextResponse.json(data);
-  } catch (error) {
-    console.error("Error al obtener inmuebles:", error);
-    return NextResponse.json({ error: "Error al obtener inmuebles" }, { status: 500 });
+    const tipoInmueble = await prisma.tipo_inmueble.findUnique({ where: { id_tipo_inmueble } });
+    if (!tipoInmueble) return NextResponse.json({ error: "Tipo de inmueble no encontrado" }, { status: 400 });
+
+    const titulo = `${tipoInmueble.nombre} en ${direccion}`;
+
+    const inmueble = await prisma.inmueble.create({
+      data: {
+        id_tipo_inmueble,
+        id_ubicacion: ubicacion.id_ubicacion,
+        id_estado,
+        id_cliente,
+        id_operacion,
+        superficie_total,
+        superficie_cubierta: superficie_cubierta ?? null,
+        cantidad_ambientes: cantidad_ambientes ?? null,
+        antiguedad: antiguedad ?? null,
+        precio: precio ?? null,
+        detalles: detalles ?? null,
+        titulo,
+        imagenes: imagenes && imagenes.length > 0 ? { create: imagenes.map((img: { url: string; principal: boolean }) => ({ url: img.url, principal: img.principal })) } : undefined,
+      },
+      include: { imagenes: true },
+    });
+
+    return NextResponse.json(inmueble, { status: 201 });
+  } catch (error: any) {
+    console.error("🔥 Error al crear inmueble:", error);
+    return NextResponse.json({ error: error.message || "Error interno al crear inmueble" }, { status: 500 });
   }
-};
+}
+
+export async function GET(req: Request) {
+  try {
+    const { searchParams } = new URL(req.url);
+
+    // Leer filtros de query params
+    const tipoId = searchParams.get("tipo") ? Number(searchParams.get("tipo")) : undefined;
+    const estadoId = searchParams.get("estado") ? Number(searchParams.get("estado")) : undefined;
+    const precioMin = searchParams.get("precioMin") ? Number(searchParams.get("precioMin")) : undefined;
+    const precioMax = searchParams.get("precioMax") ? Number(searchParams.get("precioMax")) : undefined;
+
+    const where: any = {};
+
+    if (tipoId) where.id_tipo_inmueble = tipoId;
+    if (estadoId) where.id_estado = estadoId;
+    if (precioMin !== undefined || precioMax !== undefined) {
+      where.precio = {};
+      if (precioMin !== undefined) where.precio.gte = precioMin;
+      if (precioMax !== undefined) where.precio.lte = precioMax;
+    }
+
+    const inmuebles = await prisma.inmueble.findMany({
+      where,
+      include: {
+        tipo_inmueble: true,
+        ubicacion: { include: { barrio: { include: { localidad: true } } } },
+        estado: true,
+        cliente: true,
+        imagenes: true,
+      },
+    });
+
+    return NextResponse.json(inmuebles);
+  } catch (error: any) {
+    console.error("🔥 Error al obtener inmuebles:", error);
+    return NextResponse.json({ error: error.message || "Error interno al obtener inmuebles" }, { status: 500 });
+  }
+}

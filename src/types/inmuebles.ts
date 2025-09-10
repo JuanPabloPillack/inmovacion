@@ -3,7 +3,7 @@ export interface InmuebleDTO {
   id_tipo_inmueble: number;
   id_ubicacion: number;
   id_estado: number;
-  estado: "alquiler" | "venta"; // <-- nuevo campo
+  estado: string;
   id_cliente: number;
   precio: number;
   superficie_total: number;
@@ -13,6 +13,7 @@ export interface InmuebleDTO {
   foto?: string | null;
   fotoPrincipal: string;
   detalles?: string | null;
+  titulo: string; // agregado: se genera en backend
 
   tipo_inmueble: {
     id_tipo_inmueble: number;

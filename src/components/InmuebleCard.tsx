@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import Image from "next/image";
 import { useState } from "react";
 import type { InmuebleDTO } from "@/types/inmuebles";
@@ -10,12 +9,20 @@ interface Props {
 }
 
 export default function InmuebleCard({ inmueble }: Props) {
-  const tipo = inmueble.tipo_inmueble.nombre || "Tipo desconocido";
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const images = inmueble.imagenes.map((img) => img.url);
+
+  const handlePrevImage = () =>
+    setCurrentImageIndex(
+      (prev) => (prev > 0 ? prev - 1 : images.length - 1)
+    );
+  const handleNextImage = () =>
+    setCurrentImageIndex(
+      (prev) => (prev < images.length - 1 ? prev + 1 : 0)
+    );
+
   const localidad =
     inmueble.ubicacion.barrio?.localidad?.nombre ?? "Ubicación desconocida";
-  const estado = inmueble.estado === "venta" ? "Venta" : "Alquiler";
-
-  // Use actual fields from InmuebleDTO
   const metrosCuadrados = inmueble.superficie_cubierta
     ? `${inmueble.superficie_cubierta} m²`
     : inmueble.superficie_total
@@ -25,99 +32,80 @@ export default function InmuebleCard({ inmueble }: Props) {
     ? `${inmueble.cantidad_ambientes} Ambientes`
     : "N/A";
 
-  const [foto, setFoto] = useState<string>(
-    inmueble.imagenes.find((img) => img.principal)?.url ||
-    inmueble.fotoPrincipal ||
-    inmueble.foto ||
-    "/placeholder.jpg"
-  );
-  const [loading, setLoading] = useState(false);
-
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setLoading(true);
-    const formData = new FormData();
-    formData.append("file", file);
-
-    try {
-      const uploadRes = await fetch("/api/upload", {
-        method: "POST",
-        body: formData,
-      });
-      if (!uploadRes.ok) throw new Error("Error al subir imagen");
-
-      const uploadData = await uploadRes.json();
-      setFoto(uploadData.url);
-
-      const saveRes = await fetch("/api/inmuebles", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "addImage",
-          inmuebleId: inmueble.id_inmueble,
-          url: uploadData.url,
-          principal: !inmueble.imagenes.some((img) => img.principal), // Set as principal if no principal exists
-        }),
-      });
-      if (!saveRes.ok) throw new Error("Error al guardar imagen");
-
-      alert("✅ Imagen subida correctamente!");
-    } catch (err) {
-      console.error(err);
-      alert("❌ Error al subir la imagen.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
-    <div className="inmueble-card bg-gray-200 p-4 rounded-xl shadow-md flex flex-col md:flex-row items-center">
-      <div className="relative w-full md:w-1/2 h-48">
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-gray-100 p-4 rounded-xl shadow-md">
+      {/* Galería */}
+      <div className="relative w-full h-64 md:h-48 rounded-md overflow-hidden">
         <Image
-          src={foto}
-          alt={tipo}
+          src={images[currentImageIndex] || "/placeholder.jpg"}
+          alt={inmueble.tipo_inmueble.nombre}
           fill
-          className="object-cover rounded-lg"
-          onError={() => setFoto("/placeholder.jpg")}
+          className="object-cover"
         />
-      </div>
-      <div className="md:ml-4 mt-4 md:mt-0 w-full md:w-1/2 space-y-2">
-        <h3 className="text-xl font-bold">
-          {tipo} {localidad && `en ${localidad}`}
-        </h3>
-        <p className="text-gray-600">{metrosCuadrados}</p>
-        <p className="text-gray-600">{ambientes}</p>
-        <p className="text-gray-700">
-          Precio:{" "}
-          <span className="font-bold">
-            {inmueble.precio != null ? `$${inmueble.precio.toLocaleString()}` : "N/A"}
-          </span>
-        </p>
-        {inmueble.detalles && (
-          <p className="text-sm text-gray-500">{inmueble.detalles}</p>
+
+        {images.length > 1 && (
+          <>
+            <button
+              onClick={handlePrevImage}
+              className="absolute left-2 top-1/2 transform -translate-y-1/2 bg-white bg-opacity-50 rounded-full p-2 hover:bg-opacity-75"
+            >
+              ←
+            </button>
+            <button
+              onClick={handleNextImage}
+              className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-white bg-opacity-50 rounded-full p-2 hover:bg-opacity-75"
+            >
+              →
+            </button>
+
+            {/* Indicadores de imagen */}
+            <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 flex space-x-2">
+              {images.map((_, index) => (
+                <span
+                  key={index}
+                  className={`w-2 h-2 rounded-full ${
+                    index === currentImageIndex ? "bg-blue-500" : "bg-gray-300"
+                  }`}
+                />
+              ))}
+            </div>
+          </>
         )}
-        <Link
-          href={`/inmuebles/${inmueble.id_inmueble}`}
-          className="filter-tag info inline-block mt-2 text-black hover:bg-yellow-500"
-        >
-          Más información
-        </Link>
-        <div className="mt-3">
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Cambiar foto del inmueble:
-          </label>
-          <input
-            type="file"
-            accept="image/*"
-            onChange={handleUpload}
-            className="border rounded p-1 w-full"
-          />
-          {loading && (
-            <p className="text-sm text-gray-500 mt-1">Subiendo imagen...</p>
-          )}
-        </div>
+      </div>
+
+      {/* Detalles */}
+      <div className="bg-white p-4 rounded-md">
+        <h2 className="text-xl font-semibold mb-2">
+          {inmueble.tipo_inmueble.nombre} en {localidad}
+        </h2>
+        <p className="text-gray-700">
+          {inmueble.detalles || "Sin descripción disponible."}
+        </p>
+        <p className="text-gray-700 mt-2">
+          Superficie: {metrosCuadrados} | {ambientes}
+        </p>
+        <p className="text-gray-700 mt-2">
+          Precio: ${inmueble.precio?.toLocaleString() || "N/A"}
+        </p>
+      </div>
+
+      {/* Contacto */}
+      <div className="bg-white p-4 rounded-md">
+        <h2 className="text-xl font-semibold mb-2">Contacto</h2>
+        <p className="text-gray-700 flex items-center">
+          <span className="mr-2">📞</span> +54 343-6205284
+        </p>
+        <p className="text-gray-700 mt-2 flex items-center">
+          <span className="mr-2">📷</span>
+          <a
+            href="https://instagram.com/gbsyasociados"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-600 hover:underline"
+          >
+            gbsyasociados
+          </a>
+        </p>
       </div>
     </div>
   );

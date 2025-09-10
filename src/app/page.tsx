@@ -9,8 +9,8 @@ import { FiltrosInmueble } from "@/types/filtros";
 
 export default function HomePage() {
   const [filtros, setFiltros] = useState<FiltrosInmueble>({
-    estado: "",
-    tipo: "",
+    estadoId: undefined,
+    tipoId: undefined,
     precioMin: "",
     precioMax: "",
   });
@@ -25,13 +25,15 @@ export default function HomePage() {
 
     try {
       const query = new URLSearchParams();
-      if (filtros.tipo) query.append("tipo", filtros.tipo);
-      if (filtros.estado) query.append("estado", filtros.estado);
+
+      if (filtros.tipoId) query.append("tipo", filtros.tipoId.toString());
+      if (filtros.estadoId) query.append("estado", filtros.estadoId.toString());
       if (filtros.precioMin) query.append("precioMin", filtros.precioMin);
       if (filtros.precioMax) query.append("precioMax", filtros.precioMax);
 
       const res = await fetch(`/api/inmuebles?${query.toString()}`);
       if (!res.ok) throw new Error("Error al obtener inmuebles");
+
       const data: InmuebleDTO[] = await res.json();
       setInmuebles(data);
     } catch (err: any) {

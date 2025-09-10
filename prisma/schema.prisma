@@ -55,6 +55,12 @@ model Estado {
   inmuebles Inmueble[]
 }
 
+model Operacion {
+  id_operacion Int        @id @default(autoincrement())
+  nombre       String     @db.VarChar(50) // 'venta' o 'alquiler'
+  inmuebles    Inmueble[]
+}
+
 model Inmueble {
   id_inmueble         Int               @id @default(autoincrement())
   id_tipo_inmueble    Int
@@ -63,15 +69,21 @@ model Inmueble {
   ubicacion           Ubicacion         @relation(fields: [id_ubicacion], references: [id_ubicacion], onDelete: Restrict, onUpdate: Cascade)
   id_estado           Int
   estado              Estado            @relation(fields: [id_estado], references: [id_estado], onDelete: Restrict, onUpdate: Cascade)
+  id_operacion Int?
+  operacion    Operacion? @relation(fields: [id_operacion], references: [id_operacion])
+
   id_cliente          Int
   cliente             Cliente           @relation(fields: [id_cliente], references: [id_cliente], onDelete: Restrict, onUpdate: Cascade)
+
+  titulo              String            @db.VarChar(200)
   superficie_total    Decimal           @db.Decimal(10, 2)
   superficie_cubierta Decimal?          @db.Decimal(10, 2)
   cantidad_ambientes  Int?
   antiguedad          Int?
-  precio              Decimal           @db.Decimal(10, 2)
-  foto                String?           @db.VarChar(200) // foto principal (opcional)
+  precio              Decimal?          @db.Decimal(10, 2)
+  foto                String?           @db.VarChar(200)
   detalles            String?           @db.VarChar(255)
+
   contratos           Contrato[]
   cobranzas           Cobranza[]
   rendiciones         Rendicion[]
@@ -83,7 +95,7 @@ model Inmueble {
 model InmuebleImagen {
   id          Int       @id @default(autoincrement())
   url         String    @db.VarChar(255)
-  principal   Boolean   @default(false) // permite marcar una imagen como principal
+  principal   Boolean   @default(false)
   inmueble    Inmueble  @relation(fields: [inmuebleId], references: [id_inmueble], onDelete: Cascade)
   inmuebleId  Int
 

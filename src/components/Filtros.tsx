@@ -1,7 +1,17 @@
 "use client";
 
-import { Dispatch, SetStateAction, useState } from "react";
+import { Dispatch, SetStateAction, useState, useEffect } from "react";
 import { FiltrosInmueble } from "@/types/filtros";
+
+interface Operacion {
+  id_operacion: number;
+  nombre: string;
+}
+
+interface TipoInmueble {
+  id_tipo_inmueble: number;
+  nombre: string;
+}
 
 interface FiltrosProps {
   filtros: FiltrosInmueble;
@@ -11,13 +21,30 @@ interface FiltrosProps {
 
 export default function Filtros({ filtros, setFiltros, onApply }: FiltrosProps) {
   const [open, setOpen] = useState(false);
+  const [operaciones, setOperaciones] = useState<Operacion[]>([]);
+  const [tipos, setTipos] = useState<TipoInmueble[]>([]);
+
+  useEffect(() => {
+    fetch("/api/operaciones")
+      .then(res => res.json())
+      .then(setOperaciones)
+      .catch(err => console.error("Error cargando operaciones:", err));
+
+    fetch("/api/tipos_inmueble")
+      .then(res => res.json())
+      .then(setTipos)
+      .catch(err => console.error("Error cargando tipos:", err));
+  }, []);
 
   const handleRemove = (key: keyof FiltrosInmueble) => {
-    setFiltros((prev) => ({ ...prev, [key]: "" }));
+    setFiltros(prev => ({ ...prev, [key]: undefined }));
     onApply?.();
   };
 
   const buscar = () => onApply?.();
+
+  const getOperacionNombre = (id: number) => operaciones.find(op => op.id_operacion === id)?.nombre || "";
+  const getTipoNombre = (id: number) => tipos.find(t => t.id_tipo_inmueble === id)?.nombre || "";
 
   return (
     <div className="w-full">
@@ -34,58 +61,57 @@ export default function Filtros({ filtros, setFiltros, onApply }: FiltrosProps) 
         <div className="bg-white shadow-md rounded-xl p-6 mt-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {/* Filtro estado */}
           <select
-            value={filtros.estado}
-            onChange={(e) =>
-              setFiltros((prev) => ({ ...prev, estado: e.target.value as "" | "alquiler" | "venta" }))
+            value={filtros.estadoId || ""}
+            onChange={e =>
+              setFiltros(prev => ({ ...prev, estadoId: Number(e.target.value) }))
             }
             className="border border-gray-300 p-2 rounded-lg focus:ring-2 focus:ring-blue-400 focus:outline-none"
           >
-            <option value="" disabled hidden>
-              Estado
-            </option>
-            <option value="alquiler">Alquiler</option>
-            <option value="venta">Venta</option>
+            <option value="" disabled hidden>Estado</option>
+            {operaciones.map(op => (
+              <option key={op.id_operacion} value={op.id_operacion}>
+                {op.nombre}
+              </option>
+            ))}
           </select>
 
           {/* Filtro tipo */}
           <select
-            value={filtros.tipo}
-            onChange={(e) => setFiltros((prev) => ({ ...prev, tipo: e.target.value }))}
+            value={filtros.tipoId || ""}
+            onChange={e =>
+              setFiltros(prev => ({ ...prev, tipoId: Number(e.target.value) }))
+            }
             className="border border-gray-300 p-2 rounded-lg focus:ring-2 focus:ring-blue-400 focus:outline-none"
           >
-            <option value="" disabled hidden>
-              Tipo
-            </option>
-            <option value="casa">Casa</option>
-            <option value="departamento">Departamento</option>
-            <option value="lote">Lote</option>
-            <option value="duplex">Duplex</option>
+            <option value="" disabled hidden>Tipo</option>
+            {tipos.map(t => (
+              <option key={t.id_tipo_inmueble} value={t.id_tipo_inmueble}>
+                {t.nombre}
+              </option>
+            ))}
           </select>
 
-          {/* Filtro precio mínimo */}
+          {/* Precio mínimo */}
           <input
             type="number"
             placeholder="Precio mínimo"
-            value={filtros.precioMin}
-            onChange={(e) => setFiltros((prev) => ({ ...prev, precioMin: e.target.value }))}
+            value={filtros.precioMin || ""}
+            onChange={e => setFiltros(prev => ({ ...prev, precioMin: e.target.value }))}
             className="border border-gray-300 p-2 rounded-lg focus:ring-2 focus:ring-blue-400 focus:outline-none"
           />
 
-          {/* Filtro precio máximo */}
+          {/* Precio máximo */}
           <input
             type="number"
             placeholder="Precio máximo"
-            value={filtros.precioMax}
-            onChange={(e) => setFiltros((prev) => ({ ...prev, precioMax: e.target.value }))}
+            value={filtros.precioMax || ""}
+            onChange={e => setFiltros(prev => ({ ...prev, precioMax: e.target.value }))}
             className="border border-gray-300 p-2 rounded-lg focus:ring-2 focus:ring-blue-400 focus:outline-none"
           />
 
           {/* Botón aplicar */}
           <div className="col-span-full flex justify-end">
-            <button
-              onClick={buscar}
-              className="filter-tag hover:bg-blue-500 transition"
-            >
+            <button onClick={buscar} className="filter-tag hover:bg-blue-500 transition">
               Aplicar filtros
             </button>
           </div>
@@ -94,36 +120,28 @@ export default function Filtros({ filtros, setFiltros, onApply }: FiltrosProps) 
 
       {/* Mostrar filtros activos */}
       <div className="flex flex-wrap gap-2 mt-4">
-        {filtros.estado && (
+        {filtros.estadoId && (
           <span className="filter-tag">
-            Estado: {filtros.estado}
-            <button onClick={() => handleRemove("estado")} className="text-sm font-bold hover:text-red-500">
-              ×
-            </button>
+            Estado: {getOperacionNombre(filtros.estadoId)}
+            <button onClick={() => handleRemove("estadoId")} className="text-sm font-bold hover:text-red-500">×</button>
           </span>
         )}
-        {filtros.tipo && (
+        {filtros.tipoId && (
           <span className="filter-tag">
-            Tipo: {filtros.tipo}
-            <button onClick={() => handleRemove("tipo")} className="text-sm font-bold hover:text-red-500">
-              ×
-            </button>
+            Tipo: {getTipoNombre(filtros.tipoId)}
+            <button onClick={() => handleRemove("tipoId")} className="text-sm font-bold hover:text-red-500">×</button>
           </span>
         )}
         {filtros.precioMin && (
           <span className="filter-tag">
             Min: ${filtros.precioMin}
-            <button onClick={() => handleRemove("precioMin")} className="text-sm font-bold hover:text-red-500">
-              ×
-            </button>
+            <button onClick={() => handleRemove("precioMin")} className="text-sm font-bold hover:text-red-500">×</button>
           </span>
         )}
         {filtros.precioMax && (
           <span className="filter-tag">
             Max: ${filtros.precioMax}
-            <button onClick={() => handleRemove("precioMax")} className="text-sm font-bold hover:text-red-500">
-              ×
-            </button>
+            <button onClick={() => handleRemove("precioMax")} className="text-sm font-bold hover:text-red-500">×</button>
           </span>
         )}
       </div>

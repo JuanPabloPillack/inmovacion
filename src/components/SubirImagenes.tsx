@@ -1,75 +1,67 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 import { useState } from "react";
 
 export default function SubirImagenes({ inmuebleId }: { inmuebleId: number }) {
-  const [principal, setPrincipal] = useState<File | null>(null);
-  const [galeria, setGaleria] = useState<FileList | null>(null);
+  const [files, setFiles] = useState<FileList | null>(null);
   const [subiendo, setSubiendo] = useState(false);
 
   const subirArchivo = async (file: File) => {
-    const formData = new FormData();
-    formData.append("file", file);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
 
-    const res = await fetch("/api/upload", {
-      method: "POST",
-      body: formData,
-    });
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
 
-    const { url } = await res.json();
-    return url;
+      const data = await res.json();
+
+      if (!res.ok) throw new Error(data.error || "Error al subir imagen");
+
+      return data.url as string;
+    } catch (err: any) {
+      console.error("Error al subir imagen:", err);
+      throw err;
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!files) return;
+
     setSubiendo(true);
 
-    // 1. Subir y guardar foto principal
-    if (principal) {
-      const url = await subirArchivo(principal);
-      await fetch(`/api/inmuebles/${inmuebleId}/foto`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url }),
-      });
-    }
-
-    // 2. Subir y guardar fotos adicionales
-    if (galeria) {
-      for (const file of Array.from(galeria)) {
+    try {
+      for (const file of Array.from(files)) {
         const url = await subirArchivo(file);
+
         await fetch("/api/images", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ inmuebleId, url }),
         });
       }
+      alert("Imágenes guardadas correctamente 🚀");
+    } catch (err) {
+      alert("Error al subir imágenes. Revisa la consola para más detalles.");
+    } finally {
+      setSubiendo(false);
     }
-
-    setSubiendo(false);
-    alert("Imágenes guardadas correctamente 🚀");
   };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div>
-        <label className="block">Foto principal:</label>
-        <input
-          type="file"
-          accept="image/*"
-          onChange={(e) => setPrincipal(e.target.files?.[0] ?? null)}
-        />
-      </div>
-
-      <div>
-        <label className="block">Galería de fotos:</label>
+      <label className="block">
+        Seleccionar imágenes:
         <input
           type="file"
           multiple
           accept="image/*"
-          onChange={(e) => setGaleria(e.target.files)}
+          onChange={(e) => setFiles(e.target.files)}
         />
-      </div>
-
+      </label>
       <button
         type="submit"
         disabled={subiendo}

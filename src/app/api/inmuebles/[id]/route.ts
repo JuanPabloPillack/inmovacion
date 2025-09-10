@@ -20,26 +20,30 @@ type InmuebleWithRelations = PrismaInmueble & {
   imagenes: PrismaInmuebleImagen[];
 };
 
-export const GET = async (_req: Request, { params }: { params: { id: string } }) => {
+// 🟢 GET: obtener un inmueble por id
+export async function GET(
+  _req: Request,
+  context: { params: { id: string } }
+) {
   try {
-    const id = Number(params.id);
-    if (Number.isNaN(id)) return NextResponse.json({ error: "ID inválido" }, { status: 400 });
+    const id = Number(context.params.id);
+    if (Number.isNaN(id)) {
+      return NextResponse.json({ error: "ID inválido" }, { status: 400 });
+    }
 
     const i = (await prisma.inmueble.findUnique({
       where: { id_inmueble: id },
       include: {
         tipo_inmueble: true,
         estado: true,
-        ubicacion: {
-          include: {
-            barrio: { include: { localidad: true } },
-          },
-        },
+        ubicacion: { include: { barrio: { include: { localidad: true } } } },
         imagenes: true,
       },
     })) as InmuebleWithRelations | null;
 
-    if (!i) return NextResponse.json({ error: "Inmueble no encontrado" }, { status: 404 });
+    if (!i) {
+      return NextResponse.json({ error: "Inmueble no encontrado" }, { status: 404 });
+    }
 
     const imagenes = (i.imagenes || []).map((img) => ({
       id: img.id,
@@ -48,7 +52,8 @@ export const GET = async (_req: Request, { params }: { params: { id: string } })
       principal: Boolean(img.principal),
     }));
 
-    const fotoPrincipal = imagenes.find((img) => img.principal)?.url || i.foto || "/placeholder.jpg";
+    const fotoPrincipal =
+      imagenes.find((img) => img.principal)?.url || i.foto || "/placeholder.jpg";
 
     const ubicacion = {
       id_ubicacion: i.ubicacion.id_ubicacion,
@@ -78,12 +83,14 @@ export const GET = async (_req: Request, { params }: { params: { id: string } })
       id_cliente: i.id_cliente,
       precio: Number(i.precio),
       superficie_total: Number(i.superficie_total),
-      superficie_cubierta: i.superficie_cubierta != null ? Number(i.superficie_cubierta) : null,
+      superficie_cubierta:
+        i.superficie_cubierta != null ? Number(i.superficie_cubierta) : null,
       cantidad_ambientes: i.cantidad_ambientes ?? null,
       antiguedad: i.antiguedad ?? null,
       foto: i.foto ?? null,
       fotoPrincipal,
       detalles: i.detalles ?? null,
+      titulo: i.titulo, // 🔹 agregado para cumplir InmuebleDTO
       tipo_inmueble: {
         id_tipo_inmueble: i.tipo_inmueble.id_tipo_inmueble,
         nombre: i.tipo_inmueble.nombre,
@@ -97,4 +104,51 @@ export const GET = async (_req: Request, { params }: { params: { id: string } })
     console.error("Error al obtener el inmueble:", error);
     return NextResponse.json({ error: "Error al obtener el inmueble" }, { status: 500 });
   }
-};
+}
+
+// 🟡 PUT: actualizar inmueble
+export async function PUT(
+  req: Request,
+  context: { params: { id: string } }
+) {
+  try {
+    const id = Number(context.params.id);
+    if (Number.isNaN(id)) {
+      return NextResponse.json({ error: "ID inválido" }, { status: 400 });
+    }
+
+    const data = await req.json();
+
+    const inmuebleActualizado = await prisma.inmueble.update({
+      where: { id_inmueble: id },
+      data,
+    });
+
+    return NextResponse.json(inmuebleActualizado);
+  } catch (error) {
+    console.error("Error al actualizar el inmueble:", error);
+    return NextResponse.json({ error: "Error al actualizar el inmueble" }, { status: 500 });
+  }
+}
+
+// 🔴 DELETE: eliminar inmueble
+export async function DELETE(
+  _req: Request,
+  context: { params: { id: string } }
+) {
+  try {
+    const id = Number(context.params.id);
+    if (Number.isNaN(id)) {
+      return NextResponse.json({ error: "ID inválido" }, { status: 400 });
+    }
+
+    await prisma.inmueble.delete({
+      where: { id_inmueble: id },
+    });
+
+    return NextResponse.json({ message: "Inmueble eliminado con éxito" });
+  } catch (error) {
+    console.error("Error al eliminar el inmueble:", error);
+    return NextResponse.json({ error: "Error al eliminar el inmueble" }, { status: 500 });
+  }
+}
