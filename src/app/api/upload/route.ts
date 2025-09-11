@@ -1,30 +1,50 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from "next/server";
-import cloudinary from "@/lib/cloudinary";
+import { v2 as cloudinary } from "cloudinary";
 
-export const runtime = "nodejs";
+// Configuración de Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+// Evita que Next.js intente parsear automáticamente el body
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
 
 export async function POST(req: Request) {
   try {
+    // Obtener el formData enviado desde el cliente
     const formData = await req.formData();
-    const file = formData.get("file") as File | null;
+    const file = formData.get("file") as File;
 
-    if (!file) return NextResponse.json({ error: "No se subió archivo" }, { status: 400 });
+    if (!file) {
+      return NextResponse.json({ error: "No se recibió archivo" }, { status: 400 });
+    }
 
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(new Uint8Array(arrayBuffer));
+    // Convertir el archivo a buffer/base64
+    const bytes = await file.arrayBuffer();
+    const buffer = Buffer.from(bytes);
 
-    // Convertimos a Base64 para evitar problemas de firma
-    const base64 = `data:${file.type};base64,${buffer.toString("base64")}`;
-
-    const result = await cloudinary.uploader.upload(base64, {
-      folder: "inmuebles",
-      resource_type: "auto",
+    // Subir a Cloudinary
+    const uploadRes = await new Promise<any>((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
+        { folder: "inmuebles", resource_type: "image" },
+        (error, result) => {
+          if (error) reject(error);
+          else resolve(result);
+        }
+      );
+      stream.end(buffer);
     });
 
-    return NextResponse.json({ url: result.secure_url });
-  } catch (err: any) {
-    console.error("🔥 Error en /api/upload:", err);
-    return NextResponse.json({ error: err.message || "Error interno en la subida" }, { status: 500 });
+    return NextResponse.json({ url: uploadRes.secure_url }, { status: 200 });
+  } catch (error: any) {
+    console.error("❌ Error en Cloudinary:", error);
+    return NextResponse.json({ error: "Error al subir a Cloudinary" }, { status: 500 });
   }
 }

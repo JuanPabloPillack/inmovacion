@@ -16,7 +16,7 @@ export default function HomePage() {
         const data: InmuebleDTO[] = await res.json();
         setInmuebles(data);
       } catch (error) {
-        console.error(error);
+        console.error("❌ Error en fetchInmuebles:", error);
       } finally {
         setLoading(false);
       }
