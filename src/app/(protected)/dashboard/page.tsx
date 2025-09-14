@@ -1,3 +1,7 @@
+// Archivo: src/app/(protected)/dashboard/page.tsx
+// Descripción: Página de dashboard que muestra la sesión del usuario autenticado, es nada más para pruebas, no es un dashboard real.
+// Proyecto: inmovacion (GBS y Asociados), sistema inmobiliario.
+
 import LogoutButton from "@/components/ui/LogoutButton"
 import { auth } from "../../../../auth"
  

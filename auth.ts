@@ -13,12 +13,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   callbacks: {
     jwt({ token, user }) {
       if (user) { // User is available during sign-in
+        token.id = user.id; // Copiar id al token
         token.role = user.role;
       }
       return token
     },
     session({ session, token }) {
       if (session.user) {
+        session.user.id = token.id; // Copiar id a la sesión
         session.user.role = token.role;
       }
       return session

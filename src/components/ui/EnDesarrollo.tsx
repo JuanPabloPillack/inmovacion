@@ -1,3 +1,6 @@
+// Archivo: src/components/ui/EnDesarrollo.tsx
+// Descripción: Componente que muestra un mensaje de "En Desarrollo" con un botón para volver al inicio.
+// Proyecto: inmovacion (GBS y Asociados), sistema inmobiliario.
 'use client';
 
 import React from 'react';

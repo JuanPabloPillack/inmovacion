@@ -37,42 +37,11 @@ export default {
           throw new Error("Contraseña Incorrecta");
         }
 
-        //verificación email
-
-        if (!user.emailVerified) {
-          
-          const verifyTokenExist = await db.verificationToken.findFirst({
-            where: {
-              identifier : user.email
-            }
-          });
-
-
-          //si existe un token lo eliminamos
-          if (verifyTokenExist?.identifier) {
-            await db.verificationToken.delete({
-              where:{
-                identifier : user.email
-              }
-            });
-          }
-
-          const token = nanoid();
-
-          await db.verificationToken.create({
-            data: {
-              identifier: user.email,
-              token,
-              expires: new Date(Date.now() + 1000 *60 *60 *24)
-            }
-          });
-
-          //enviar email de verificación con resend
-
-          const response = await sendEmailVerification(user.email, token);
-          throw new Error("Por favor, revisa la verificación de correo electrónico");
-
-        }
+   
+        if (user.status === "inactive") {
+    throw new Error("Tu cuenta está inactiva. Contacta a un administrador.");
+  }
+        
 
         return user;
       },

@@ -53,14 +53,13 @@ export const registerAction = async (values: z.infer<typeof registerSchema>) => 
         email: data.email,
         name: data.name,
         password: passwordHash,
+        emailVerified: new Date(),
+        phone: data.phone,
+        role: data.role,
       },
     });
 
-    await signIn("credentials", {
-      email: data.email,
-      password: data.password,
-      redirect: false,
-    });
+
 
     return { success: true };
   } catch (error) {
