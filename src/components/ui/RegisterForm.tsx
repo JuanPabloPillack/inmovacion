@@ -150,7 +150,7 @@ export default function RegisterForm({ onSuccess, onError, onFormDirtyChange }: 
                       <Input
                         placeholder="usuario@empresa.com"
                         {...field}
-                        type="email"
+                        type=""
                         disabled={isPending}
                         className="h-12 rounded-xl border-[#969696]/20 focus:border-[#63bae9] focus:ring-[#63bae9]/20 transition-all duration-200 text-[#686363] placeholder-[#969696] bg-slate-50/50 text-sm sm:text-base"
                       />
