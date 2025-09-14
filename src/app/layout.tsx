@@ -1,9 +1,19 @@
+// src/app/layout.tsx
+import "./globals.css"; // 👈 asegurate de tener esto
+import { SessionProvider } from "next-auth/react";
+import type { ReactNode } from "react";
 import "./globals.css";
 import Image from "next/image";
 import Link from "next/link";
 
+export default function RootLayout({ children }: { children: ReactNode }) {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
+    <html lang="es">
+      <body className="min-h-screen bg-gray-50 text-gray-900">
+        <SessionProvider>
+          {children}
+        </SessionProvider>
     <html lang="es">
       <body>
         {/* Header */}
