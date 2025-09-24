@@ -90,14 +90,13 @@ export async function GET(
       foto: i.foto ?? null,
       fotoPrincipal,
       detalles: i.detalles ?? null,
-      titulo: i.titulo,
+      titulo: i.titulo, // 🔹 agregado para cumplir InmuebleDTO
       tipo_inmueble: {
         id_tipo_inmueble: i.tipo_inmueble.id_tipo_inmueble,
         nombre: i.tipo_inmueble.nombre,
       },
       ubicacion,
       imagenes,
-      archivado: i.archivado ?? false, // 🔹 agregamos archivado
     };
 
     return NextResponse.json(dto);
@@ -107,7 +106,7 @@ export async function GET(
   }
 }
 
-// 🟡 PUT: actualizar inmueble completo
+// 🟡 PUT: actualizar inmueble
 export async function PUT(
   req: Request,
   context: { params: { id: string } }
@@ -151,39 +150,5 @@ export async function DELETE(
   } catch (error) {
     console.error("Error al eliminar el inmueble:", error);
     return NextResponse.json({ error: "Error al eliminar el inmueble" }, { status: 500 });
-  }
-}
-
-// 🟠 PATCH: archivar/desarchivar inmueble
-export async function PATCH(
-  req: Request,
-  context: { params: { id: string } }
-) {
-  try {
-    const id = Number(context.params.id);
-    if (Number.isNaN(id)) {
-      return NextResponse.json({ error: "ID inválido" }, { status: 400 });
-    }
-
-    const { archivado } = await req.json();
-    if (typeof archivado !== "boolean") {
-      return NextResponse.json(
-        { error: "El valor de archivado debe ser booleano" },
-        { status: 400 }
-      );
-    }
-
-    const inmuebleActualizado = await prisma.inmueble.update({
-      where: { id_inmueble: id },
-      data: { archivado },
-    });
-
-    return NextResponse.json(inmuebleActualizado);
-  } catch (error) {
-    console.error("Error al archivar/desarchivar el inmueble:", error);
-    return NextResponse.json(
-      { error: "Error al actualizar el estado de archivado" },
-      { status: 500 }
-    );
   }
 }

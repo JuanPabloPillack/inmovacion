@@ -2,14 +2,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-// ✅ GET → listar inmuebles con filtros opcionales, ignorando los archivados
+// ✅ GET → listar inmuebles con filtros opcionales
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
 
-    const where: any = {
-      archivado: false, // ❌ Solo mostrar inmuebles no archivados
-    };
+    const where: any = {};
 
     if (searchParams.get("tipo")) {
       where.id_tipo_inmueble = Number(searchParams.get("tipo"));
@@ -60,7 +58,6 @@ export async function POST(req: NextRequest) {
         antiguedad: body.antiguedad,
         precio: body.precio,
         detalles: body.detalles,
-        archivado: false, // 🔹 Inicialmente no archivado
 
         // relaciones
         tipo_inmueble: { connect: { id_tipo_inmueble: body.tipo_inmueble.connect.id_tipo_inmueble } },
