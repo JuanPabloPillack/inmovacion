@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import InmuebleCard from "@/components/InmuebleCard";
-import { InmuebleDTO } from "@/types/inmuebles";
+import { InmuebleDTO } from "../../../types/inmuebles";
 
 export default function HomePage() {
   const [inmuebles, setInmuebles] = useState<InmuebleDTO[]>([]);

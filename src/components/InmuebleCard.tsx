@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useState } from "react";
-import type { InmuebleDTO } from "@/types/inmuebles";
+import type { InmuebleDTO } from "../../types/inmuebles";
 
 interface Props {
   inmueble: InmuebleDTO;

@@ -1,7 +1,7 @@
 "use client";
 
 import { Dispatch, SetStateAction, useState, useEffect } from "react";
-import { FiltrosInmueble } from "@/types/filtros";
+import { FiltrosInmueble } from "../../types/filtros";
 
 interface Operacion {
   id_operacion: number;

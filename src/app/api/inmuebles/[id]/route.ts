@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import type { InmuebleDTO } from "@/types/inmuebles";
+import type { InmuebleDTO } from "../../../../../types/inmuebles";
 import type {
   Inmueble as PrismaInmueble,
   InmuebleImagen as PrismaInmuebleImagen,

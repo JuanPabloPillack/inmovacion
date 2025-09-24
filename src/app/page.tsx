@@ -4,8 +4,8 @@
 import { useState, useEffect, useCallback } from "react";
 import Filtros from "../components/Filtros";
 import InmuebleCard from "../components/InmuebleCard";
-import { InmuebleDTO } from "@/types/inmuebles";
-import { FiltrosInmueble } from "@/types/filtros";
+import { InmuebleDTO } from "../../types/inmuebles";
+import { FiltrosInmueble } from "../../types/filtros";
 
 export default function HomePage() {
   const [filtros, setFiltros] = useState<FiltrosInmueble>({
