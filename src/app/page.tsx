@@ -1,31 +1,72 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import Header from "@/components/ui/Header";
+import { useState, useEffect, useCallback } from "react";
+import Filtros from "../components/Filtros";
+import InmuebleCard from "../components/InmuebleCard";
+import { InmuebleDTO } from "@/types/inmuebles";
+import { FiltrosInmueble } from "@/types/filtros";
 
 export default function HomePage() {
+  const [filtros, setFiltros] = useState<FiltrosInmueble>({
+    estadoId: undefined,
+    tipoId: undefined,
+    precioMin: "",
+    precioMax: "",
+  });
+
+  const [inmuebles, setInmuebles] = useState<InmuebleDTO[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const buscarInmuebles = useCallback(async () => {
+    setLoading(true);
+    setError("");
+
+    try {
+      const query = new URLSearchParams();
+
+      if (filtros.tipoId) query.append("tipo", filtros.tipoId.toString());
+      if (filtros.estadoId) query.append("estado", filtros.estadoId.toString());
+      if (filtros.precioMin) query.append("precioMin", filtros.precioMin);
+      if (filtros.precioMax) query.append("precioMax", filtros.precioMax);
+
+      const res = await fetch(`/api/inmuebles?${query.toString()}`);
+      if (!res.ok) throw new Error("Error al obtener inmuebles");
+
+      const data: InmuebleDTO[] = await res.json();
+      setInmuebles(data);
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message);
+      setInmuebles([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [filtros]);
+
+  useEffect(() => {
+    buscarInmuebles();
+  }, [buscarInmuebles]);
+
   return (
-    <div className="min-h-screen flex flex-col font-sans relative bg-gradient-to-br from-[#63bae9]/10 via-white to-[#fcc238]/10">
-      {/* Header */}
-      <Header />
-
-      {/* Hero / Contenido principal */}
-      <main className="flex-1 flex items-center justify-center px-4 py-20">
-        <div className="w-full max-w-3xl bg-white rounded-2xl shadow-lg p-12 flex flex-col items-center text-center space-y-6 border border-[#e5e5e5]">
-          <h1 className="text-4xl md:text-5xl font-bold text-[#63bae9]">
-            De parte del equipo de Sistemas
-          </h1>
-          <p className="text-lg md:text-xl text-[#ff6b6b] font-semibold">
-            Estamos aún en desarrollo, se agradece su paciencia.
-          </p>
-        </div>
-      </main>
-
-      {/* Footer */}
-      <footer className="bg-[#63bae9] text-white py-6 text-center mt-auto">
-        <p className="text-sm">
-          © 2025 Inmovación - GBS y Asociados. Todos los derechos reservados.
-        </p>
-      </footer>
+    <div className="main-content max-w-6xl mx-auto py-8 px-4">
+      <Filtros filtros={filtros} setFiltros={setFiltros} onApply={buscarInmuebles} />
+      <div className="space-y-6">
+        {loading ? (
+          <p className="text-center">Cargando inmuebles...</p>
+        ) : error ? (
+          <p className="text-center text-red-500">{error}</p>
+        ) : inmuebles.length === 0 ? (
+          <p className="text-center">No hay inmuebles disponibles con este filtro.</p>
+        ) : (
+          <div className="space-y-6">
+            {inmuebles.map((i) => (
+              <InmuebleCard key={i.id_inmueble} inmueble={i} />
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
