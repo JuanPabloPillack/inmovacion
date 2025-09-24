@@ -90,6 +90,7 @@ model Inmueble {
   pagos               Pago[]
   historial           Historial[]       @relation("HistorialInmueble")
   imagenes            InmuebleImagen[]
+  archivado           Boolean           @default(false)
 }
 
 model InmuebleImagen {

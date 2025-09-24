@@ -13,9 +13,10 @@ export interface InmuebleDTO {
   foto?: string | null;
   fotoPrincipal: string;
   detalles?: string | null;
-  titulo: string; 
-  archivado?: boolean;
+  titulo: string;
 
+  // 🔹 Nuevo: siempre boolean
+  archivado: boolean;
 
   tipo_inmueble: {
     id_tipo_inmueble: number;
