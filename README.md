@@ -36,7 +36,6 @@ The easiest way to deploy your Next.js app is to use the [Vercel Platform](https
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
 
 
-
 -- En esta rama tenemos lo siguiente:
 
 -creacion de la BD (de forma local, no desplegada) con migraciones (configurar el archivo .env y ejecutar npx prisma migrate dev para instalar la BD en forma local).
