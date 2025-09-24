@@ -13,7 +13,9 @@ export interface InmuebleDTO {
   foto?: string | null;
   fotoPrincipal: string;
   detalles?: string | null;
-  titulo: string; // agregado: se genera en backend
+  titulo: string; 
+  archivado?: boolean;
+
 
   tipo_inmueble: {
     id_tipo_inmueble: number;
