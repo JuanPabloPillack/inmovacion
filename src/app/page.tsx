@@ -1,6 +1,7 @@
+//src/app/page.tsx
 "use client";
 
-import Header from "@/components/ui/Header";
+import Header from "../components/ui/Header";
 
 export default function HomePage() {
   return (
