@@ -4,7 +4,6 @@ import { db } from "@/lib/db";
 export async function obtenerInmuebles(filtros: any) {
   return db.inmueble.findMany({
     where: {
-      // Filtrar por tipo de inmueble (usando la relación con Tipo_inmueble)
       tipo_inmueble: {
         nombre: filtros.tipo || undefined, // Filtra por el nombre del tipo de inmueble
       },
