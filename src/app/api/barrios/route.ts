@@ -1,11 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // app/api/barrios/route.ts
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
 
 export async function GET() {
   try {
-    const barrios = await prisma.barrio.findMany({
+    const barrios = await db.barrio.findMany({
       orderBy: { nombre: "asc" },
     });
 

@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
 
 // ✅ GET → listar inmuebles con filtros opcionales
 export async function GET(req: NextRequest) {
@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
       where.precio = { ...where.precio, lte: Number(searchParams.get("precioMax")) };
     }
 
-    const inmuebles = await prisma.inmueble.findMany({
+    const inmuebles = await db.inmueble.findMany({
       where,
       include: {
         tipo_inmueble: true,
@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
     // Normalizar imágenes
     const imagenesArray = Array.isArray(body.imagenes?.create) ? body.imagenes.create : [];
 
-    const inmueble = await prisma.inmueble.create({
+    const inmueble = await db.inmueble.create({
       data: {
         titulo: body.titulo,
         superficie_total: body.superficie_total,

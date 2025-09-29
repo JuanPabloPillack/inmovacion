@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
 
 export async function GET() {
   try {
-    const operaciones = await prisma.operacion.findMany();
+    const operaciones = await db.operacion.findMany();
     return NextResponse.json(operaciones);
   } catch (err) {
     console.error("Error al obtener operaciones:", err);

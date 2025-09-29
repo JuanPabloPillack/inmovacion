@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
 import type { InmuebleDTO } from "@/types/inmuebles";
 import type {
   Inmueble as PrismaInmueble,
@@ -31,7 +31,7 @@ export async function GET(
       return NextResponse.json({ error: "ID inválido" }, { status: 400 });
     }
 
-    const i = (await prisma.inmueble.findUnique({
+    const i = (await db.inmueble.findUnique({
       where: { id_inmueble: id },
       include: {
         tipo_inmueble: true,
@@ -119,7 +119,7 @@ export async function PUT(
 
     const data = await req.json();
 
-    const inmuebleActualizado = await prisma.inmueble.update({
+    const inmuebleActualizado = await db.inmueble.update({
       where: { id_inmueble: id },
       data,
     });
@@ -142,7 +142,7 @@ export async function DELETE(
       return NextResponse.json({ error: "ID inválido" }, { status: 400 });
     }
 
-    await prisma.inmueble.delete({
+    await db.inmueble.delete({
       where: { id_inmueble: id },
     });
 

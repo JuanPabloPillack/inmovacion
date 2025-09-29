@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
 
 export async function GET() {
   try {
-    const clientes = await prisma.cliente.findMany({
+    const clientes = await db.cliente.findMany({
       select: { id_cliente: true, nombre: true },
       orderBy: { nombre: "asc" },
     });

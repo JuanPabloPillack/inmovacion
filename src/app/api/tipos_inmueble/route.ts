@@ -1,10 +1,10 @@
 // app/api/tipos_inmueble/route.ts
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
 
 export async function GET() {
   try {
-    const tipos = await prisma.tipo_inmueble.findMany({
+    const tipos = await db.tipo_inmueble.findMany({
       select: {
         id_tipo_inmueble: true,
         nombre: true,

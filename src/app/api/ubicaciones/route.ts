@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
 
 export async function POST(req: Request) {
   try {
@@ -11,7 +11,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Faltan campos obligatorios" }, { status: 400 });
     }
 
-    const ubicacion = await prisma.ubicacion.create({
+    const ubicacion = await db.ubicacion.create({
       data: {
         direccion,
         ciudad: ciudad || null,
@@ -29,7 +29,7 @@ export async function POST(req: Request) {
 
 export async function GET() {
   try {
-    const ubicaciones = await prisma.ubicacion.findMany({
+    const ubicaciones = await db.ubicacion.findMany({
       include: { barrio: true },
       orderBy: { id_ubicacion: "desc" },
     });

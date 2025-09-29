@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
 
 export async function POST(req: Request) {
   try {
@@ -9,7 +9,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Faltan datos" }, { status: 400 });
     }
 
-    const imagen = await prisma.inmuebleImagen.create({
+    const imagen = await db.inmuebleImagen.create({
       data: { inmuebleId, url, principal: false },
     });
 
