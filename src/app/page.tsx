@@ -1,5 +1,3 @@
-//src/app/page.tsx
-//cambio para mergear2...
 "use client";
 
 import Header from "../components/ui/Header";
