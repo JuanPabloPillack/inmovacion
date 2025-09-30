@@ -1,5 +1,5 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 // src/components/ui/Header.tsx
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 "use client";
 
@@ -49,7 +49,6 @@ export default function Header() {
           >
             Inicio
           </button>
-          
         </div>
 
         <div className="absolute right-6 flex items-center space-x-2">
