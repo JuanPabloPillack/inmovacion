@@ -6,20 +6,34 @@ import type { InmuebleDTO } from "@/types/inmuebles";
 
 interface Props {
   inmueble: InmuebleDTO;
+  bajaMode?: boolean; // 🔹 habilita opción de archivar/desarchivar
 }
 
-export default function InmuebleCard({ inmueble }: Props) {
+export default function InmuebleCard({ inmueble, bajaMode = false }: Props) {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [archivado, setArchivado] = useState(inmueble.archivado || false);
   const images = inmueble.imagenes.map((img) => img.url);
 
   const handlePrevImage = () =>
-    setCurrentImageIndex(
-      (prev) => (prev > 0 ? prev - 1 : images.length - 1)
-    );
+    setCurrentImageIndex((prev) => (prev > 0 ? prev - 1 : images.length - 1));
   const handleNextImage = () =>
-    setCurrentImageIndex(
-      (prev) => (prev < images.length - 1 ? prev + 1 : 0)
-    );
+    setCurrentImageIndex((prev) => (prev < images.length - 1 ? prev + 1 : 0));
+
+  const toggleArchivado = async () => {
+    try {
+      // Actualizamos el estado local
+      setArchivado(!archivado);
+
+      // Actualizamos en la base de datos
+      await fetch(`/api/inmuebles/${inmueble.id_inmueble}`, {
+        method: "PUT",
+        body: JSON.stringify({ archivado: !archivado }),
+        headers: { "Content-Type": "application/json" },
+      });
+    } catch (error) {
+      console.error("Error al actualizar archivado:", error);
+    }
+  };
 
   const localidad =
     inmueble.ubicacion.barrio?.localidad?.nombre ?? "Ubicación desconocida";
@@ -78,15 +92,28 @@ export default function InmuebleCard({ inmueble }: Props) {
         <h2 className="text-xl font-semibold mb-2">
           {inmueble.tipo_inmueble.nombre} en {localidad}
         </h2>
-        <p className="text-gray-700">
-          {inmueble.detalles || "Sin descripción disponible."}
-        </p>
+        <p className="text-gray-700">{inmueble.detalles || "Sin descripción disponible."}</p>
         <p className="text-gray-700 mt-2">
           Superficie: {metrosCuadrados} | {ambientes}
         </p>
         <p className="text-gray-700 mt-2">
           Precio: ${inmueble.precio?.toLocaleString() || "N/A"}
         </p>
+
+        {/* 🔹 Solo en bajaMode mostramos archivado y botón */}
+        {bajaMode && (
+          <>
+            <p className="text-gray-700 mt-2 font-semibold">
+              Estado: {archivado ? "Archivado" : "Activo"}
+            </p>
+            <button
+              onClick={toggleArchivado}
+              className="mt-2 px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
+            >
+              {archivado ? "Desarchivar" : "Archivar"}
+            </button>
+          </>
+        )}
       </div>
 
       {/* Contacto */}
