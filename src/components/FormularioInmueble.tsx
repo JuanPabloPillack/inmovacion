@@ -1,6 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
+
 import { useState, useEffect, useRef } from "react";
+import Header from "@/components/ui/Header";
 
 interface Cliente { id_cliente: number; nombre: string; }
 interface TipoInmueble { id_tipo_inmueble: number; nombre: string; }
@@ -138,110 +140,133 @@ export default function FormularioInmueble() {
   };
 
   return (
-    <form ref={formRef} onSubmit={handleSubmit} className="p-4 border rounded space-y-4">
-      {/* Título */}
-      <div>
-        <label className="block">Título</label>
-        <input type="text" name="titulo" className="border p-2 w-full" required />
-      </div>
+    <div className="min-h-screen flex flex-col font-sans relative bg-gradient-to-br from-[#63bae9]/10 via-white to-[#fcc238]/10">
+      {/* Header */}
+      <Header />
 
-      {/* Tipo de propiedad */}
-      <div>
-        <label className="block">Tipo de propiedad</label>
-        <select name="id_tipo_inmueble" className="border p-2 w-full" required defaultValue="">
-          <option value="" disabled hidden>Seleccione un tipo</option>
-          {tipos.map(t => <option key={t.id_tipo_inmueble} value={t.id_tipo_inmueble}>{t.nombre}</option>)}
-        </select>
-      </div>
-
-      {/* Operación */}
-      <div>
-        <label className="block">Operación</label>
-        <select name="id_operacion" className="border p-2 w-full" defaultValue="">
-          <option value="" disabled hidden>Seleccione una operación</option>
-          {operaciones.map(o => <option key={o.id_operacion} value={o.id_operacion}>{o.nombre}</option>)}
-        </select>
-      </div>
-
-      {/* Estado */}
-      <div>
-        <label className="block">Estado</label>
-        <select name="id_estado" className="border p-2 w-full" required defaultValue="">
-          <option value="" disabled hidden>Seleccione un estado</option>
-          {estados.map(e => <option key={e.id_estado} value={e.id_estado}>{e.nombre}</option>)}
-        </select>
-      </div>
-
-      {/* Cliente */}
-      <div>
-        <label className="block">Propietario</label>
-        <select name="id_cliente" className="border p-2 w-full" required defaultValue="">
-          <option value="" disabled hidden>Seleccione un cliente</option>
-          {clientes.map(c => <option key={c.id_cliente} value={c.id_cliente}>{c.nombre}</option>)}
-        </select>
-      </div>
-
-      {/* Barrio */}
-      <div>
-        <label className="block">Barrio</label>
-        <select name="barrio" className="border p-2 w-full" required defaultValue="">
-          <option value="" disabled hidden>Seleccione un barrio</option>
-          {barrios.map(b => <option key={b.id_barrio} value={b.id_barrio}>{b.nombre}</option>)}
-        </select>
-      </div>
-
-      {/* Dirección, ciudad, provincia, superficies, precio, detalles */}
-      <div><label className="block">Dirección</label><input type="text" name="direccion" className="border p-2 w-full" required /></div>
-      <div><label className="block">Ciudad</label><input type="text" name="ciudad" className="border p-2 w-full" /></div>
-      <div><label className="block">Provincia</label><input type="text" name="provincia" className="border p-2 w-full" /></div>
-      <div><label className="block">Superficie total (m²)</label><input type="number" name="superficie_total" className="border p-2 w-full" required /></div>
-      <div><label className="block">Superficie cubierta (m²)</label><input type="number" name="superficie_cubierta" className="border p-2 w-full" /></div>
-      <div><label className="block">Cantidad de ambientes</label><input type="number" name="cantidad_ambientes" className="border p-2 w-full" /></div>
-      <div><label className="block">Antigüedad (años)</label><input type="number" name="antiguedad" className="border p-2 w-full" /></div>
-      <div><label className="block">Precio</label><input type="number" name="precio" className="border p-2 w-full" /></div>
-      <div><label className="block">Detalles</label><textarea name="detalles" className="border p-2 w-full" /></div>
-
-      {/* Imágenes */}
-      <div>
-        <label className="block mb-2">Fotos</label>
-        <div
-          className="border border-gray-400 p-4 flex flex-wrap gap-2 items-center cursor-pointer min-h-[100px]"
-          onClick={() => document.getElementById("fileInput")?.click()}
+      {/* Contenido principal */}
+      <main className="flex-1 flex items-start justify-center px-4 py-10">
+        <form
+          ref={formRef}
+          onSubmit={handleSubmit}
+          className="w-full max-w-4xl bg-white rounded-2xl shadow-lg p-8 space-y-6 border border-[#e5e5e5]"
         >
-          <span className="text-3xl font-bold text-gray-500">+</span>
-          {files.map((file, i) => (
-            <div key={i} className="relative w-20 h-20 border rounded overflow-hidden bg-gray-100 flex items-center justify-center">
-              <img src={URL.createObjectURL(file)} alt={file.name} className="object-cover w-full h-full" />
-              {principalIndex === i && <span className="absolute top-0 left-0 bg-blue-600 text-white text-xs px-1">Principal</span>}
-              <button
-                type="button"
-                onClick={ev => { ev.stopPropagation(); handleRemoveFile(i); }}
-                className="absolute top-0 right-0 bg-red-600 text-white text-xs px-1"
-              >
-                ✕
-              </button>
-              {principalIndex !== i && (
-                <button
-                  type="button"
-                  onClick={ev => { ev.stopPropagation(); handleSetPrincipal(i); }}
-                  className="absolute bottom-0 left-0 bg-green-600 text-white text-xs px-1"
-                >
-                  Hacer principal
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-        <input id="fileInput" type="file" multiple accept="image/*" className="hidden" onChange={handleFileChange} />
-      </div>
+          <h1 className="text-2xl font-bold text-[#63bae9] text-center">
+            Registrar nuevo inmueble
+          </h1>
 
-      <button
-        type="submit"
-        disabled={loading}
-        className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:bg-gray-400"
-      >
-        {loading ? "Guardando..." : "Guardar Inmueble"}
-      </button>
-    </form>
+          {/* Título */}
+          <div>
+            <label className="block">Título</label>
+            <input type="text" name="titulo" className="border p-2 w-full" required />
+          </div>
+
+          {/* Tipo de propiedad */}
+          <div>
+            <label className="block">Tipo de propiedad</label>
+            <select name="id_tipo_inmueble" className="border p-2 w-full" required defaultValue="">
+              <option value="" disabled hidden>Seleccione un tipo</option>
+              {tipos.map(t => <option key={t.id_tipo_inmueble} value={t.id_tipo_inmueble}>{t.nombre}</option>)}
+            </select>
+          </div>
+
+          {/* Operación */}
+          <div>
+            <label className="block">Operación</label>
+            <select name="id_operacion" className="border p-2 w-full" defaultValue="">
+              <option value="" disabled hidden>Seleccione una operación</option>
+              {operaciones.map(o => <option key={o.id_operacion} value={o.id_operacion}>{o.nombre}</option>)}
+            </select>
+          </div>
+
+          {/* Estado */}
+          <div>
+            <label className="block">Estado</label>
+            <select name="id_estado" className="border p-2 w-full" required defaultValue="">
+              <option value="" disabled hidden>Seleccione un estado</option>
+              {estados.map(e => <option key={e.id_estado} value={e.id_estado}>{e.nombre}</option>)}
+            </select>
+          </div>
+
+          {/* Cliente */}
+          <div>
+            <label className="block">Propietario</label>
+            <select name="id_cliente" className="border p-2 w-full" required defaultValue="">
+              <option value="" disabled hidden>Seleccione un cliente</option>
+              {clientes.map(c => <option key={c.id_cliente} value={c.id_cliente}>{c.nombre}</option>)}
+            </select>
+          </div>
+
+          {/* Barrio */}
+          <div>
+            <label className="block">Barrio</label>
+            <select name="barrio" className="border p-2 w-full" required defaultValue="">
+              <option value="" disabled hidden>Seleccione un barrio</option>
+              {barrios.map(b => <option key={b.id_barrio} value={b.id_barrio}>{b.nombre}</option>)}
+            </select>
+          </div>
+
+          {/* Dirección, ciudad, provincia, superficies, precio, detalles */}
+          <div><label className="block">Dirección</label><input type="text" name="direccion" className="border p-2 w-full" required /></div>
+          <div><label className="block">Ciudad</label><input type="text" name="ciudad" className="border p-2 w-full" /></div>
+          <div><label className="block">Provincia</label><input type="text" name="provincia" className="border p-2 w-full" /></div>
+          <div><label className="block">Superficie total (m²)</label><input type="number" name="superficie_total" className="border p-2 w-full" required /></div>
+          <div><label className="block">Superficie cubierta (m²)</label><input type="number" name="superficie_cubierta" className="border p-2 w-full" /></div>
+          <div><label className="block">Cantidad de ambientes</label><input type="number" name="cantidad_ambientes" className="border p-2 w-full" /></div>
+          <div><label className="block">Antigüedad (años)</label><input type="number" name="antiguedad" className="border p-2 w-full" /></div>
+          <div><label className="block">Precio</label><input type="number" name="precio" className="border p-2 w-full" /></div>
+          <div><label className="block">Detalles</label><textarea name="detalles" className="border p-2 w-full" /></div>
+
+          {/* Imágenes */}
+          <div>
+            <label className="block mb-2">Fotos</label>
+            <div
+              className="border border-gray-400 p-4 flex flex-wrap gap-2 items-center cursor-pointer min-h-[100px]"
+              onClick={() => document.getElementById("fileInput")?.click()}
+            >
+              <span className="text-3xl font-bold text-gray-500">+</span>
+              {files.map((file, i) => (
+                <div key={i} className="relative w-20 h-20 border rounded overflow-hidden bg-gray-100 flex items-center justify-center">
+                  <img src={URL.createObjectURL(file)} alt={file.name} className="object-cover w-full h-full" />
+                  {principalIndex === i && <span className="absolute top-0 left-0 bg-blue-600 text-white text-xs px-1">Principal</span>}
+                  <button
+                    type="button"
+                    onClick={ev => { ev.stopPropagation(); handleRemoveFile(i); }}
+                    className="absolute top-0 right-0 bg-red-600 text-white text-xs px-1"
+                  >
+                    ✕
+                  </button>
+                  {principalIndex !== i && (
+                    <button
+                      type="button"
+                      onClick={ev => { ev.stopPropagation(); handleSetPrincipal(i); }}
+                      className="absolute bottom-0 left-0 bg-green-600 text-white text-xs px-1"
+                    >
+                      Hacer principal
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+            <input id="fileInput" type="file" multiple accept="image/*" className="hidden" onChange={handleFileChange} />
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:bg-gray-400"
+          >
+            {loading ? "Guardando..." : "Guardar Inmueble"}
+          </button>
+        </form>
+      </main>
+
+      {/* Footer */}
+      <footer className="bg-[#63bae9] text-white py-6 text-center mt-auto">
+        <p className="text-sm">
+          © 2025 Inmovación - GBS y Asociados. Todos los derechos reservados.
+        </p>
+      </footer>
+    </div>
   );
 }
