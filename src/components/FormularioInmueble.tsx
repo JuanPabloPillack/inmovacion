@@ -1,6 +1,20 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
+
 import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
+import {
+  Building2,
+  User,
+  MapPin,
+  Home,
+  DollarSign,
+  FileText,
+  Upload,
+  X,
+  Star,
+} from "lucide-react";
+import type { InmuebleEdit } from "@/types/inmuebles";
 
 interface Cliente { id_cliente: number; nombre: string; }
 interface TipoInmueble { id_tipo_inmueble: number; nombre: string; }
@@ -8,7 +22,26 @@ interface Estado { id_estado: number; nombre: string; }
 interface Operacion { id_operacion: number; nombre: string; }
 interface Barrio { id_barrio: number; nombre: string; }
 
-export default function FormularioInmueble() {
+interface ImagenData {
+  url: string;
+  principal: boolean;
+  file?: File;
+}
+
+interface FormularioInmuebleProps {
+  onSuccess?: () => void;
+  initialData?: InmuebleEdit;
+  submitLabel?: string;
+  submitHandler?: (formData: FormData, imagenes: ImagenData[]) => Promise<void>;
+}
+
+export default function FormularioInmueble({
+  onSuccess,
+  initialData,
+  submitLabel,
+  submitHandler,
+}: FormularioInmuebleProps) {
+  const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
 
   const [clientes, setClientes] = useState<Cliente[]>([]);
@@ -17,231 +50,514 @@ export default function FormularioInmueble() {
   const [operaciones, setOperaciones] = useState<Operacion[]>([]);
   const [barrios, setBarrios] = useState<Barrio[]>([]);
   const [loading, setLoading] = useState(false);
-  const [files, setFiles] = useState<File[]>([]);
-  const [principalIndex, setPrincipalIndex] = useState<number | null>(0);
+  const [imagenes, setImagenes] = useState<ImagenData[]>([]);
+
+  // -- Selects controlados
+  const [selectedCliente, setSelectedCliente] = useState<number | "">(
+    initialData?.id_cliente ?? ""
+  );
+  const [selectedBarrio, setSelectedBarrio] = useState<number | "">(
+    initialData?.ubicacion?.id_barrio ?? ""
+  );
+  const [selectedTipo, setSelectedTipo] = useState<number | "">(
+    initialData?.id_tipo_inmueble ?? ""
+  );
+  const [selectedOperacion, setSelectedOperacion] = useState<number | "">(
+    initialData?.id_operacion ?? ""
+  );
+  const [selectedEstado, setSelectedEstado] = useState<number | "">(
+    initialData?.id_estado ?? ""
+  );
 
   useEffect(() => {
-    fetch("/api/clientes").then(r => r.json()).then(setClientes).catch(console.error);
-    fetch("/api/tipos_inmueble").then(r => r.json()).then(setTipos).catch(console.error);
-    fetch("/api/estados").then(r => r.json()).then(setEstados).catch(console.error);
-    fetch("/api/operaciones").then(r => r.json()).then(setOperaciones).catch(console.error);
-    fetch("/api/barrios").then(r => r.json()).then(setBarrios).catch(console.error);
-  }, []);
+    const loadData = async () => {
+      try {
+        const [c, t, e, o, b] = await Promise.all([
+          fetch("/api/clientes").then((r) => r.json()),
+          fetch("/api/tipos_inmueble").then((r) => r.json()),
+          fetch("/api/estados").then((r) => r.json()),
+          fetch("/api/operaciones").then((r) => r.json()),
+          fetch("/api/barrios").then((r) => r.json()),
+        ]);
+        setClientes(c);
+        setTipos(t);
+        setEstados(e);
+        setOperaciones(o);
+        setBarrios(b);
+      } catch (err) {
+        console.error("Error cargando datos:", err);
+      }
+    };
 
+    loadData();
+
+    if (initialData?.imagenes?.length) {
+      const imgs = initialData.imagenes.map((img) => ({
+        url: img.url,
+        principal: img.principal,
+      }));
+      setImagenes(imgs);
+    }
+
+    // ✅ Pre-cargar barrio al editar
+    if (initialData?.ubicacion) {
+      setSelectedBarrio(initialData.ubicacion.id_barrio ?? "");
+    }
+  }, [initialData]);
+
+  // 📸 Manejo de imágenes
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFiles = e.target.files ? Array.from(e.target.files) : [];
+    const selectedFiles = Array.from(e.target.files || []);
     if (!selectedFiles.length) return;
-    setFiles(prev => [...prev, ...selectedFiles]);
-    if (principalIndex === null && selectedFiles.length > 0) setPrincipalIndex(0);
+    const nuevas = selectedFiles.map((file) => ({
+      url: URL.createObjectURL(file),
+      file,
+      principal: false,
+    }));
+    setImagenes((prev) => {
+      const noTienePrincipal = !prev.some((i) => i.principal);
+      if (noTienePrincipal && nuevas.length > 0) nuevas[0].principal = true;
+      return [...prev, ...nuevas];
+    });
   };
 
   const handleRemoveFile = (index: number) => {
-    const updatedFiles = files.filter((_, i) => i !== index);
-    setFiles(updatedFiles);
-    if (principalIndex === index) setPrincipalIndex(updatedFiles.length > 0 ? 0 : null);
-    else if (principalIndex !== null && index < principalIndex) setPrincipalIndex(principalIndex - 1);
+    const actualizadas = imagenes.filter((_, i) => i !== index);
+    if (imagenes[index].principal && actualizadas.length > 0) actualizadas[0].principal = true;
+    setImagenes(actualizadas);
   };
 
-  const handleSetPrincipal = (index: number) => setPrincipalIndex(index);
+  const handleSetPrincipal = (index: number) => {
+    setImagenes((prev) =>
+      prev.map((img, i) => ({ ...img, principal: i === index }))
+    );
+  };
 
+  // 📤 Submit
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!formRef.current) return;
+    const formData = new FormData(formRef.current);
+    const fields = Object.fromEntries(formData.entries());
+    const id_cliente = selectedCliente;
+    const id_barrio = selectedBarrio;
+
+    if (!id_cliente || !id_barrio) {
+      alert("Debe seleccionar un propietario y un barrio");
+      return;
+    }
+
+    if (submitHandler) {
+      try {
+        await submitHandler(formData, imagenes);
+        onSuccess?.();
+      } catch (err: any) {
+        console.error("Error en submitHandler:", err);
+        alert(err.message || "Error al guardar");
+      }
+      return;
+    }
+
     setLoading(true);
-
     try {
-      if (!formRef.current) throw new Error("Formulario no encontrado");
-
-      const formData = new FormData(formRef.current);
-      const fields = Object.fromEntries(formData.entries());
-
-      // Campos obligatorios
-      const direccion = String(fields.direccion || "").trim();
-      const id_tipo_inmueble = Number(fields.id_tipo_inmueble);
-      const id_cliente = Number(fields.id_cliente);
-      const id_estado = Number(fields.id_estado);
-      const id_barrio = Number(fields.barrio);
-      const superficie_total = Number(fields.superficie_total);
-
-      if (!direccion || isNaN(id_tipo_inmueble) || isNaN(id_cliente) || isNaN(id_estado) || isNaN(id_barrio) || isNaN(superficie_total)) {
-        alert("Faltan campos obligatorios");
-        setLoading(false);
-        return;
-      }
-
-      // Crear ubicación
-      const resUbicacion = await fetch("/api/ubicaciones", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          direccion,
-          ciudad: fields.ciudad || null,
-          provincia: fields.provincia || null,
-          id_barrio,
-        }),
-      });
-
-      if (!resUbicacion.ok) throw new Error("Error al crear la ubicación");
-      const ubicacion = await resUbicacion.json();
-
-      // Subida de imágenes
       const uploadedImages: { url: string; principal: boolean }[] = [];
-      for (let i = 0; i < files.length; i++) {
-        const imageForm = new FormData();
-        imageForm.append("file", files[i]);
-        const res = await fetch("/api/upload", { method: "POST", body: imageForm });
-        if (!res.ok) throw new Error(`Error al subir imagen ${files[i].name}`);
-        const data = await res.json();
-        uploadedImages.push({ url: data.url, principal: i === principalIndex });
+      for (const img of imagenes) {
+        if (img.file) {
+          const form = new FormData();
+          form.append("file", img.file);
+          const res = await fetch("/api/upload", { method: "POST", body: form });
+          if (!res.ok) throw new Error("Error al subir imagen");
+          const data = await res.json();
+          uploadedImages.push({ url: data.url, principal: img.principal });
+        } else {
+          uploadedImages.push({ url: img.url, principal: img.principal });
+        }
       }
 
-      // Payload final
       const payload = {
-        titulo: fields.titulo || "Inmueble",
-        tipo_inmueble: { connect: { id_tipo_inmueble } },
-        cliente: { connect: { id_cliente } },
-        estado: { connect: { id_estado } },
-        operacion: fields.id_operacion ? { connect: { id_operacion: Number(fields.id_operacion) } } : undefined,
-        ubicacion: { connect: { id_ubicacion: ubicacion.id_ubicacion } },
-        superficie_total,
+        ...fields,
+        id_cliente: Number(id_cliente),
+        id_barrio: Number(id_barrio),
+        id_tipo_inmueble: Number(fields.id_tipo_inmueble),
+        id_estado: Number(fields.id_estado),
+        id_operacion: fields.id_operacion ? Number(fields.id_operacion) : undefined,
+        superficie_total: fields.superficie_total ? Number(fields.superficie_total) : undefined,
         superficie_cubierta: fields.superficie_cubierta ? Number(fields.superficie_cubierta) : undefined,
         cantidad_ambientes: fields.cantidad_ambientes ? Number(fields.cantidad_ambientes) : undefined,
+        cantidad_banos: fields.cantidad_banos ? Number(fields.cantidad_banos) : undefined,
+        cantidad_dormitorios: fields.cantidad_dormitorios ? Number(fields.cantidad_dormitorios) : undefined,
+        cantidad_cocheras: fields.cantidad_cocheras ? Number(fields.cantidad_cocheras) : undefined,
+        cantidad_pisos: fields.cantidad_pisos ? Number(fields.cantidad_pisos) : undefined,
         antiguedad: fields.antiguedad ? Number(fields.antiguedad) : undefined,
         precio: fields.precio ? Number(fields.precio) : undefined,
-        detalles: fields.detalles || undefined,
-        imagenes: uploadedImages.length > 0 ? { create: uploadedImages } : undefined,
+        imagenes: uploadedImages,
       };
 
-      const resCreate = await fetch("/api/inmuebles", {
-        method: "POST",
+      const method = initialData ? "PUT" : "POST";
+      const url = initialData
+        ? /api/inmuebles/${initialData.id_inmueble}
+        : "/api/inmuebles";
+
+      const res = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
 
-      if (!resCreate.ok) {
-        const errBody = await resCreate.json().catch(() => ({}));
-        throw new Error(errBody.error || "Error al guardar el inmueble");
-      }
+      if (!res.ok) throw new Error("Error al guardar inmueble");
 
-      const inmueble = await resCreate.json();
-      alert("✅ Inmueble creado con éxito: " + inmueble.id_inmueble);
-
-      formRef.current.reset();
-      setFiles([]);
-      setPrincipalIndex(null);
-
+      alert("✅ Inmueble guardado con éxito");
+      router.push("/propiedades");
     } catch (error: any) {
-      console.error(error);
-      alert("❌ Hubo un error: " + (error.message || error));
+      console.error("Error:", error);
+      alert(error.message || "Error al guardar inmueble");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <form ref={formRef} onSubmit={handleSubmit} className="p-4 border rounded space-y-4">
+    <div className="min-h-screen bg-gray-50 py-8 px-4">
+      <div className="max-w-7xl mx-auto">
+        <div className="mb-8 flex items-center gap-3">
+          <div className="w-12 h-12 bg-blue-400 rounded-xl flex items-center justify-center">
+            <Building2 className="w-6 h-6 text-white" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-semibold text-gray-800">
+              {initialData ? "Editar Inmueble" : "Crear Inmueble"}
+            </h1>
+            <p className="text-sm text-gray-500">
+              {initialData
+                ? "Actualiza la información de la propiedad"
+                : "Registra tus propiedades"}
+            </p>
+          </div>
+        </div>
+
+{/* Formulario */}
+<form ref={formRef} onSubmit={handleSubmit} className="space-y-6">
+  {/* Información Básica */}
+  <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
+    <div className="flex items-center gap-3 mb-6">
+      <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+        <FileText className="w-5 h-5 text-blue-600" />
+      </div>
+      <h2 className="text-lg font-semibold text-gray-800">Información Básica</h2>
+    </div>
+
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
       {/* Título */}
       <div>
-        <label className="block">Título</label>
-        <input type="text" name="titulo" className="border p-2 w-full" required />
+        <label className="block text-sm font-medium text-gray-700 mb-2">Título</label>
+        <input
+          type="text"
+          name="titulo"
+          defaultValue={initialData?.titulo ?? ""}
+          className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+          required
+        />
       </div>
 
       {/* Tipo de propiedad */}
       <div>
-        <label className="block">Tipo de propiedad</label>
-        <select name="id_tipo_inmueble" className="border p-2 w-full" required defaultValue="">
+        <label className="block text-sm font-medium text-gray-700 mb-2">Tipo de propiedad</label>
+        <select
+          name="id_tipo_inmueble"
+          value={selectedTipo ?? ""}
+          onChange={(e) => setSelectedTipo(Number(e.target.value))}
+          className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
+            selectedTipo === "" ? "border-red-300" : "border-gray-300"
+          }`}
+          required
+        >
           <option value="" disabled hidden>Seleccione un tipo</option>
-          {tipos.map(t => <option key={t.id_tipo_inmueble} value={t.id_tipo_inmueble}>{t.nombre}</option>)}
+          {tipos.map((t) => (
+            <option key={t.id_tipo_inmueble} value={t.id_tipo_inmueble}>
+              {t.nombre}
+            </option>
+          ))}
         </select>
       </div>
 
       {/* Operación */}
       <div>
-        <label className="block">Operación</label>
-        <select name="id_operacion" className="border p-2 w-full" defaultValue="">
+        <label className="block text-sm font-medium text-gray-700 mb-2">Operación</label>
+        <select
+          name="id_operacion"
+          value={selectedOperacion ?? ""}
+          onChange={(e) => setSelectedOperacion(Number(e.target.value))}
+          className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
+            selectedOperacion === "" ? "border-red-300" : "border-gray-300"
+          }`}
+        >
           <option value="" disabled hidden>Seleccione una operación</option>
-          {operaciones.map(o => <option key={o.id_operacion} value={o.id_operacion}>{o.nombre}</option>)}
+          {operaciones.map((o) => (
+            <option key={o.id_operacion} value={o.id_operacion}>
+              {o.nombre}
+            </option>
+          ))}
         </select>
       </div>
 
       {/* Estado */}
       <div>
-        <label className="block">Estado</label>
-        <select name="id_estado" className="border p-2 w-full" required defaultValue="">
+        <label className="block text-sm font-medium text-gray-700 mb-2">Estado</label>
+        <select
+          name="id_estado"
+          value={selectedEstado ?? ""}
+          onChange={(e) => setSelectedEstado(Number(e.target.value))}
+          className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
+            selectedEstado === "" ? "border-red-300" : "border-gray-300"
+          }`}
+          required
+        >
           <option value="" disabled hidden>Seleccione un estado</option>
-          {estados.map(e => <option key={e.id_estado} value={e.id_estado}>{e.nombre}</option>)}
+          {estados.map((e) => (
+            <option key={e.id_estado} value={e.id_estado}>
+              {e.nombre}
+            </option>
+          ))}
         </select>
       </div>
 
-      {/* Cliente */}
+      {/* Propietario */}
       <div>
-        <label className="block">Propietario</label>
-        <select name="id_cliente" className="border p-2 w-full" required defaultValue="">
-          <option value="" disabled hidden>Seleccione un cliente</option>
-          {clientes.map(c => <option key={c.id_cliente} value={c.id_cliente}>{c.nombre}</option>)}
+        <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+          <User className="w-4 h-4 text-gray-400" /> Propietario
+        </label>
+        <select
+          name="id_cliente"
+          value={selectedCliente}
+          onChange={(e) => setSelectedCliente(Number(e.target.value))}
+          className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
+            selectedCliente === "" ? "border-red-300" : "border-gray-300"
+          }`}
+          required
+        >
+          <option value="">Seleccione un propietario</option>
+          {clientes.map((c) => (
+            <option key={c.id_cliente} value={c.id_cliente}>
+              {c.nombre}
+            </option>
+          ))}
         </select>
       </div>
 
       {/* Barrio */}
-      <div>
-        <label className="block">Barrio</label>
-        <select name="barrio" className="border p-2 w-full" required defaultValue="">
-          <option value="" disabled hidden>Seleccione un barrio</option>
-          {barrios.map(b => <option key={b.id_barrio} value={b.id_barrio}>{b.nombre}</option>)}
-        </select>
+<div>
+  <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+    <MapPin className="w-4 h-4 text-gray-400" /> Barrio
+  </label>
+  <select
+    name="id_barrio"
+    value={selectedBarrio}
+    onChange={(e) => setSelectedBarrio(Number(e.target.value))}
+    className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
+      selectedBarrio === "" ? "border-red-300" : "border-gray-300"
+    }`}
+    required
+  >
+    <option value="">Seleccione un barrio</option>
+    {barrios.map((b) => (
+      <option key={b.id_barrio} value={b.id_barrio}>
+        {b.nombre}
+      </option>
+    ))}
+  </select>
+</div>
+</div>
+</div>
+
+{/* Ubicación */}
+<div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
+  <div className="flex items-center gap-3 mb-6">
+    <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+      <MapPin className="w-5 h-5 text-blue-600" />
+    </div>
+    <h2 className="text-lg font-semibold text-gray-800">Ubicación</h2>
+  </div>
+
+  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+    {/* Dirección */}
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-2">Dirección</label>
+      <input
+        type="text"
+        name="direccion"
+        defaultValue={initialData?.ubicacion?.direccion ?? ""}
+        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+        required
+      />
+    </div>
+
+    {/* Ciudad */}
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-2">Ciudad</label>
+      <input
+        type="text"
+        name="ciudad"
+        defaultValue={initialData?.ubicacion?.ciudad ?? ""}
+        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+      />
+    </div>
+
+    {/* Provincia */}
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-2">Provincia</label>
+      <input
+        type="text"
+        name="provincia"
+        defaultValue={initialData?.ubicacion?.provincia ?? ""}
+        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+      />
+    </div>
+  </div>
+</div>
+
+  {/* Características */}
+  <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
+    <div className="flex items-center gap-3 mb-6">
+      <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+        <Home className="w-5 h-5 text-blue-600" />
       </div>
+      <h2 className="text-lg font-semibold text-gray-800">Características</h2>
+    </div>
 
-      {/* Dirección, ciudad, provincia, superficies, precio, detalles */}
-      <div><label className="block">Dirección</label><input type="text" name="direccion" className="border p-2 w-full" required /></div>
-      <div><label className="block">Ciudad</label><input type="text" name="ciudad" className="border p-2 w-full" /></div>
-      <div><label className="block">Provincia</label><input type="text" name="provincia" className="border p-2 w-full" /></div>
-      <div><label className="block">Superficie total (m²)</label><input type="number" name="superficie_total" className="border p-2 w-full" required /></div>
-      <div><label className="block">Superficie cubierta (m²)</label><input type="number" name="superficie_cubierta" className="border p-2 w-full" /></div>
-      <div><label className="block">Cantidad de ambientes</label><input type="number" name="cantidad_ambientes" className="border p-2 w-full" /></div>
-      <div><label className="block">Antigüedad (años)</label><input type="number" name="antiguedad" className="border p-2 w-full" /></div>
-      <div><label className="block">Precio</label><input type="number" name="precio" className="border p-2 w-full" /></div>
-      <div><label className="block">Detalles</label><textarea name="detalles" className="border p-2 w-full" /></div>
-
-      {/* Imágenes */}
-      <div>
-        <label className="block mb-2">Fotos</label>
-        <div
-          className="border border-gray-400 p-4 flex flex-wrap gap-2 items-center cursor-pointer min-h-[100px]"
-          onClick={() => document.getElementById("fileInput")?.click()}
-        >
-          <span className="text-3xl font-bold text-gray-500">+</span>
-          {files.map((file, i) => (
-            <div key={i} className="relative w-20 h-20 border rounded overflow-hidden bg-gray-100 flex items-center justify-center">
-              <img src={URL.createObjectURL(file)} alt={file.name} className="object-cover w-full h-full" />
-              {principalIndex === i && <span className="absolute top-0 left-0 bg-blue-600 text-white text-xs px-1">Principal</span>}
-              <button
-                type="button"
-                onClick={ev => { ev.stopPropagation(); handleRemoveFile(i); }}
-                className="absolute top-0 right-0 bg-red-600 text-white text-xs px-1"
-              >
-                ✕
-              </button>
-              {principalIndex !== i && (
-                <button
-                  type="button"
-                  onClick={ev => { ev.stopPropagation(); handleSetPrincipal(i); }}
-                  className="absolute bottom-0 left-0 bg-green-600 text-white text-xs px-1"
-                >
-                  Hacer principal
-                </button>
-              )}
-            </div>
-          ))}
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {[
+        { label: "Superficie total (m²)", name: "superficie_total", type: "number" as const, required: true, value: initialData?.superficie_total },
+        { label: "Superficie cubierta (m²)", name: "superficie_cubierta", type: "number" as const, value: initialData?.superficie_cubierta },
+        { label: "Ambientes", name: "cantidad_ambientes", type: "number" as const, value: initialData?.cantidad_ambientes },
+        { label: "Baños", name: "cantidad_banos", type: "number" as const, value: initialData?.cantidad_banos },
+        { label: "Dormitorios", name: "cantidad_dormitorios", type: "number" as const, value: initialData?.cantidad_dormitorios },
+        { label: "Cocheras", name: "cantidad_cocheras", type: "number" as const, value: initialData?.cantidad_cocheras },
+        { label: "Pisos", name: "cantidad_pisos", type: "number" as const, value: initialData?.cantidad_pisos },
+        { label: "Antigüedad (años)", name: "antiguedad", type: "number" as const, value: initialData?.antiguedad },
+        { label: "Precio", name: "precio", type: "number" as const, value: initialData?.precio },
+      ].map((field) => (
+        <div key={field.name}>
+          <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+            {field.name === "precio" && <DollarSign className="w-4 h-4 text-gray-400" />}
+            {field.label}
+          </label>
+          <input
+            type={field.type}
+            name={field.name}
+            defaultValue={field.value?.toString() ?? ""}
+            className={w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition ${field.name === "precio" ? "pl-10" : ""}}
+            required={field.required}
+          />
         </div>
-        <input id="fileInput" type="file" multiple accept="image/*" className="hidden" onChange={handleFileChange} />
-      </div>
+      ))}
+    </div>
+  </div>
 
-      <button
-        type="submit"
-        disabled={loading}
-        className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:bg-gray-400"
-      >
-        {loading ? "Guardando..." : "Guardar Inmueble"}
-      </button>
-    </form>
+  {/* Detalles adicionales */}
+  <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
+    <div className="flex items-center gap-3 mb-6">
+      <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+        <FileText className="w-5 h-5 text-blue-600" />
+      </div>
+      <h2 className="text-lg font-semibold text-gray-800">Detalles adicionales</h2>
+    </div>
+
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="md:col-span-3">
+        <label className="block text-sm font-medium text-gray-700 mb-2">Descripción</label>
+        <textarea
+          name="detalles"
+          defaultValue={initialData?.detalles ?? ""}
+          rows={4}
+          className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+        />
+      </div>
+    </div>
+  </div>
+
+{/* 📷 Imágenes */}
+<div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
+  <h2 className="text-lg font-semibold text-gray-800 mb-6 flex items-center gap-3">
+    <Upload className="w-5 h-5 text-blue-600" /> Imágenes
+  </h2>
+
+  <div
+    className="border-2 border-dashed border-gray-300 rounded-xl p-8 cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all duration-200"
+    onClick={() => document.getElementById("fileInput")?.click()}
+  >
+    <div className="flex flex-wrap gap-4 justify-center">
+      {imagenes.map((img, i) => (
+        <div key={i} className="relative w-32 h-32 group">
+          <img
+            src={img.file ? URL.createObjectURL(img.file) : img.url}
+            alt="preview"
+            className="w-full h-full object-cover rounded-lg border-2 border-gray-200"
+          />
+
+          {/* Botón eliminar */}
+          <button
+            type="button"
+            onClick={(ev) => { ev.stopPropagation(); handleRemoveFile(i); }}
+            className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition"
+          >
+            <X className="w-3 h-3" />
+          </button>
+
+          {/* Botón marcar como principal */}
+          <button
+            type="button"
+            onClick={(ev) => {
+              ev.stopPropagation();
+              setImagenes((prev) =>
+                prev.map((imgItem, idx) => ({
+                  ...imgItem,
+                  principal: idx === i,
+                }))
+              );
+            }}
+            className={`absolute bottom-1 left-1 px-2 py-0.5 text-xs rounded ${
+              img.principal ? "bg-amber-400 text-white" : "bg-gray-200 text-gray-700"
+            }`}
+          >
+            {img.principal ? "Principal" : "Hacer principal"}
+          </button>
+        </div>
+      ))}
+
+      {imagenes.length === 0 && (
+        <div className="text-center mt-4 w-full">
+          <p className="text-sm text-gray-500">Haz clic o arrastra imágenes aquí</p>
+        </div>
+      )}
+    </div>
+
+    <input
+      id="fileInput"
+      type="file"
+      multiple
+      accept="image/*"
+      className="hidden"
+      onChange={handleFileChange}
+    />
+  </div>
+</div>
+
+
+  {/* Botón enviar */}
+  <div className="flex justify-end">
+    <button
+      type="submit"
+      disabled={loading}
+      className={`px-6 py-3 rounded-xl font-semibold text-white transition ${
+        loading ? "bg-gray-400" : "bg-blue-600 hover:bg-blue-700"
+      }`}
+    >
+      {loading ? "Guardando..." : submitLabel ?? "Guardar Inmueble"}
+    </button>
+  </div>
+</form>
+
+      </div>
+    </div>
   );
 }

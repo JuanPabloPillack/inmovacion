@@ -64,16 +64,24 @@ model VerificationToken {
 
 // ========== MODELOS DEL SISTEMA INMOBILIARIO ==========
 
+model TipoCliente {
+  id_tipo_cliente Int       @id @default(autoincrement())
+  nombre          String    @db.VarChar(50) // Ej: Propietario, Comprador, Arrendatario
+  clientes        Cliente[]
+}
+
 model Cliente {
-  id_cliente Int         @id @default(autoincrement())
-  nombre     String      @db.VarChar(100)
-  email      String?     @db.VarChar(100)
-  telefono   String?     @db.VarChar(50)
-  inmuebles  Inmueble[]
-  contratos  Contrato[]
-  cobranzas  Cobranza[]
-  pagos      Pago[]
-  historial  Historial[] @relation("HistorialCliente")
+  id_cliente    Int          @id @default(autoincrement())
+  nombre        String       @db.VarChar(100)
+  email         String?      @db.VarChar(100)
+  telefono      String?      @db.VarChar(50)
+  tipoClienteId Int?
+  tipoCliente   TipoCliente? @relation(fields: [tipoClienteId], references: [id_tipo_cliente])
+  inmuebles     Inmueble[]
+  contratos     Contrato[]
+  cobranzas     Cobranza[]
+  pagos         Pago[]
+  historial     Historial[]  @relation("HistorialCliente")
 }
 
 model Tipo_inmueble {
@@ -119,31 +127,36 @@ model Operacion {
 }
 
 model Inmueble {
-  id_inmueble         Int              @id @default(autoincrement())
-  id_tipo_inmueble    Int
-  tipo_inmueble       Tipo_inmueble    @relation(fields: [id_tipo_inmueble], references: [id_tipo_inmueble], onDelete: Restrict, onUpdate: Cascade)
-  id_ubicacion        Int
-  ubicacion           Ubicacion        @relation(fields: [id_ubicacion], references: [id_ubicacion], onDelete: Restrict, onUpdate: Cascade)
-  id_estado           Int
-  estado              Estado           @relation(fields: [id_estado], references: [id_estado], onDelete: Restrict, onUpdate: Cascade)
-  id_operacion        Int?
-  operacion           Operacion?       @relation(fields: [id_operacion], references: [id_operacion], onDelete: Restrict, onUpdate: Cascade)
-  id_cliente          Int
-  cliente             Cliente          @relation(fields: [id_cliente], references: [id_cliente], onDelete: Restrict, onUpdate: Cascade)
-  titulo              String           @db.VarChar(200)
-  superficie_total    Decimal          @db.Decimal(10, 2)
-  superficie_cubierta Decimal?         @db.Decimal(10, 2)
-  cantidad_ambientes  Int?
-  antiguedad          Int?
-  precio              Decimal?         @db.Decimal(10, 2)
-  foto                String?          @db.VarChar(200)
-  detalles            String?          @db.VarChar(255)
-  contratos           Contrato[]
-  cobranzas           Cobranza[]
-  rendiciones         Rendicion[]
-  pagos               Pago[]
-  historial           Historial[]      @relation("HistorialInmueble")
-  imagenes            InmuebleImagen[]
+  id_inmueble          Int              @id @default(autoincrement())
+  id_tipo_inmueble     Int
+  tipo_inmueble        Tipo_inmueble    @relation(fields: [id_tipo_inmueble], references: [id_tipo_inmueble], onDelete: Restrict, onUpdate: Cascade)
+  id_ubicacion         Int
+  ubicacion            Ubicacion        @relation(fields: [id_ubicacion], references: [id_ubicacion], onDelete: Restrict, onUpdate: Cascade)
+  id_estado            Int
+  estado               Estado           @relation(fields: [id_estado], references: [id_estado], onDelete: Restrict, onUpdate: Cascade)
+  id_operacion         Int?
+  operacion            Operacion?       @relation(fields: [id_operacion], references: [id_operacion], onDelete: Restrict, onUpdate: Cascade)
+  id_cliente           Int
+  cliente              Cliente          @relation(fields: [id_cliente], references: [id_cliente], onDelete: Restrict, onUpdate: Cascade)
+  titulo               String           @db.VarChar(200)
+  superficie_total     Decimal          @db.Decimal(10, 2)
+  superficie_cubierta  Decimal?         @db.Decimal(10, 2)
+  cantidad_ambientes   Int?
+  cantidad_banos       Int?
+  cantidad_dormitorios Int?
+  cantidad_cocheras    Int?
+  cantidad_pisos       Int?
+  antiguedad           Int?
+  precio               Decimal?         @db.Decimal(10, 2)
+  foto                 String?          @db.VarChar(200)
+  detalles             String?          @db.VarChar(255)
+  archivado            Boolean          @default(false)
+  contratos            Contrato[]
+  cobranzas            Cobranza[]
+  rendiciones          Rendicion[]
+  pagos                Pago[]
+  historial            Historial[]      @relation("HistorialInmueble")
+  imagenes             InmuebleImagen[]
 }
 
 model InmuebleImagen {
@@ -156,15 +169,30 @@ model InmuebleImagen {
   @@index([inmuebleId], name: "idx_inmueble_imagen_inmuebleId")
 }
 
+model Template {
+  id              Int        @id @default(autoincrement())
+  nombre          String     @db.VarChar(100) // Nombre del template, ej: "Contrato Alquiler"
+  archivoPath     String     @db.VarChar(255) // Ruta donde se guarda el .docx
+  camposVariables Json?      // Lista de campos variables
+  createdAt       DateTime   @default(now())
+  contratos       Contrato[]
+}
+
 model Contrato {
-  id_contrato  Int      @id @default(autoincrement())
+  id_contrato  Int       @id @default(autoincrement())
   id_inmueble  Int
-  inmueble     Inmueble @relation(fields: [id_inmueble], references: [id_inmueble], onDelete: Restrict, onUpdate: Cascade)
+  inmueble     Inmueble  @relation(fields: [id_inmueble], references: [id_inmueble], onDelete: Restrict, onUpdate: Cascade)
   id_cliente   Int
-  cliente      Cliente  @relation(fields: [id_cliente], references: [id_cliente], onDelete: Restrict, onUpdate: Cascade)
+  cliente      Cliente   @relation(fields: [id_cliente], references: [id_cliente], onDelete: Restrict, onUpdate: Cascade)
+  id_template  Int?
+  template     Template? @relation(fields: [id_template], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  nombre       String?   @db.VarChar(100) // Nombre del contrato
+  valores      Json?     // Valores de los campos variables
+  archivoPath  String?   @db.VarChar(255) // Ruta del contrato generado
   fecha_inicio DateTime
   fecha_fin    DateTime
-  monto        Decimal  @db.Decimal(10, 2)
+  monto        Decimal   @db.Decimal(10, 2)
+  createdAt    DateTime  @default(now())
 }
 
 model Cobranza {
