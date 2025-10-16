@@ -1,5 +1,5 @@
 // src/app/layout.tsx
-import "./globals.css"; // 👈 asegurate de tener esto
+import "./globals.css"; 
 import { SessionProvider } from "next-auth/react";
 import type { ReactNode } from "react";
 

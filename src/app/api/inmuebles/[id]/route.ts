@@ -2,7 +2,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import type { InmuebleDTO } from "@/types/inmuebles";
-import { Prisma } from "@/generated/prisma";
+import { Prisma } from "@prisma/client";
 
 const toNumberOrUndefined = (v: any): number | undefined =>
   v !== undefined && v !== null && v !== "" ? Number(v) : undefined;

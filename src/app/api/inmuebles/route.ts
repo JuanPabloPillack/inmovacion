@@ -1,7 +1,12 @@
+// src/app/api/inmuebles/route.ts
+
+
+
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { Prisma } from "@prisma/client";
+import { Prisma } from "@/generated/prisma";
 
 // 🧩 Helpers
 const toNumberOrUndefined = (v: any): number | undefined =>
@@ -125,6 +130,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(creado, { status: 201 });
   } catch (error: any) {
     console.error("❌ Error POST /api/inmuebles:", error);
-    return NextResponse.json({ error: error.message || "Error al crear inmueble" }, { status: 500 });
-  }
+    return NextResponse.json({ error: error.message || "Error al crear inmueble" }, { status: 500 });
+  }
 }

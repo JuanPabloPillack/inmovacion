@@ -94,3 +94,33 @@ export interface InmuebleEdit {
   detalles?: string;
   imagenes?: { url: string; principal: boolean }[];
 }
+
+export interface InmuebleEdit {
+  id_inmueble: number;
+  titulo: string;
+  id_tipo_inmueble: number;
+  id_operacion?: number;
+  id_estado: number;
+  id_cliente: number | null;
+
+  // 🔹 Relación con ubicación
+  ubicacion?: {
+    id_ubicacion: number;
+    direccion: string;
+    ciudad?: string;
+    provincia?: string;
+    id_barrio: number | null;
+  };
+
+  superficie_total: number;
+  superficie_cubierta?: number;
+  cantidad_ambientes?: number;
+  cantidad_banos?: number;
+  cantidad_dormitorios?: number;
+  cantidad_cocheras?: number;
+  cantidad_pisos?: number;
+  antiguedad?: number;
+  precio?: number;
+  detalles?: string;
+  imagenes?: { url: string; principal: boolean }[];
+}
