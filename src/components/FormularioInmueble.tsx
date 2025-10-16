@@ -195,7 +195,7 @@ export default function FormularioInmueble({
 
       const method = initialData ? "PUT" : "POST";
       const url = initialData
-        ? /api/inmuebles/${initialData.id_inmueble}
+        ? `/api/inmuebles/${initialData.id_inmueble}`
         : "/api/inmuebles";
 
       const res = await fetch(url, {
@@ -445,7 +445,7 @@ export default function FormularioInmueble({
             type={field.type}
             name={field.name}
             defaultValue={field.value?.toString() ?? ""}
-            className={w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition ${field.name === "precio" ? "pl-10" : ""}}
+            className={`w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition ${field.name === "precio" ? "pl-10" : ""}`}
             required={field.required}
           />
         </div>

@@ -1,10 +1,16 @@
+"use client";
+import { useRouter } from "next/navigation";
 import FormularioInmueble from "@/components/FormularioInmueble";
 
 export default function NuevoInmueblePage() {
+  const router = useRouter();
+
   return (
-    <div className="max-w-3xl mx-auto p-6">
-      <h1 className="text-2xl font-bold mb-6">Publicar nuevo inmueble</h1>
-      <FormularioInmueble />
-    </div>
+    <FormularioInmueble
+      onSuccess={() => {
+        // Redirige a la página de módulo después de crear
+        router.push("/propiedades/modulo");
+      }}
+    />
   );
 }
