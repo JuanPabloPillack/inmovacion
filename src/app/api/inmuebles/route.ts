@@ -1,28 +1,29 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { Prisma } from "@prisma/client";
 
-// ✅ GET → listar inmuebles con filtros opcionales, ignorando los archivados
+// 🧩 Helpers
+const toNumberOrUndefined = (v: any): number | undefined =>
+  v !== undefined && v !== null && v !== "" ? Number(v) : undefined;
+const toDecimalOrUndefined = (v: any): Prisma.Decimal | undefined =>
+  v !== undefined && v !== null && v !== "" ? new Prisma.Decimal(Number(v)) : undefined;
+
+// ✅ GET → listar inmuebles con filtros opcionales
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
+    const where: any = { archivado: false };
 
-    const where: any = {
-      archivado: false, // ❌ Solo mostrar inmuebles no archivados
-    };
+    const tipo = searchParams.get("tipo");
+    const estado = searchParams.get("estado");
+    const precioMin = searchParams.get("precioMin");
+    const precioMax = searchParams.get("precioMax");
 
-    if (searchParams.get("tipo")) {
-      where.id_tipo_inmueble = Number(searchParams.get("tipo"));
-    }
-    if (searchParams.get("estado")) {
-      where.id_estado = Number(searchParams.get("estado"));
-    }
-    if (searchParams.get("precioMin")) {
-      where.precio = { gte: Number(searchParams.get("precioMin")) };
-    }
-    if (searchParams.get("precioMax")) {
-      where.precio = { ...where.precio, lte: Number(searchParams.get("precioMax")) };
-    }
+    if (tipo) where.id_tipo_inmueble = Number(tipo);
+    if (estado) where.id_estado = Number(estado);
+    if (precioMin) where.precio = { gte: Number(precioMin) };
+    if (precioMax) where.precio = { ...(where.precio || {}), lte: Number(precioMax) };
 
     const inmuebles = await db.inmueble.findMany({
       where,
@@ -31,62 +32,99 @@ export async function GET(req: NextRequest) {
         estado: true,
         operacion: true,
         cliente: true,
-        ubicacion: true,
+        ubicacion: { include: { barrio: { include: { localidad: true } } } },
         imagenes: true,
       },
+      orderBy: { id_inmueble: "desc" },
     });
 
     return NextResponse.json(inmuebles);
   } catch (error) {
-    console.error("❌ Error en GET /api/inmuebles:", error);
+    console.error("❌ Error GET /api/inmuebles:", error);
     return NextResponse.json({ error: "Error al obtener inmuebles" }, { status: 500 });
   }
 }
 
-// ✅ POST → crear inmueble
+// 🟢 POST → crear inmueble
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
+    console.log("📦 Payload recibido:", body);
 
-    // Normalizar imágenes
-    const imagenesArray = Array.isArray(body.imagenes?.create) ? body.imagenes.create : [];
+    // ✅ crear ubicación (si corresponde)
+    let ubicacionId: number | undefined;
+    if (body.direccion || body.ciudad || body.provincia || body.id_barrio) {
+      const nuevaUbicacion = await db.ubicacion.create({
+        data: {
+          direccion: body.direccion ?? null,
+          ciudad: body.ciudad ?? null,
+          provincia: body.provincia ?? null,
+          id_barrio: toNumberOrUndefined(body.id_barrio),
+        },
+      });
+      ubicacionId = nuevaUbicacion.id_ubicacion;
+    }
 
+    // ✅ crear inmueble
     const inmueble = await db.inmueble.create({
       data: {
         titulo: body.titulo,
-        superficie_total: body.superficie_total,
-        superficie_cubierta: body.superficie_cubierta,
-        cantidad_ambientes: body.cantidad_ambientes,
-        antiguedad: body.antiguedad,
-        precio: body.precio,
-        detalles: body.detalles,
-        archivado: false, // 🔹 Inicialmente no archivado
+        superficie_total: toDecimalOrUndefined(body.superficie_total),
+        superficie_cubierta: toDecimalOrUndefined(body.superficie_cubierta),
+        cantidad_ambientes: toNumberOrUndefined(body.cantidad_ambientes),
+        cantidad_banos: toNumberOrUndefined(body.cantidad_banos),
+        cantidad_dormitorios: toNumberOrUndefined(body.cantidad_dormitorios),
+        cantidad_cocheras: toNumberOrUndefined(body.cantidad_cocheras),
+        cantidad_pisos: toNumberOrUndefined(body.cantidad_pisos),
+        antiguedad: toNumberOrUndefined(body.antiguedad),
+        precio: toDecimalOrUndefined(body.precio),
+        detalles: body.detalles ?? null,
+        archivado: false,
 
-        // relaciones
-        tipo_inmueble: { connect: { id_tipo_inmueble: body.tipo_inmueble.connect.id_tipo_inmueble } },
-        cliente: { connect: { id_cliente: body.cliente.connect.id_cliente } },
-        estado: { connect: { id_estado: body.estado.connect.id_estado } },
-        operacion: body.operacion
-          ? { connect: { id_operacion: body.operacion.connect.id_operacion } }
+        tipo_inmueble: body.id_tipo_inmueble
+          ? { connect: { id_tipo_inmueble: Number(body.id_tipo_inmueble) } }
           : undefined,
-        ubicacion: { connect: { id_ubicacion: body.ubicacion.connect.id_ubicacion } },
+        estado: body.id_estado
+          ? { connect: { id_estado: Number(body.id_estado) } }
+          : undefined,
+        cliente: body.id_cliente
+          ? { connect: { id_cliente: Number(body.id_cliente) } }
+          : undefined,
+        operacion: body.id_operacion
+          ? { connect: { id_operacion: Number(body.id_operacion) } }
+          : undefined,
 
-        // imágenes opcionales
-        imagenes: imagenesArray.length > 0 ? { create: imagenesArray } : undefined,
-      },
-      include: {
-        imagenes: true,
-        ubicacion: true,
-        tipo_inmueble: true,
-        cliente: true,
-        estado: true,
-        operacion: true,
+        ...(ubicacionId ? { id_ubicacion: ubicacionId } : {}),
+        foto: body.imagenes?.find((i: any) => i.principal)?.url ?? "/placeholder.jpg",
       },
     });
 
-    return NextResponse.json(inmueble);
+    // ✅ guardar imágenes
+    if (Array.isArray(body.imagenes) && body.imagenes.length > 0) {
+      await db.inmuebleImagen.createMany({
+        data: body.imagenes.map((img: any) => ({
+          url: img.url,
+          inmuebleId: inmueble.id_inmueble,
+          principal: Boolean(img.principal),
+        })),
+      });
+    }
+
+    const creado = await db.inmueble.findUnique({
+      where: { id_inmueble: inmueble.id_inmueble },
+      include: {
+        tipo_inmueble: true,
+        estado: true,
+        cliente: true,
+        operacion: true,
+        ubicacion: { include: { barrio: { include: { localidad: true } } } },
+        imagenes: true,
+      },
+    });
+
+    return NextResponse.json(creado, { status: 201 });
   } catch (error: any) {
-    console.error("❌ Error en POST /api/inmuebles:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("❌ Error POST /api/inmuebles:", error);
+    return NextResponse.json({ error: error.message || "Error al crear inmueble" }, { status: 500 });
   }
 }

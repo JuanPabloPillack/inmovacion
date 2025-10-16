@@ -7,7 +7,7 @@ import React, { useState } from "react";
 import { useSession, signIn, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Menu, User, Home, CreditCard, FileText, FileSignature, Settings, DollarSign, Users, AlertCircle } from "lucide-react";
+import { Menu, User, Home, CreditCard, FileText, FileSignature, Settings, DollarSign, Users, AlertCircle, X, LogOut } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 export default function Header() {
@@ -18,7 +18,7 @@ export default function Header() {
 
   const modules: [string, string, any][] = [
     ["Clientes", "/clientes", User],
-    ["Propiedades", "/propiedades", Home],
+    ["Propiedades", "/propiedades/modulo", Home],
     ["Pagos", "/pagos", CreditCard],
     ["Rendiciones", "/rendiciones", FileText],
     ["Contratos", "/contratos", FileSignature],
@@ -27,48 +27,96 @@ export default function Header() {
     ["Usuarios", "/usuarios", Users],
   ];
 
-  // Inspeccionar la sesión para depuración
   console.log("Session:", session);
 
   const handleUserSettingsClick = () => {
-    if (session?.user?.id) {
-      router.push("/usuarios/perfil"); // Cambiar a /usuarios/perfil
+    if (session?.user) {
+      router.push("/usuarios/perfil");
     } else {
       setError("No se pudo cargar la configuración del usuario.");
-      setTimeout(() => setError(null), 3000); // Ocultar alerta después de 3s
+      setTimeout(() => setError(null), 3000);
     }
   };
 
   return (
     <>
-      <header className="w-full bg-white px-6 py-3 flex justify-between items-center border-b border-[#969696] relative z-10">
-        <div className="flex-1 flex justify-center space-x-6 font-medium">
+      <header
+        className="w-full bg-white px-8 py-4 flex justify-between items-center border-b shadow-sm relative z-10"
+        style={{ borderColor: '#e5e7eb' }}
+      >
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-xl" style={{ backgroundColor: '#e8f6fc' }}>
+            <Home className="w-6 h-6" style={{ color: '#63bae9' }} />
+          </div>
+          <span className="text-xl font-bold" style={{ color: '#686363' }}>
+            
+          </span>
+        </div>
+
+        <div className="flex-1 flex justify-center">
           <button
             onClick={() => router.push("/")}
-            className="hover:text-[#63bae9] transition-colors cursor-pointer"
+            className="px-6 py-2 rounded-lg font-medium transition-all duration-200"
+            style={{ color: '#686363' }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = '#e8f6fc';
+              e.currentTarget.style.color = '#63bae9';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent';
+              e.currentTarget.style.color = '#686363';
+            }}
           >
             Inicio
           </button>
         </div>
 
-        <div className="absolute right-6 flex items-center space-x-2">
+        <div className="flex items-center gap-3">
           {session ? (
             <>
               <Button
                 variant="outline"
                 size="icon"
-                className="border-[#686363] text-[#686363] hover:border-[#63bae9] hover:text-[#63bae9] cursor-pointer"
+                className="border transition-all duration-200 rounded-lg"
+                style={{
+                  borderColor: '#e5e7eb',
+                  color: '#686363',
+                }}
                 onClick={handleUserSettingsClick}
                 title="Ver perfil"
-                disabled={!session?.user?.id} // Deshabilitar si no hay ID
+                disabled={!session?.user}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = '#63bae9';
+                  e.currentTarget.style.backgroundColor = '#e8f6fc';
+                  e.currentTarget.style.color = '#63bae9';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = '#e5e7eb';
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                  e.currentTarget.style.color = '#686363';
+                }}
               >
                 <User className="h-5 w-5" />
               </Button>
               <Button
                 variant="outline"
                 size="icon"
-                className="border-[#686363] text-[#686363] hover:border-[#63bae9] hover:text-[#63bae9] cursor-pointer"
+                className="border transition-all duration-200 rounded-lg"
+                style={{
+                  borderColor: '#e5e7eb',
+                  color: '#686363',
+                }}
                 onClick={() => setMenuOpen(!menuOpen)}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = '#fcc238';
+                  e.currentTarget.style.backgroundColor = '#fff9e6';
+                  e.currentTarget.style.color = '#fcc238';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = '#e5e7eb';
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                  e.currentTarget.style.color = '#686363';
+                }}
               >
                 <Menu className="h-5 w-5" />
               </Button>
@@ -76,7 +124,16 @@ export default function Header() {
           ) : (
             <Button
               onClick={() => signIn()}
-              className="bg-[#63bae9] text-white hover:bg-[#fcc238] transition-colors font-semibold cursor-pointer"
+              className="font-semibold transition-all duration-200 rounded-lg shadow-sm hover:shadow-md text-white"
+              style={{ backgroundColor: '#63bae9' }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = '#4ca8d8';
+                e.currentTarget.style.transform = 'translateY(-1px)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = '#63bae9';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }}
             >
               Iniciar sesión
             </Button>
@@ -85,55 +142,124 @@ export default function Header() {
       </header>
 
       {error && (
-        <Alert variant="destructive" className="absolute top-16 right-6 max-w-sm shadow-lg">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription className="text-red-800">
-            {error}
-          </AlertDescription>
-        </Alert>
+        <div className="fixed top-20 right-8 z-50 animate-in slide-in-from-top-2 fade-in duration-300">
+          <Alert
+            className="shadow-lg border-l-4 rounded-xl max-w-sm"
+            style={{
+              backgroundColor: '#fff9e6',
+              borderLeftColor: '#fcc238',
+              borderColor: '#fcc238',
+            }}
+          >
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded-lg" style={{ backgroundColor: '#fef3cd' }}>
+                <AlertCircle className="h-5 w-5" style={{ color: '#fcc238' }} />
+              </div>
+              <AlertDescription style={{ color: '#686363' }}>{error}</AlertDescription>
+            </div>
+          </Alert>
+        </div>
       )}
 
       {session && (
         <div
-          className={`fixed top-0 right-0 h-full w-64 bg-white border-l border-[#969696] shadow-lg transform transition-transform duration-300 z-50 ${
+          className={`fixed top-0 right-0 h-full w-80 bg-white shadow-2xl transform transition-all duration-300 z-50 ${
             menuOpen ? "translate-x-0" : "translate-x-full"
           }`}
+          style={{ borderLeft: '1px solid #e5e7eb' }}
         >
-          <div className="p-4 flex flex-col gap-2">
-            <h2 className="text-xl font-bold text-[#63bae9] mb-4 border-b border-[#e5e5e5] pb-2">
-              Módulos
-            </h2>
-
-            {modules.map(([label, path, Icon]) => (
+          <div className="flex flex-col h-full">
+            <div
+              className="p-6 border-b flex items-center justify-between"
+              style={{ borderColor: '#e5e7eb', backgroundColor: '#f8f9fa' }}
+            >
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-xl" style={{ backgroundColor: '#e8f6fc' }}>
+                  <Menu className="w-5 h-5" style={{ color: '#63bae9' }} />
+                </div>
+                <h2 className="text-xl font-bold" style={{ color: '#686363' }}>
+                  Módulos
+                </h2>
+              </div>
               <button
-                key={path}
+                onClick={() => setMenuOpen(false)}
+                className="p-2 rounded-lg transition-all duration-200"
+                style={{ color: '#969696' }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#f3f4f6';
+                  e.currentTarget.style.color = '#686363';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                  e.currentTarget.style.color = '#969696';
+                }}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="space-y-2">
+                {modules.map(([label, path, Icon]) => (
+                  <button
+                    key={path}
+                    onClick={() => {
+                      router.push(path);
+                      setMenuOpen(false);
+                    }}
+                    className="w-full px-4 py-3.5 rounded-xl font-semibold text-left flex items-center gap-3 transition-all duration-200"
+                    style={{ color: '#686363' }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = '#e8f6fc';
+                      e.currentTarget.style.color = '#63bae9';
+                      e.currentTarget.style.transform = 'translateX(4px)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = 'transparent';
+                      e.currentTarget.style.color = '#686363';
+                      e.currentTarget.style.transform = 'translateX(0)';
+                    }}
+                  >
+                    <div
+                      className="p-2 rounded-lg"
+                      style={{ backgroundColor: '#f3f4f6' }}
+                    >
+                      <Icon className="w-4 h-4" />
+                    </div>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="p-6 border-t" style={{ borderColor: '#e5e7eb' }}>
+              <button
                 onClick={() => {
-                  router.push(path);
+                  signOut({ redirect: true, callbackUrl: "/" });
                   setMenuOpen(false);
                 }}
-                className="px-4 py-3 rounded-md hover:bg-[#63bae9] hover:text-white transition-colors font-semibold text-left flex items-center gap-2"
+                className="w-full px-4 py-3.5 rounded-xl font-semibold text-white flex items-center justify-center gap-3 transition-all duration-200 shadow-sm hover:shadow-md"
+                style={{ backgroundColor: '#ef4444' }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#dc2626';
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = '#ef4444';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                }}
               >
-                <Icon className="w-5 h-5" />
-                {label}
+                <LogOut className="w-5 h-5" />
+                Cerrar sesión
               </button>
-            ))}
-
-            <button
-              onClick={() => {
-                signOut({ redirect: true, callbackUrl: "/" });
-                setMenuOpen(false);
-              }}
-              className="px-4 py-3 rounded-md bg-red-500 text-white hover:bg-red-600 transition-colors font-semibold text-left mt-4 flex items-center gap-2"
-            >
-              Cerrar sesión
-            </button>
+            </div>
           </div>
         </div>
       )}
 
       {menuOpen && (
         <div
-          className="fixed inset-0 bg-black/30 z-40"
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40 transition-opacity duration-300"
           onClick={() => setMenuOpen(false)}
         />
       )}
