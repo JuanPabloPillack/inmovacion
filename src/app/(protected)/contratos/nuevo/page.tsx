@@ -1,9 +1,10 @@
 // src/app/(protected)/contratos/nuevo/page.tsx
 'use client';
 import { useState, useEffect } from 'react';
-import { FileText, Save, AlertCircle, Calendar, DollarSign, Building2, User, FileType, ChevronDown } from 'lucide-react';
+import { FileText, Save, AlertCircle, Calendar, DollarSign, Building2, User, FileType } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Header from '@/components/ui/Header';
+import Combobox from '@/components/ui/combobox'; // ✅ Importar Combobox
 
 interface Cliente { id_cliente: number; nombre: string }
 interface Inmueble { id_inmueble: number; titulo: string }
@@ -14,9 +15,9 @@ export default function NewContract() {
   const [inmuebles, setInmuebles] = useState<Inmueble[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [nombre, setNombre] = useState('');
-  const [id_cliente, setIdCliente] = useState(0);
-  const [id_inmueble, setIdInmueble] = useState(0);
-  const [id_template, setIdTemplate] = useState(0);
+  const [id_cliente, setIdCliente] = useState<number | undefined>(undefined); // ✅ Cambiar de 0 a undefined
+  const [id_inmueble, setIdInmueble] = useState<number | undefined>(undefined); // ✅ Cambiar de 0 a undefined
+  const [id_template, setIdTemplate] = useState<number | undefined>(undefined); // ✅ Cambiar de 0 a undefined
   const [valores, setValores] = useState<{ [key: string]: string }>({});
   const [fecha_inicio, setFechaInicio] = useState('');
   const [fecha_fin, setFechaFin] = useState('');
@@ -32,7 +33,7 @@ export default function NewContract() {
         const [clientesRes, inmueblesRes, templatesRes] = await Promise.all([
           fetch('/api/clientes'),
           fetch('/api/inmuebles'),
-          fetch('/api/templates?pageSize=1000'), // ✅ CORRECCIÓN: Obtener todos los templates
+          fetch('/api/templates?pageSize=1000'),
         ]);
         if (!clientesRes.ok || !inmueblesRes.ok || !templatesRes.ok) {
           throw new Error('Error al cargar datos');
@@ -43,8 +44,6 @@ export default function NewContract() {
           titulo: inmueble.titulo,
         }));
         setInmuebles(inmueblesData);
-        
-        // ✅ CORRECCIÓN: Extraer el array 'templates' de la respuesta
         const templatesData = await templatesRes.json();
         setTemplates(templatesData.templates || []);
       } catch (err) {
@@ -77,7 +76,6 @@ export default function NewContract() {
       return;
     }
     
-    // ✅ Validar que el monto no sea demasiado grande
     const montoNum = parseFloat(monto);
     if (montoNum > 999999999.99) {
       setError('El monto es demasiado grande. Máximo permitido: 999,999,999.99');
@@ -119,6 +117,22 @@ export default function NewContract() {
       setLoading(false);
     }
   };
+
+  // ✅ Mapear datos para los Combobox
+  const clienteOptions = clientes.map(cliente => ({
+    value: cliente.id_cliente,
+    label: cliente.nombre,
+  }));
+
+  const inmuebleOptions = inmuebles.map(inmueble => ({
+    value: inmueble.id_inmueble,
+    label: inmueble.titulo,
+  }));
+
+  const templateOptions = templates.map(template => ({
+    value: template.id,
+    label: template.nombre,
+  }));
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: '#f8f9fa' }}>
@@ -197,82 +211,55 @@ export default function NewContract() {
                 />
               </div>
 
+              {/* ✅ Combobox para Cliente */}
               <div>
-                <label className="flex items-center gap-2 text-sm font-semibold mb-3" style={{ color: '#686363' }}>
-                  <User className="w-4 h-4" style={{ color: '#63bae9' }} />
-                  Cliente
-                </label>
-                <div className="relative">
-                  <select
-                    value={id_cliente}
-                    onChange={(e) => setIdCliente(parseInt(e.target.value))}
-                    className="w-full px-4 py-3.5 rounded-xl border transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 appearance-none"
-                    style={{
-                      borderColor: '#e5e7eb',
-                      color: id_cliente === 0 ? '#969696' : '#686363'
-                    }}
-                  >
-                    <option value={0}>Selecciona un cliente</option>
-                    {clientes.map((cliente) => (
-                      <option key={cliente.id_cliente} value={cliente.id_cliente}>
-                        {cliente.nombre}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown className="absolute right-4 top-1/2 transform -translate-y-1/2 w-4 h-4 pointer-events-none" style={{ color: '#969696' }} />
-                </div>
+                <Combobox
+                  options={clienteOptions}
+                  value={id_cliente}
+                  onChange={setIdCliente}
+                  placeholder="Selecciona un cliente"
+                  label={
+                    <>
+                      <User className="w-4 h-4 inline mr-2" style={{ color: '#63bae9' }} />
+                      Cliente
+                    </>
+                  }
+                  searchPlaceholder="Buscar cliente..."
+                />
               </div>
 
+              {/* ✅ Combobox para Inmueble */}
               <div>
-                <label className="flex items-center gap-2 text-sm font-semibold mb-3" style={{ color: '#686363' }}>
-                  <Building2 className="w-4 h-4" style={{ color: '#63bae9' }} />
-                  Inmueble
-                </label>
-                <div className="relative">
-                  <select
-                    value={id_inmueble}
-                    onChange={(e) => setIdInmueble(parseInt(e.target.value))}
-                    className="w-full px-4 py-3.5 rounded-xl border transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 appearance-none"
-                    style={{
-                      borderColor: '#e5e7eb',
-                      color: id_inmueble === 0 ? '#969696' : '#686363'
-                    }}
-                  >
-                    <option value={0}>Selecciona un inmueble</option>
-                    {inmuebles.map((inmueble) => (
-                      <option key={inmueble.id_inmueble} value={inmueble.id_inmueble}>
-                        {inmueble.titulo}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown className="absolute right-4 top-1/2 transform -translate-y-1/2 w-4 h-4 pointer-events-none" style={{ color: '#969696' }} />
-                </div>
+                <Combobox
+                  options={inmuebleOptions}
+                  value={id_inmueble}
+                  onChange={setIdInmueble}
+                  placeholder="Selecciona un inmueble"
+                  label={
+                    <>
+                      <Building2 className="w-4 h-4 inline mr-2" style={{ color: '#63bae9' }} />
+                      Inmueble
+                    </>
+                  }
+                  searchPlaceholder="Buscar inmueble..."
+                />
               </div>
 
+              {/* ✅ Combobox para Template */}
               <div className="md:col-span-2">
-                <label className="flex items-center gap-2 text-sm font-semibold mb-3" style={{ color: '#686363' }}>
-                  <FileType className="w-4 h-4" style={{ color: '#63bae9' }} />
-                  Template de Contrato
-                </label>
-                <div className="relative">
-                  <select
-                    value={id_template}
-                    onChange={(e) => setIdTemplate(parseInt(e.target.value))}
-                    className="w-full px-4 py-3.5 rounded-xl border transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 appearance-none"
-                    style={{
-                      borderColor: '#e5e7eb',
-                      color: id_template === 0 ? '#969696' : '#686363'
-                    }}
-                  >
-                    <option value={0}>Selecciona un template</option>
-                    {templates.map((template) => (
-                      <option key={template.id} value={template.id}>
-                        {template.nombre}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown className="absolute right-4 top-1/2 transform -translate-y-1/2 w-4 h-4 pointer-events-none" style={{ color: '#969696' }} />
-                </div>
+                <Combobox
+                  options={templateOptions}
+                  value={id_template}
+                  onChange={setIdTemplate}
+                  placeholder="Selecciona un template"
+                  label={
+                    <>
+                      <FileType className="w-4 h-4 inline mr-2" style={{ color: '#63bae9' }} />
+                      Template de Contrato
+                    </>
+                  }
+                  searchPlaceholder="Buscar template..."
+                />
               </div>
             </div>
 

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { FileText, PlusCircle, AlertCircle, Download, Trash2, Calendar, DollarSign, User, Home, Search, ArrowLeft } from 'lucide-react';
 import ConfirmationModal from '@/components/ui/confirmation-modal';
+import Combobox from '@/components/ui/combobox'; // ✅ Importar Combobox
 
 interface Contrato {
   id_contrato: number;
@@ -87,13 +88,12 @@ function Contratos() {
       setError('No se pudieron cargar los inmuebles');
     }
   };
+
   const fetchTemplates = async () => {
     try {
-      // ✅ CORRECCIÓN: Usar pageSize grande para obtener todos
       const res = await fetch('/api/templates?pageSize=1000');
       if (!res.ok) throw new Error('Error al cargar templates');
       const data = await res.json();
-      // ✅ CORRECCIÓN: Extraer el array 'templates' de la respuesta
       setTemplates(data.templates || []);
     } catch (err) {
       setError('No se pudieron cargar los templates');
@@ -159,6 +159,22 @@ function Contratos() {
     setDeleteModalOpen(false);
     setItemToDelete(null);
   };
+
+  // ✅ Mapear datos para los Combobox
+  const clienteOptions = clientes.map(cliente => ({
+    value: cliente.id_cliente,
+    label: cliente.nombre,
+  }));
+
+  const inmuebleOptions = inmuebles.map(inmueble => ({
+    value: inmueble.id_inmueble,
+    label: inmueble.titulo,
+  }));
+
+  const templateOptions = templates.map(template => ({
+    value: template.id,
+    label: template.nombre,
+  }));
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -231,10 +247,10 @@ function Contratos() {
           </a>
         </div>
 
-        {/* Filtros y búsqueda */}
+        {/* Filtros y búsqueda - ✅ Actualizado con Combobox */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 mb-8 p-6">
           <div className="flex flex-col md:flex-row gap-4 flex-wrap">
-            <div className="flex-1">
+            <div className="flex-1 min-w-[250px]">
               <label className="block text-sm font-semibold mb-2" style={{ color: '#686363' }}>
                 Buscar por nombre
               </label>
@@ -253,7 +269,8 @@ function Contratos() {
                 <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5" style={{ color: '#969696' }} />
               </div>
             </div>
-            <div>
+
+            <div className="min-w-[200px]">
               <label className="block text-sm font-semibold mb-2" style={{ color: '#686363' }}>
                 Fecha de Inicio
               </label>
@@ -271,69 +288,58 @@ function Contratos() {
                 <Calendar className="absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5 pointer-events-none" style={{ color: '#969696' }} />
               </div>
             </div>
-            <div>
-              <label className="block text-sm font-semibold mb-2" style={{ color: '#686363' }}>
-                Cliente
-              </label>
-              <select
-                value={id_cliente || ''}
-                onChange={(e) => setIdCliente(e.target.value ? parseInt(e.target.value) : undefined)}
-                className="w-full px-4 py-3 rounded-lg border-2 border-gray-300 focus:outline-none focus:border-opacity-100 transition-all"
-                style={{
-                  color: '#686363',
-                  borderColor: id_cliente ? '#63bae9' : '#e5e7eb',
-                }}
-              >
-                <option value="">Todos los clientes</option>
-                {clientes.map((cliente) => (
-                  <option key={cliente.id_cliente} value={cliente.id_cliente}>
-                    {cliente.nombre}
-                  </option>
-                ))}
-              </select>
+
+            {/* ✅ Combobox para Cliente */}
+            <div className="min-w-[250px] flex-1">
+              <Combobox
+                options={clienteOptions}
+                value={id_cliente}
+                onChange={setIdCliente}
+                placeholder="Todos los clientes"
+                label={
+                  <>
+                    <User className="w-4 h-4 inline mr-2" style={{ color: '#63bae9' }} />
+                    Cliente
+                  </>
+                }
+                searchPlaceholder="Buscar cliente..."
+              />
             </div>
-            <div>
-              <label className="block text-sm font-semibold mb-2" style={{ color: '#686363' }}>
-                Inmueble
-              </label>
-              <select
-                value={id_inmueble || ''}
-                onChange={(e) => setIdInmueble(e.target.value ? parseInt(e.target.value) : undefined)}
-                className="w-full px-4 py-3 rounded-lg border-2 border-gray-300 focus:outline-none focus:border-opacity-100 transition-all"
-                style={{
-                  color: '#686363',
-                  borderColor: id_inmueble ? '#63bae9' : '#e5e7eb',
-                }}
-              >
-                <option value="">Todos los inmuebles</option>
-                {inmuebles.map((inmueble) => (
-                  <option key={inmueble.id_inmueble} value={inmueble.id_inmueble}>
-                    {inmueble.titulo}
-                  </option>
-                ))}
-              </select>
+
+            {/* ✅ Combobox para Inmueble */}
+            <div className="min-w-[250px] flex-1">
+              <Combobox
+                options={inmuebleOptions}
+                value={id_inmueble}
+                onChange={setIdInmueble}
+                placeholder="Todos los inmuebles"
+                label={
+                  <>
+                    <Home className="w-4 h-4 inline mr-2" style={{ color: '#63bae9' }} />
+                    Inmueble
+                  </>
+                }
+                searchPlaceholder="Buscar inmueble..."
+              />
             </div>
-            <div>
-              <label className="block text-sm font-semibold mb-2" style={{ color: '#686363' }}>
-                Template
-              </label>
-              <select
-                value={id_template || ''}
-                onChange={(e) => setIdTemplate(e.target.value ? parseInt(e.target.value) : undefined)}
-                className="w-full px-4 py-3 rounded-lg border-2 border-gray-300 focus:outline-none focus:border-opacity-100 transition-all"
-                style={{
-                  color: '#686363',
-                  borderColor: id_template ? '#63bae9' : '#e5e7eb',
-                }}
-              >
-                <option value="">Todos los templates</option>
-                {templates.map((template) => (
-                  <option key={template.id} value={template.id}>
-                    {template.nombre}
-                  </option>
-                ))}
-              </select>
+
+            {/* ✅ Combobox para Template */}
+            <div className="min-w-[250px] flex-1">
+              <Combobox
+                options={templateOptions}
+                value={id_template}
+                onChange={setIdTemplate}
+                placeholder="Todos los templates"
+                label={
+                  <>
+                    <FileText className="w-4 h-4 inline mr-2" style={{ color: '#63bae9' }} />
+                    Template
+                  </>
+                }
+                searchPlaceholder="Buscar template..."
+              />
             </div>
+
             <div className="flex items-end">
               <button
                 onClick={handleFilter}
@@ -347,7 +353,7 @@ function Contratos() {
           </div>
         </div>
 
-        {/* Contracts List */}
+        {/* Contracts List - Sin cambios */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200">
           <div className="p-6 border-b border-gray-200">
             <h2 className="text-2xl font-semibold" style={{ color: '#686363' }}>
