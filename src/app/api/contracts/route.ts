@@ -12,6 +12,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const search = searchParams.get('search');
     const fechaDesde = searchParams.get('fechaDesde');
+    const fechaHasta = searchParams.get('fechaHasta');
     const id_cliente = parseInt(searchParams.get('id_cliente') || '0') || undefined;
     const id_inmueble = parseInt(searchParams.get('id_inmueble') || '0') || undefined;
     const id_template = parseInt(searchParams.get('id_template') || '0') || undefined;
@@ -20,21 +21,42 @@ export async function GET(req: NextRequest) {
 
     const where: any = {};
 
+    // Búsqueda por nombre
     if (search) {
-      where.nombre = { contains: search };
+      where.nombre = { contains: search, mode: 'insensitive' };
     }
-    if (fechaDesde) {
-      where.fecha_inicio = { gte: new Date(fechaDesde) };
-    }
-    if (id_cliente) {
-      where.id_cliente = id_cliente;
-    }
-    if (id_inmueble) {
-      where.id_inmueble = id_inmueble;
-    }
-    if (id_template) {
-      where.id_template = id_template;
-    }
+
+    // FILTRO POR RANGO DE FECHAS (CORREGIDO)
+    // Lógica: buscar contratos que se superpongan con el rango seleccionado
+    // Un contrato se superpone si:
+    // - Su fecha_fin es >= fechaDesde (el contrato no termina antes del rango)
+    // - Su fecha_inicio es <= fechaHasta (el contrato no empieza después del rango)
+   if (fechaDesde || fechaHasta) {
+  where.AND = where.AND || [];
+
+  if (fechaDesde) {
+    // Crear fecha sin conversión a UTC para mantener la fecha local
+    const [year, month, day] = fechaDesde.split('-').map(Number);
+    const startDate = new Date(year, month - 1, day, 0, 0, 0, 0);
+    
+    // El contrato debe terminar en o después de la fecha desde
+    where.AND.push({ fecha_fin: { gte: startDate } });
+  }
+
+  if (fechaHasta) {
+    // Crear fecha sin conversión a UTC para mantener la fecha local
+    const [year, month, day] = fechaHasta.split('-').map(Number);
+    const endDate = new Date(year, month - 1, day, 23, 59, 59, 999);
+    
+    // El contrato debe empezar en o antes de la fecha hasta
+    where.AND.push({ fecha_inicio: { lte: endDate } });
+  }
+}
+
+    // Filtros por ID
+    if (id_cliente) where.id_cliente = id_cliente;
+    if (id_inmueble) where.id_inmueble = id_inmueble;
+    if (id_template) where.id_template = id_template;
 
     const [contratos, total] = await Promise.all([
       db.contrato.findMany({
@@ -44,7 +66,7 @@ export async function GET(req: NextRequest) {
           inmueble: { select: { titulo: true } },
           template: { select: { nombre: true } },
         },
-        orderBy: { createdAt: 'asc' },
+        orderBy: { createdAt: 'desc' },
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
@@ -58,6 +80,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
+// POST y DELETE SIN CAMBIOS
 export async function POST(req: NextRequest) {
   try {
     const data = await req.json();
@@ -76,14 +99,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Faltan datos requeridos' }, { status: 400 });
     }
 
-    console.log('Valores recibidos:', valores);
-
     const template = await db.template.findUnique({ where: { id: id_template } });
     if (!template) {
       return NextResponse.json({ error: 'Template no encontrado' }, { status: 404 });
     }
-
-    console.log('Campos del template:', template.camposVariables);
 
     const content = await fs.readFile(path.join(process.cwd(), 'public', template.archivoPath));
     const zip = new PizZip(content);
@@ -138,7 +157,6 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: 'Contrato no encontrado' }, { status: 404 });
     }
 
-    // Eliminar el archivo .docx si archivoPath existe
     if (contrato.archivoPath) {
       const filePath = path.join(process.cwd(), 'public', contrato.archivoPath);
       try {
@@ -148,7 +166,6 @@ export async function DELETE(req: NextRequest) {
       }
     }
 
-    // Eliminar el contrato de la base de datos
     await db.contrato.delete({ where: { id_contrato: id } });
 
     return NextResponse.json({ success: true }, { status: 200 });

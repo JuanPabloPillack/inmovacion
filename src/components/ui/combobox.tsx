@@ -13,8 +13,9 @@ interface ComboboxProps {
   value: number | undefined;
   onChange: (value: number | undefined) => void;
   placeholder: string;
-  label: string | React.ReactNode; // Cambiado de JSX.Element a React.ReactNode
+  label: string | React.ReactNode;
   searchPlaceholder?: string;
+  disabled?: boolean; // ← AGREGADO
 }
 
 export default function Combobox({
@@ -24,6 +25,7 @@ export default function Combobox({
   placeholder,
   label,
   searchPlaceholder = 'Buscar...',
+  disabled = false, // ← AGREGADO con valor por defecto
 }: ComboboxProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -41,7 +43,7 @@ export default function Combobox({
         option.label.toLowerCase().includes(searchTerm.toLowerCase())
       );
       setFilteredOptions(filtered);
-      setFocusedIndex(-1); // Resetear el índice al filtrar
+      setFocusedIndex(-1);
     } else {
       setFilteredOptions(options);
     }
@@ -68,6 +70,8 @@ export default function Combobox({
 
   // Manejo de navegación con teclado
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (disabled) return; // ← AGREGADO: prevenir interacción si está disabled
+
     if (!isOpen) {
       if (e.key === 'ArrowDown' || e.key === 'Enter') {
         e.preventDefault();
@@ -106,18 +110,21 @@ export default function Combobox({
   };
 
   const handleOptionClick = (option: ComboboxOption) => {
+    if (disabled) return; // ← AGREGADO
     onChange(option.value);
     setIsOpen(false);
     setSearchTerm('');
   };
 
   const handleClear = () => {
+    if (disabled) return; // ← AGREGADO
     onChange(undefined);
     setSearchTerm('');
     setIsOpen(false);
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (disabled) return; // ← AGREGADO
     const value = e.target.value;
     setSearchTerm(value);
     if (!isOpen && value) {
@@ -127,7 +134,7 @@ export default function Combobox({
 
   return (
     <div className="relative">
-      <label className="flex items-center gap-2 text-sm font-semibold mb-2" style={{ color: '#686363' }}>
+      <label className="flex items-center gap-2 text-sm font-semibold mb-2" style={{ color: disabled ? '#969696' : '#686363' }}>
         {label}
       </label>
       
@@ -137,14 +144,18 @@ export default function Combobox({
       >
         {/* Input principal */}
         <div
-          className={`w-full px-4 py-3 rounded-lg border-2 flex items-center justify-between transition-all focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-200 focus-within:ring-opacity-50 ${
+          className={`w-full px-4 py-3 rounded-lg border-2 flex items-center justify-between transition-all ${
+            disabled 
+              ? 'opacity-50 cursor-not-allowed bg-gray-50' // ← AGREGADO: estilos disabled
+              : 'focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-200 focus-within:ring-opacity-50 cursor-pointer'
+          } ${
             isOpen ? 'rounded-b-none border-b-0' : 'rounded-lg'
           }`}
           style={{
-            borderColor: value ? '#63bae9' : '#e5e7eb',
-            backgroundColor: 'white',
+            borderColor: disabled ? '#e5e7eb' : (value ? '#63bae9' : '#e5e7eb'), // ← MODIFICADO
+            backgroundColor: disabled ? '#f9fafb' : 'white', // ← AGREGADO
           }}
-          onClick={() => setIsOpen(!isOpen)}
+          onClick={() => !disabled && setIsOpen(!isOpen)} // ← MODIFICADO: prevenir apertura
           onKeyDown={handleKeyDown}
         >
           <input
@@ -157,9 +168,10 @@ export default function Combobox({
             style={{ color: '#686363' }}
             readOnly={!!selectedOption && !isOpen}
             autoComplete="off"
+            disabled={disabled} // ← AGREGADO
           />
           
-          {selectedOption && (
+          {selectedOption && !disabled && ( // ← MODIFICADO: ocultar botón X si está disabled
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -173,7 +185,7 @@ export default function Combobox({
           )}
           
           <div className="flex items-center gap-2 absolute right-3">
-            {searchTerm && (
+            {searchTerm && !disabled && ( // ← MODIFICADO
               <Search className="w-4 h-4" style={{ color: '#969696' }} />
             )}
             <ChevronDown 
@@ -183,8 +195,8 @@ export default function Combobox({
           </div>
         </div>
 
-        {/* Dropdown de opciones */}
-        {isOpen && filteredOptions.length > 0 && (
+        {/* Dropdown de opciones - solo mostrar si NO está disabled */}
+        {!disabled && isOpen && filteredOptions.length > 0 && ( // ← MODIFICADO
           <div 
             className="absolute z-50 w-full bg-white border-2 border-t-0 rounded-b-lg shadow-lg max-h-60 overflow-auto" 
             style={{
@@ -213,7 +225,7 @@ export default function Combobox({
           </div>
         )}
 
-        {isOpen && filteredOptions.length === 0 && (
+        {!disabled && isOpen && filteredOptions.length === 0 && ( // ← MODIFICADO
           <div 
             className="absolute z-50 w-full bg-white border-2 border-t-0 rounded-b-lg shadow-lg p-4" 
             style={{
@@ -229,7 +241,7 @@ export default function Combobox({
       </div>
 
       {/* Contador de resultados */}
-      {isOpen && filteredOptions.length > 0 && filteredOptions.length !== options.length && (
+      {!disabled && isOpen && filteredOptions.length > 0 && filteredOptions.length !== options.length && ( // ← MODIFICADO
         <p className="mt-1 text-xs" style={{ color: '#969696' }}>
           {filteredOptions.length} de {options.length} resultados
         </p>

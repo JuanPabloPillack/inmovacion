@@ -148,7 +148,7 @@ function TemplatePage() {
               </div>
               <div>
                 <h1 className="text-3xl font-bold" style={{ color: '#686363' }}>
-                  Gestión de Templates
+                  Gestión de Plantillas
                 </h1>
                 <p className="text-sm mt-1" style={{ color: '#969696' }}>
                   Administra plantillas para generación de contratos
@@ -205,7 +205,7 @@ function TemplatePage() {
               </div>
               <div>
                 <h2 className="text-xl font-semibold" style={{ color: '#686363' }}>
-                  Subir Nuevo Template
+                  Subir Nueva Plantilla
                 </h2>
                 <p className="text-sm" style={{ color: '#969696' }}>
                   Carga un archivo .docx con campos variables
@@ -217,7 +217,7 @@ function TemplatePage() {
           <div className="p-6 space-y-5">
             <div>
               <label className="block text-sm font-semibold mb-2 flex items-center gap-2" style={{ color: '#686363' }}>
-                <span>Nombre del Template</span>
+                <span>Nombre de la Plantilla</span>
                 <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: '#fef9e7', color: '#fcc238' }}>Requerido</span>
               </label>
               <input
@@ -369,7 +369,7 @@ function TemplatePage() {
         <div className="bg-white rounded-xl shadow-sm border border-gray-200">
           <div className="p-6 border-b border-gray-200">
             <h2 className="text-2xl font-semibold" style={{ color: '#686363' }}>
-              Templates Disponibles
+              Plantillas Disponibles
             </h2>
             <p className="text-sm mt-1" style={{ color: '#969696' }}>
               Plantillas cargadas en el sistema
@@ -380,7 +380,7 @@ function TemplatePage() {
             {loading && templates.length === 0 ? (
               <div className="text-center py-16">
                 <div className="inline-block w-12 h-12 border-4 border-gray-200 rounded-full animate-spin" style={{ borderTopColor: '#fcc238' }}></div>
-                <p className="mt-4 text-lg font-medium" style={{ color: '#969696' }}>Cargando templates...</p>
+                <p className="mt-4 text-lg font-medium" style={{ color: '#969696' }}>Cargando Plantillas...</p>
               </div>
             ) : templates.length === 0 ? (
               <div className="text-center py-16">
@@ -388,10 +388,10 @@ function TemplatePage() {
                   <FileText className="w-12 h-12" style={{ color: '#fcc238' }} />
                 </div>
                 <h3 className="text-xl font-semibold mb-2" style={{ color: '#686363' }}>
-                  No hay templates disponibles
+                  No hay Plantillas disponibles
                 </h3>
                 <p className="text-lg" style={{ color: '#969696' }}>
-                  Haz un ajuste en la búsqueda o sube un nuevo template para comenzar
+                  Haz un ajuste en la búsqueda o sube una nueva plantilla para comenzar
                 </p>
               </div>
             ) : (
@@ -508,8 +508,8 @@ function TemplatePage() {
           isOpen={deleteModalOpen}
           onClose={closeModal}
           onConfirm={confirmDelete}
-          title="¿Eliminar template?"
-          message={itemToDelete ? `¿Estás seguro de que quieres eliminar el template "${itemToDelete.nombre}"? Esta acción no se puede deshacer.` : ''}
+          title="¿Eliminar Plantilla?"
+          message={itemToDelete ? `¿Estás seguro de que quieres eliminar la plantilla "${itemToDelete.nombre}"? Esta acción no se puede deshacer.` : ''}
           confirmText="Eliminar"
           cancelText="Cancelar"
           variant="danger"

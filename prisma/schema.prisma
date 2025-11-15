@@ -1,3 +1,5 @@
+// prisma/schema.prisma
+
 generator client {
   provider = "prisma-client-js"
   output   = "../src/generated/prisma"
@@ -71,17 +73,21 @@ model TipoCliente {
 }
 
 model Cliente {
-  id_cliente    Int          @id @default(autoincrement())
-  nombre        String       @db.VarChar(100)
-  email         String?      @db.VarChar(100)
-  telefono      String?      @db.VarChar(50)
-  tipoClienteId Int?
-  tipoCliente   TipoCliente? @relation(fields: [tipoClienteId], references: [id_tipo_cliente])
-  inmuebles     Inmueble[]
-  contratos     Contrato[]
-  cobranzas     Cobranza[]
-  pagos         Pago[]
-  historial     Historial[]  @relation("HistorialCliente")
+  id_cliente      Int          @id @default(autoincrement())
+  nombre          String       @db.VarChar(100)
+  apellido        String?      @db.VarChar(100)
+  email           String?      @db.VarChar(100)
+  telefono        String?      @db.VarChar(50)
+  tipo_documento  String?      @db.VarChar(50)
+  tipoClienteId   Int?
+  tipoCliente     TipoCliente? @relation(fields: [tipoClienteId], references: [id_tipo_cliente])
+  descripcion     String?      @db.Text
+  activo          Boolean      @default(true)
+  inmuebles       Inmueble[]
+  contratos       Contrato[]
+  cobranzas       Cobranza[]
+  pagos           Pago[]
+  historial       Historial[]  @relation("HistorialCliente")
 }
 
 model Tipo_inmueble {
