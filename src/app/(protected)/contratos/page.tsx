@@ -4,12 +4,20 @@ import { useState, useEffect } from 'react';
 import { FileText, PlusCircle, AlertCircle, Download, Trash2, Calendar, DollarSign, User, Home, Search, ArrowLeft, Filter, X, Edit3, Eye } from 'lucide-react';
 import Combobox from '@/components/ui/combobox';
 
+interface Cliente { id_cliente: number; nombre: string; }
+interface Inmueble { id_inmueble: number; titulo: string; }
+interface Template { id: number; nombre: string; }
+
+// Actualizamos la interfaz Contrato para reflejar los nombres según el tipo
 interface Contrato {
   id_contrato: number;
   nombre: string;
-  cliente: { nombre: string };
-  inmueble: { titulo: string };
-  template: { nombre: string };
+  tipo_contrato: 'ALQUILER_LOCACION' | 'COMPRA_VENTA';
+  // Usamos un objeto genérico para cliente_1 y cliente_2, pero con nombres dinámicos al mostrar
+  cliente_1: { id_cliente: number; nombre: string };
+  cliente_2: { id_cliente: number; nombre: string };
+  inmueble: { id_inmueble: number; titulo: string };
+  template: { id: number; nombre: string };
   valores: { [key: string]: string };
   fecha_inicio: string;
   fecha_fin: string;
@@ -17,10 +25,6 @@ interface Contrato {
   archivoPath: string;
   createdAt: string;
 }
-
-interface Cliente { id_cliente: number; nombre: string; }
-interface Inmueble { id_inmueble: number; titulo: string; }
-interface Template { id: number; nombre: string; }
 
 function Contratos() {
   const [contratos, setContratos] = useState<Contrato[]>([]);
@@ -34,13 +38,25 @@ function Contratos() {
   const [search, setSearch] = useState('');
   const [fechaDesde, setFechaDesde] = useState('');
   const [fechaHasta, setFechaHasta] = useState('');
-  const [id_cliente, setIdCliente] = useState<number | undefined>(undefined);
+  const [tipoContrato, setTipoContrato] = useState<'ALQUILER_LOCACION' | 'COMPRA_VENTA' | ''>('');
+  const [id_cliente_1, setIdCliente1] = useState<number | undefined>(undefined);
+  const [id_cliente_2, setIdCliente2] = useState<number | undefined>(undefined);
   const [id_inmueble, setIdInmueble] = useState<number | undefined>(undefined);
   const [id_template, setIdTemplate] = useState<number | undefined>(undefined);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(10);
   const [total, setTotal] = useState(0);
   const [showFilters, setShowFilters] = useState(false);
+
+  // Nueva función para obtener las etiquetas dinámicas según el tipo de contrato
+  const getClienteLabels = (tipo: 'ALQUILER_LOCACION' | 'COMPRA_VENTA' | '') => {
+    if (tipo === 'ALQUILER_LOCACION') {
+      return { cliente1: 'Locador', cliente2: 'Locatario' };
+    } else if (tipo === 'COMPRA_VENTA') {
+      return { cliente1: 'Vendedor', cliente2: 'Comprador' };
+    }
+    return { cliente1: 'Cliente 1', cliente2: 'Cliente 2' }; // Por defecto, si no hay tipo seleccionado
+  };
 
   useEffect(() => {
     fetchClientes();
@@ -55,7 +71,7 @@ function Contratos() {
     }, search ? 400 : 0);
 
     return () => clearTimeout(timer);
-  }, [search, fechaDesde, fechaHasta, id_cliente, id_inmueble, id_template, page]);
+  }, [search, fechaDesde, fechaHasta, tipoContrato, id_cliente_1, id_cliente_2, id_inmueble, id_template, page]);
 
   const fetchClientes = async () => {
     try {
@@ -97,7 +113,9 @@ function Contratos() {
       if (search) params.append('search', search);
       if (fechaDesde) params.append('fechaDesde', fechaDesde);
       if (fechaHasta) params.append('fechaHasta', fechaHasta);
-      if (id_cliente) params.append('id_cliente', id_cliente.toString());
+      if (tipoContrato) params.append('tipo_contrato', tipoContrato);
+      if (id_cliente_1) params.append('id_cliente_1', id_cliente_1.toString());
+      if (id_cliente_2) params.append('id_cliente_2', id_cliente_2.toString());
       if (id_inmueble) params.append('id_inmueble', id_inmueble.toString());
       if (id_template) params.append('id_template', id_template.toString());
       params.append('page', page.toString());
@@ -149,17 +167,22 @@ function Contratos() {
     setSearch('');
     setFechaDesde('');
     setFechaHasta('');
-    setIdCliente(undefined);
+    setTipoContrato('');
+    setIdCliente1(undefined);
+    setIdCliente2(undefined);
     setIdInmueble(undefined);
     setIdTemplate(undefined);
     setPage(1);
   };
 
-  const hasActiveFilters = search || fechaDesde || fechaHasta || id_cliente || id_inmueble || id_template;
+  const hasActiveFilters = search || fechaDesde || fechaHasta || tipoContrato || id_cliente_1 || id_cliente_2 || id_inmueble || id_template;
 
   const clienteOptions = clientes.map(c => ({ value: c.id_cliente, label: c.nombre }));
   const inmuebleOptions = inmuebles.map(i => ({ value: i.id_inmueble, label: i.titulo }));
   const templateOptions = templates.map(t => ({ value: t.id, label: t.nombre }));
+
+  // Obtener las etiquetas dinámicas para los filtros
+  const { cliente1: labelCliente1, cliente2: labelCliente2 } = getClienteLabels(tipoContrato);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
@@ -281,6 +304,21 @@ function Contratos() {
 
                 <div>
                   <label className="block text-sm font-bold text-[#686363] mb-2">
+                    Tipo de Contrato
+                  </label>
+                  <select
+                    value={tipoContrato}
+                    onChange={(e) => setTipoContrato(e.target.value as 'ALQUILER_LOCACION' | 'COMPRA_VENTA' | '')}
+                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-[#63bae9] focus:outline-none transition-all text-[#686363]"
+                  >
+                    <option value="">Todos los tipos</option>
+                    <option value="ALQUILER_LOCACION">Alquiler/Locación</option>
+                    <option value="COMPRA_VENTA">Compra/Venta</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-[#686363] mb-2">
                     Fecha Desde
                   </label>
                   <div className="relative">
@@ -309,19 +347,36 @@ function Contratos() {
                   </div>
                 </div>
 
+                {/* Actualizamos los Combobox para usar etiquetas dinámicas */}
                 <div>
                   <Combobox
                     options={clienteOptions}
-                    value={id_cliente}
-                    onChange={setIdCliente}
-                    placeholder="Todos los clientes"
+                    value={id_cliente_1}
+                    onChange={setIdCliente1}
+                    placeholder={`Todos los ${labelCliente1.toLowerCase()}s`}
                     label={
                       <>
                         <User className="w-4 h-4 inline mr-1 text-[#63bae9]" />
-                        Cliente
+                        {labelCliente1}
                       </>
                     }
-                    searchPlaceholder="Buscar cliente..."
+                    searchPlaceholder={`Buscar ${labelCliente1.toLowerCase()}...`}
+                  />
+                </div>
+
+                <div>
+                  <Combobox
+                    options={clienteOptions}
+                    value={id_cliente_2}
+                    onChange={setIdCliente2}
+                    placeholder={`Todos los ${labelCliente2.toLowerCase()}s`}
+                    label={
+                      <>
+                        <User className="w-4 h-4 inline mr-1 text-[#63bae9]" />
+                        {labelCliente2}
+                      </>
+                    }
+                    searchPlaceholder={`Buscar ${labelCliente2.toLowerCase()}...`}
                   />
                 </div>
 
@@ -411,131 +466,157 @@ function Contratos() {
               </div>
             ) : (
               <div className="space-y-4">
-                {contratos.map((contrato) => (
-                  <div
-                    key={contrato.id_contrato}
-                    className="group border-2 border-gray-100 rounded-2xl p-6 hover:border-[#63bae9]/30 hover:shadow-lg transition-all duration-300 bg-gradient-to-br from-white to-gray-50/30"
-                  >
-                    <div className="flex flex-col xl:flex-row gap-6">
-                      <div className="flex gap-4 flex-1 min-w-0">
-                        <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#63bae9] to-[#4a9fd4] flex items-center justify-center flex-shrink-0 shadow-md group-hover:scale-110 group-hover:rotate-3 transition-transform duration-300">
-                          <FileText className="w-8 h-8 text-white" strokeWidth={2.5} />
-                        </div>
+                {contratos.map((contrato) => {
+                  // Obtener etiquetas dinámicas para cada contrato
+                  const { cliente1, cliente2 } = getClienteLabels(contrato.tipo_contrato);
 
-                        <div className="flex-1 min-w-0">
-                          <h3 className="text-xl font-bold text-[#686363] mb-4 group-hover:text-[#63bae9] transition-colors">
-                            {contrato.nombre}
-                          </h3>
-
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-                            <div className="flex items-start gap-3 p-3 rounded-xl bg-blue-50/50 border border-blue-100/50">
-                              <User className="w-5 h-5 mt-0.5 flex-shrink-0 text-[#63bae9]" />
-                              <div className="min-w-0">
-                                <p className="text-xs font-semibold text-[#969696] uppercase tracking-wide mb-1">Cliente</p>
-                                <p className="text-sm font-bold text-[#686363] truncate">{contrato.cliente.nombre}</p>
-                              </div>
-                            </div>
-
-                            <div className="flex items-start gap-3 p-3 rounded-xl bg-blue-50/50 border border-blue-100/50">
-                              <Home className="w-5 h-5 mt-0.5 flex-shrink-0 text-[#63bae9]" />
-                              <div className="min-w-0">
-                                <p className="text-xs font-semibold text-[#969696] uppercase tracking-wide mb-1">Inmueble</p>
-                                <p className="text-sm font-bold text-[#686363] truncate">{contrato.inmueble.titulo}</p>
-                              </div>
-                            </div>
-
-                            <div className="flex items-start gap-3 p-3 rounded-xl bg-amber-50/50 border border-amber-100/50">
-                              <Calendar className="w-5 h-5 mt-0.5 flex-shrink-0 text-[#fcc238]" />
-                              <div className="min-w-0">
-                                <p className="text-xs font-semibold text-[#969696] uppercase tracking-wide mb-1">Periodo</p>
-                                <p className="text-sm font-bold text-[#686363]">
-                                  {new Date(contrato.fecha_inicio).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })} - {new Date(contrato.fecha_fin).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}
-                                </p>
-                              </div>
-                            </div>
-
-                            <div className="flex items-start gap-3 p-3 rounded-xl bg-amber-50/50 border border-amber-100/50">
-                              <DollarSign className="w-5 h-5 mt-0.5 flex-shrink-0 text-[#fcc238]" />
-                              <div className="min-w-0">
-                                <p className="text-xs font-semibold text-[#969696] uppercase tracking-wide mb-1">Monto</p>
-                                <p className="text-lg font-bold text-[#686363]">
-                                  ${parseFloat(contrato.monto.toString()).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                </p>
-                              </div>
-                            </div>
+                  return (
+                    <div
+                      key={contrato.id_contrato}
+                      className="group border-2 border-gray-100 rounded-2xl p-6 hover:border-[#63bae9]/30 hover:shadow-lg transition-all duration-300 bg-gradient-to-br from-white to-gray-50/30"
+                    >
+                      <div className="flex flex-col xl:flex-row gap-6">
+                        <div className="flex gap-4 flex-1 min-w-0">
+                          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#63bae9] to-[#4a9fd4] flex items-center justify-center flex-shrink-0 shadow-md group-hover:scale-110 group-hover:rotate-3 transition-transform duration-300">
+                            <FileText className="w-8 h-8 text-white" strokeWidth={2.5} />
                           </div>
 
-                          <div className="flex items-center gap-2 mb-3">
-                            <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-gradient-to-r from-blue-50 to-cyan-50 text-[#63bae9] border border-[#63bae9]/20">
-                              <FileText className="w-3.5 h-3.5" />
-                              {contrato.template.nombre}
-                            </span>
-                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h3 className="text-xl font-bold text-[#686363] mb-4 group-hover:text-[#63bae9] transition-colors">
+                              {contrato.nombre}
+                            </h3>
 
-                          {Object.keys(contrato.valores).length > 0 && (
-                            <details className="group/details">
-                              <summary className="cursor-pointer text-sm font-semibold px-4 py-2 rounded-lg inline-flex items-center gap-2 bg-gray-50 hover:bg-gray-100 text-[#686363] transition-colors">
-                                Campos Variables ({Object.keys(contrato.valores).length})
-                              </summary>
-                              <div className="mt-3 p-4 rounded-xl bg-gradient-to-br from-gray-50 to-gray-100/50 border border-gray-200">
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                  {Object.entries(contrato.valores).map(([key, value]) => (
-                                    <div key={key} className="flex gap-2 p-2 rounded-lg bg-white/80">
-                                      <span className="text-xs font-bold text-[#969696] uppercase tracking-wide">{key}:</span>
-                                      <span className="text-xs font-medium text-[#686363]">{value}</span>
-                                    </div>
-                                  ))}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                              <div className="flex items-start gap-3 p-3 rounded-xl bg-blue-50/50 border border-blue-100/50">
+                                <FileText className="w-5 h-5 mt-0.5 flex-shrink-0 text-[#63bae9]" />
+                                <div className="min-w-0">
+                                  <p className="text-xs font-semibold text-[#969696] uppercase tracking-wide mb-1">Tipo</p>
+                                  <p className="text-sm font-bold text-[#686363]">
+                                    {contrato.tipo_contrato === 'ALQUILER_LOCACION' ? 'Alquiler/Locación' : 'Compra/Venta'}
+                                  </p>
                                 </div>
                               </div>
-                            </details>
-                          )}
+
+                              {/* Actualizamos Cliente 1 con la etiqueta dinámica */}
+                              <div className="flex items-start gap-3 p-3 rounded-xl bg-blue-50/50 border border-blue-100/50">
+                                <User className="w-5 h-5 mt-0.5 flex-shrink-0 text-[#63bae9]" />
+                                <div className="min-w-0">
+                                  <p className="text-xs font-semibold text-[#969696] uppercase tracking-wide mb-1">{cliente1}</p>
+                                  <p className="text-sm font-bold text-[#686363] truncate">{contrato.cliente_1.nombre}</p>
+                                </div>
+                              </div>
+
+                              {/* Actualizamos Cliente 2 con la etiqueta dinámica */}
+                              <div className="flex items-start gap-3 p-3 rounded-xl bg-blue-50/50 border border-blue-100/50">
+                                <User className="w-5 h-5 mt-0.5 flex-shrink-0 text-[#63bae9]" />
+                                <div className="min-w-0">
+                                  <p className="text-xs font-semibold text-[#969696] uppercase tracking-wide mb-1">{cliente2}</p>
+                                  <p className="text-sm font-bold text-[#686363] truncate">{contrato.cliente_2.nombre}</p>
+                                </div>
+                              </div>
+
+                              <div className="flex items-start gap-3 p-3 rounded-xl bg-blue-50/50 border border-blue-100/50">
+                                <Home className="w-5 h-5 mt-0.5 flex-shrink-0 text-[#63bae9]" />
+                                <div className="min-w-0">
+                                  <p className="text-xs font-semibold text-[#969696] uppercase tracking-wide mb-1">Inmueble</p>
+                                  <p className="text-sm font-bold text-[#686363] truncate">{contrato.inmueble.titulo}</p>
+                                </div>
+                              </div>
+
+                              <div className="flex items-start gap-3 p-3 rounded-xl bg-amber-50/50 border border-amber-100/50">
+                                <Calendar className="w-5 h-5 mt-0.5 flex-shrink-0 text-[#fcc238]" />
+                                <div className="min-w-0">
+                                  <p className="text-xs font-semibold text-[#969696] uppercase tracking-wide mb-1">Periodo</p>
+                                  <p className="text-sm font-bold text-[#686363]">
+                                    {new Date(contrato.fecha_inicio).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })} - {new Date(contrato.fecha_fin).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div className="flex items-start gap-3 p-3 rounded-xl bg-amber-50/50 border border-amber-100/50">
+                                <DollarSign className="w-5 h-5 mt-0.5 flex-shrink-0 text-[#fcc238]" />
+                                <div className="min-w-0">
+                                  <p className="text-xs font-semibold text-[#969696] uppercase tracking-wide mb-1">Monto</p>
+                                  <p className="text-lg font-bold text-[#686363]">
+                                    ${parseFloat(contrato.monto.toString()).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 mb-3">
+                              <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-gradient-to-r from-blue-50 to-cyan-50 text-[#63bae9] border border-[#63bae9]/20">
+                                <FileText className="w-3.5 h-3.5" />
+                                {contrato.template.nombre}
+                              </span>
+                            </div>
+
+                            {Object.keys(contrato.valores).length > 0 && (
+                              <details className="group/details">
+                                <summary className="cursor-pointer text-sm font-semibold px-4 py-2 rounded-lg inline-flex items-center gap-2 bg-gray-50 hover:bg-gray-100 text-[#686363] transition-colors">
+                                  Campos Variables ({Object.keys(contrato.valores).length})
+                                </summary>
+                                <div className="mt-3 p-4 rounded-xl bg-gradient-to-br from-gray-50 to-gray-100/50 border border-gray-200">
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    {Object.entries(contrato.valores).map(([key, value]) => (
+                                      <div key={key} className="flex gap-2 p-2 rounded-lg bg-white/80">
+                                        <span className="text-xs font-bold text-[#969696] uppercase tracking-wide">{key}:</span>
+                                        <span className="text-xs font-medium text-[#686363]">{value}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              </details>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* BOTONES DE ACCIÓN */}
+                        <div className="flex xl:flex-col gap-2 justify-end flex-shrink-0">
+                          <a
+                            href={`/contratos/preview/${contrato.id_contrato}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-4 py-3 rounded-lg font-medium text-white flex items-center gap-2 transition-all hover:shadow-md hover:scale-105 active:scale-95"
+                            style={{ backgroundColor: '#63bae9' }}
+                          >
+                            <Eye className="w-5 h-5" />
+                            <span className="hidden sm:inline">Vista Previa</span>
+                          </a>
+
+                          <a
+                            href={`/contratos/editar/${contrato.id_contrato}`}
+                            className="px-4 py-3 rounded-lg font-medium text-white flex items-center gap-2 transition-all hover:shadow-md hover:scale-105 active:scale-95"
+                            style={{ backgroundColor: '#10b981' }}
+                          >
+                            <Edit3 className="w-5 h-5" />
+                            <span className="hidden sm:inline">Editar</span>
+                          </a>
+
+                          <a
+                            href={contrato.archivoPath}
+                            download
+                            className="px-4 py-3 rounded-lg font-medium text-white flex items-center gap-2 transition-all hover:shadow-md hover:scale-105 active:scale-95"
+                            style={{ backgroundColor: '#63bae9' }}
+                          >
+                            <Download className="w-5 h-5" />
+                            <span className="hidden sm:inline">Descargar</span>
+                          </a>
+
+                          <button
+                            onClick={() => handleDelete(contrato.id_contrato, contrato.nombre)}
+                            disabled={loading}
+                            className="px-4 py-3 rounded-lg font-medium text-white flex items-center gap-2 transition-all hover:shadow-md hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                            style={{ backgroundColor: '#fcc238' }}
+                          >
+                            <Trash2 className="w-5 h-5" />
+                            <span className="hidden sm:inline">Eliminar</span>
+                          </button>
                         </div>
                       </div>
-
-                      {/* BOTONES DE ACCIÓN */}
-                      <div className="flex xl:flex-col gap-2 justify-end flex-shrink-0">
-                        {/* VER PREVIEW */}
-                        <a
-                          href={`/contratos/preview/${contrato.id_contrato}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-[#10b981] text-white font-semibold shadow-md hover:shadow-lg transition-all hover:scale-105 active:scale-95 whitespace-nowrap"
-                        >
-                          <Eye className="w-5 h-5" />
-                          <span>Vista Previa</span>
-                        </a>
-
-                        {/* EDITAR */}
-                        <a
-                          href={`/contratos/editar/${contrato.id_contrato}`}
-                          className="flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-[#f59e0b] text-white font-semibold shadow-md hover:shadow-lg transition-all hover:scale-105 active:scale-95 whitespace-nowrap"
-                        >
-                          <Edit3 className="w-5 h-5" />
-                          <span>Editar</span>
-                        </a>
-
-                        {/* DESCARGAR */}
-                        <a
-                          href={contrato.archivoPath}
-                          download
-                          className="flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-[#63bae9] to-[#4a9fd4] text-white font-semibold shadow-md hover:shadow-lg transition-all hover:scale-105 active:scale-95 whitespace-nowrap"
-                        >
-                          <Download className="w-5 h-5" />
-                          <span>Descargar</span>
-                        </a>
-
-                        {/* ELIMINAR */}
-                        <button
-                          onClick={() => handleDelete(contrato.id_contrato, contrato.nombre)}
-                          className="flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-red-500 to-red-600 text-white font-semibold shadow-md hover:shadow-lg transition-all hover:scale-105 active:scale-95 whitespace-nowrap"
-                        >
-                          <Trash2 className="w-5 h-5" />
-                          <span>Eliminar</span>
-                        </button>
-                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
 
                 <div className="flex flex-col sm:flex-row justify-between items-center pt-6 gap-4 border-t border-gray-200">
                   <button

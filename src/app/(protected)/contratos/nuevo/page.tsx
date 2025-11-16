@@ -1,5 +1,4 @@
-//src/app/(protected)/contratos/nuevo/page.tsx
-
+// src/app/(protected)/contratos/nuevo/page.tsx
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { FileText, Save, AlertCircle, Calendar, DollarSign, Building2, User, FileType, Lock, CheckCircle2, ChevronRight } from 'lucide-react';
@@ -49,12 +48,39 @@ interface Inmueble {
 interface Template {
   id: number;
   nombre: string;
+  tipo: 'ALQUILER_LOCACION' | 'COMPRA_VENTA';
   camposVariables: string[] | null;
 }
 
-const dateSchema = z.object({
+interface Contrato {
+  nombre: string;
+  tipo_contrato: 'ALQUILER_LOCACION' | 'COMPRA_VENTA';
+  id_locador?: number;
+  id_locatario?: number;
+  id_comprador?: number;
+  id_vendedor?: number;
+  id_inmueble: number;
+  id_template: number;
+  valores: { [key: string]: string };
+  fecha_inicio: string;
+  fecha_fin: string;
+  monto: string;
+}
+
+const contractSchema = z.object({
+  nombre: z.string().min(1, 'El nombre del contrato es obligatorio'),
+  tipo_contrato: z.enum(['ALQUILER_LOCACION', 'COMPRA_VENTA'], { message: 'El tipo de contrato es obligatorio' }),
+  id_locador: z.number({ message: 'El locador es obligatorio' }).optional(),
+  id_locatario: z.number({ message: 'El locatario es obligatorio' }).optional(),
+  id_comprador: z.number({ message: 'El comprador es obligatorio' }).optional(),
+  id_vendedor: z.number({ message: 'El vendedor es obligatorio' }).optional(),
+  id_inmueble: z.number({ message: 'El inmueble es obligatorio' }),
+  id_template: z.number({ message: 'La plantilla es obligatoria' }),
   fecha_inicio: z.string().min(1, 'La fecha de inicio es obligatoria'),
   fecha_fin: z.string().min(1, 'La fecha de fin es obligatoria'),
+  monto: z.string().min(1, 'El monto es obligatorio').refine((val) => !isNaN(parseFloat(val)) && parseFloat(val) > 0, {
+    message: 'El monto debe ser un número positivo',
+  }),
 }).refine((data) => {
   const start = new Date(data.fecha_inicio);
   const end = new Date(data.fecha_fin);
@@ -62,6 +88,14 @@ const dateSchema = z.object({
 }, {
   message: 'La fecha de fin debe ser posterior a la de inicio',
   path: ['fecha_fin'],
+}).refine((data) => {
+  if (data.tipo_contrato === 'ALQUILER_LOCACION') {
+    return !!data.id_locador && !!data.id_locatario && data.id_locador !== data.id_locatario;
+  }
+  return !!data.id_comprador && !!data.id_vendedor && data.id_comprador !== data.id_vendedor;
+}, {
+  message: 'Deben seleccionarse dos clientes diferentes',
+  path: ['id_locatario', 'id_vendedor'],
 });
 
 export default function NewContract() {
@@ -69,7 +103,11 @@ export default function NewContract() {
   const [inmuebles, setInmuebles] = useState<Inmueble[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [nombre, setNombre] = useState('');
-  const [id_cliente, setIdCliente] = useState<number | undefined>(undefined);
+  const [tipoContrato, setTipoContrato] = useState<'ALQUILER_LOCACION' | 'COMPRA_VENTA' | ''>('');
+  const [id_locador, setIdLocador] = useState<number | undefined>(undefined);
+  const [id_locatario, setIdLocatario] = useState<number | undefined>(undefined);
+  const [id_comprador, setIdComprador] = useState<number | undefined>(undefined);
+  const [id_vendedor, setIdVendedor] = useState<number | undefined>(undefined);
   const [id_inmueble, setIdInmueble] = useState<number | undefined>(undefined);
   const [id_template, setIdTemplate] = useState<number | undefined>(undefined);
   const [valores, setValores] = useState<{ [key: string]: string }>({});
@@ -78,45 +116,13 @@ export default function NewContract() {
   const [monto, setMonto] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [selectedCliente, setSelectedCliente] = useState<Cliente | null>(null);
+  const [selectedLocador, setSelectedLocador] = useState<Cliente | null>(null);
+  const [selectedLocatario, setSelectedLocatario] = useState<Cliente | null>(null);
+  const [selectedComprador, setSelectedComprador] = useState<Cliente | null>(null);
+  const [selectedVendedor, setSelectedVendedor] = useState<Cliente | null>(null);
   const [selectedInmueble, setSelectedInmueble] = useState<Inmueble | null>(null);
+  const [formErrors, setFormErrors] = useState<{ [key: string]: string }>({});
   const router = useRouter();
-
-  const [fechaErrors, setFechaErrors] = useState<{ inicio?: string; fin?: string }>({});
-
-  useEffect(() => {
-    if (!fecha_inicio && !fecha_fin) {
-      setFechaErrors({});
-      return;
-    }
-
-    const result = dateSchema.safeParse({
-      fecha_inicio,
-      fecha_fin,
-    });
-
-    if (!result.success) {
-      const errors: { inicio?: string; fin?: string } = {};
-      result.error.issues.forEach(issue => {
-        if (issue.path[0] === 'fecha_inicio') errors.inicio = issue.message;
-        if (issue.path[0] === 'fecha_fin') errors.fin = issue.message;
-      });
-      setFechaErrors(errors);
-    } else {
-      setFechaErrors({});
-    }
-  }, [fecha_inicio, fecha_fin]);
-
-  const isPrevStepComplete = !!(
-    nombre &&
-    id_cliente &&
-    id_inmueble &&
-    fecha_inicio &&
-    fecha_fin &&
-    monto &&
-    !fechaErrors.inicio &&
-    !fechaErrors.fin
-  );
 
   useEffect(() => {
     const fetchData = async () => {
@@ -144,21 +150,24 @@ export default function NewContract() {
   }, []);
 
   useEffect(() => {
-    const fetchCliente = async () => {
-      if (id_cliente) {
+    const fetchCliente = async (id: number | undefined, setCliente: (cliente: Cliente | null) => void) => {
+      if (id) {
         try {
-          const res = await fetch(`/api/clientes/${id_cliente}`);
+          const res = await fetch(`/api/clientes/${id}`);
           if (!res.ok) throw new Error('Error al cargar cliente');
-          setSelectedCliente(await res.json());
+          setCliente(await res.json());
         } catch (err) {
           setError('Error al cargar cliente');
         }
       } else {
-        setSelectedCliente(null);
+        setCliente(null);
       }
     };
-    fetchCliente();
-  }, [id_cliente]);
+    fetchCliente(id_locador, setSelectedLocador);
+    fetchCliente(id_locatario, setSelectedLocatario);
+    fetchCliente(id_comprador, setSelectedComprador);
+    fetchCliente(id_vendedor, setSelectedVendedor);
+  }, [id_locador, id_locatario, id_comprador, id_vendedor]);
 
   useEffect(() => {
     const fetchInmueble = async () => {
@@ -177,17 +186,57 @@ export default function NewContract() {
     fetchInmueble();
   }, [id_inmueble]);
 
+  useEffect(() => {
+    setIdTemplate(undefined);
+    setValores({});
+    setIdLocador(undefined);
+    setIdLocatario(undefined);
+    setIdComprador(undefined);
+    setIdVendedor(undefined);
+    setIdInmueble(undefined);
+    setFechaInicio('');
+    setFechaFin('');
+    setMonto('');
+  }, [tipoContrato]);
+
   const autoCompleteField = useCallback((campo: string): string | null => {
     const lowerCampo = campo.toLowerCase();
 
-    if (lowerCampo.includes('cliente_nombre') && selectedCliente?.nombre) return selectedCliente.nombre;
-    if (lowerCampo.includes('cliente_apellido') && selectedCliente?.apellido) return selectedCliente.apellido || '';
-    if (lowerCampo.includes('cliente_email') && selectedCliente?.email) return selectedCliente.email || '';
-    if (lowerCampo.includes('cliente_telefono') && selectedCliente?.telefono) return selectedCliente.telefono || '';
-    if (lowerCampo.includes('cliente_tipo_documento') && selectedCliente?.tipo_documento) return selectedCliente.tipo_documento || '';
-    if (lowerCampo.includes('cliente_descripcion') && selectedCliente?.descripcion) return selectedCliente.descripcion || '';
-    if (lowerCampo.includes('cliente_activo') && selectedCliente?.activo !== undefined) return selectedCliente.activo.toString();
-    if (lowerCampo.includes('cliente_tipo') && selectedCliente?.tipoCliente?.nombre) return selectedCliente.tipoCliente.nombre || '';
+    if (lowerCampo.includes('locador_nombre') && selectedLocador?.nombre) return selectedLocador.nombre;
+    if (lowerCampo.includes('locador_apellido') && selectedLocador?.apellido) return selectedLocador.apellido || '';
+    if (lowerCampo.includes('locador_email') && selectedLocador?.email) return selectedLocador.email || '';
+    if (lowerCampo.includes('locador_telefono') && selectedLocador?.telefono) return selectedLocador.telefono || '';
+    if (lowerCampo.includes('locador_tipo_documento') && selectedLocador?.tipo_documento) return selectedLocador.tipo_documento || '';
+    if (lowerCampo.includes('locador_descripcion') && selectedLocador?.descripcion) return selectedLocador.descripcion || '';
+    if (lowerCampo.includes('locador_activo') && selectedLocador?.activo !== undefined) return selectedLocador.activo.toString();
+    if (lowerCampo.includes('locador_tipo') && selectedLocador?.tipoCliente?.nombre) return selectedLocador.tipoCliente.nombre || '';
+
+    if (lowerCampo.includes('locatario_nombre') && selectedLocatario?.nombre) return selectedLocatario.nombre;
+    if (lowerCampo.includes('locatario_apellido') && selectedLocatario?.apellido) return selectedLocatario.apellido || '';
+    if (lowerCampo.includes('locatario_email') && selectedLocatario?.email) return selectedLocatario.email || '';
+    if (lowerCampo.includes('locatario_telefono') && selectedLocatario?.telefono) return selectedLocatario.telefono || '';
+    if (lowerCampo.includes('locatario_tipo_documento') && selectedLocatario?.tipo_documento) return selectedLocatario.tipo_documento || '';
+    if (lowerCampo.includes('locatario_descripcion') && selectedLocatario?.descripcion) return selectedLocatario.descripcion || '';
+    if (lowerCampo.includes('locatario_activo') && selectedLocatario?.activo !== undefined) return selectedLocatario.activo.toString();
+    if (lowerCampo.includes('locatario_tipo') && selectedLocatario?.tipoCliente?.nombre) return selectedLocatario.tipoCliente.nombre || '';
+
+    if (lowerCampo.includes('comprador_nombre') && selectedComprador?.nombre) return selectedComprador.nombre;
+    if (lowerCampo.includes('comprador_apellido') && selectedComprador?.apellido) return selectedComprador.apellido || '';
+    if (lowerCampo.includes('comprador_email') && selectedComprador?.email) return selectedComprador.email || '';
+    if (lowerCampo.includes('comprador_telefono') && selectedComprador?.telefono) return selectedComprador.telefono || '';
+    if (lowerCampo.includes('comprador_tipo_documento') && selectedComprador?.tipo_documento) return selectedComprador.tipo_documento || '';
+    if (lowerCampo.includes('comprador_descripcion') && selectedComprador?.descripcion) return selectedComprador.descripcion || '';
+    if (lowerCampo.includes('comprador_activo') && selectedComprador?.activo !== undefined) return selectedComprador.activo.toString();
+    if (lowerCampo.includes('comprador_tipo') && selectedComprador?.tipoCliente?.nombre) return selectedComprador.tipoCliente.nombre || '';
+
+    if (lowerCampo.includes('vendedor_nombre') && selectedVendedor?.nombre) return selectedVendedor.nombre;
+    if (lowerCampo.includes('vendedor_apellido') && selectedVendedor?.apellido) return selectedVendedor.apellido || '';
+    if (lowerCampo.includes('vendedor_email') && selectedVendedor?.email) return selectedVendedor.email || '';
+    if (lowerCampo.includes('vendedor_telefono') && selectedVendedor?.telefono) return selectedVendedor.telefono || '';
+    if (lowerCampo.includes('vendedor_tipo_documento') && selectedVendedor?.tipo_documento) return selectedVendedor.tipo_documento || '';
+    if (lowerCampo.includes('vendedor_descripcion') && selectedVendedor?.descripcion) return selectedVendedor.descripcion || '';
+    if (lowerCampo.includes('vendedor_activo') && selectedVendedor?.activo !== undefined) return selectedVendedor.activo.toString();
+    if (lowerCampo.includes('vendedor_tipo') && selectedVendedor?.tipoCliente?.nombre) return selectedVendedor.tipoCliente.nombre || '';
 
     if (lowerCampo.includes('inmueble_titulo') && selectedInmueble?.titulo) return selectedInmueble.titulo;
     if (lowerCampo.includes('inmueble_superficie_total') && selectedInmueble?.superficie_total) return selectedInmueble.superficie_total.toString();
@@ -198,7 +247,7 @@ export default function NewContract() {
     if (lowerCampo.includes('inmueble_cantidad_cocheras') && selectedInmueble?.cantidad_cocheras) return selectedInmueble.cantidad_cocheras.toString();
     if (lowerCampo.includes('inmueble_cantidad_pisos') && selectedInmueble?.cantidad_pisos) return selectedInmueble.cantidad_pisos.toString();
     if (lowerCampo.includes('inmueble_antiguedad') && selectedInmueble?.antiguedad) return selectedInmueble.antiguedad.toString();
-    if (lowerCampo.includes('inmueble_precio') && selectedInmueble?.precio) return selectedInmueble.precio.toString();
+   if (lowerCampo.includes('inmueble_precio') && selectedInmueble?.precio) return selectedInmueble.precio.toString();
     if (lowerCampo.includes('inmueble_detalles') && selectedInmueble?.detalles) return selectedInmueble.detalles || '';
     if (lowerCampo.includes('inmueble_archivado') && selectedInmueble?.archivado !== undefined) return selectedInmueble.archivado.toString();
     if (lowerCampo.includes('inmueble_direccion') && selectedInmueble?.ubicacion?.direccion) return selectedInmueble.ubicacion.direccion;
@@ -214,12 +263,13 @@ export default function NewContract() {
     }
 
     if (lowerCampo.includes('contrato_nombre') && nombre) return nombre;
+    if (lowerCampo.includes('contrato_tipo') && tipoContrato) return tipoContrato === 'ALQUILER_LOCACION' ? 'Alquiler/Locación' : 'Compra/Venta';
     if (lowerCampo.includes('contrato_fecha_inicio') && fecha_inicio) return fecha_inicio;
     if (lowerCampo.includes('contrato_fecha_fin') && fecha_fin) return fecha_fin;
     if (lowerCampo.includes('contrato_monto') && monto) return monto;
 
     return null;
-  }, [selectedCliente, selectedInmueble, nombre, fecha_inicio, fecha_fin, monto]);
+  }, [selectedLocador, selectedLocatario, selectedComprador, selectedVendedor, selectedInmueble, nombre, tipoContrato, fecha_inicio, fecha_fin, monto]);
 
   useEffect(() => {
     if (!id_template) {
@@ -242,35 +292,102 @@ export default function NewContract() {
   }, [
     id_template,
     templates,
-    selectedCliente,
+    selectedLocador,
+    selectedLocatario,
+    selectedComprador,
+    selectedVendedor,
     selectedInmueble,
     nombre,
+    tipoContrato,
     fecha_inicio,
     fecha_fin,
     monto,
     autoCompleteField
   ]);
 
-  const handleSubmit = async () => {
-    if (!nombre || !id_cliente || !id_inmueble || !id_template || !fecha_inicio || !fecha_fin || !monto) {
-      setError('Por favor, completa todos los campos');
-      return;
-    }
+    // Validar dinámicamente fechas y monto
+  // Validar dinámicamente fechas y monto
+useEffect(() => {
+  // Solo validar si hay valores para validar
+  if (!fecha_inicio && !fecha_fin && !monto) {
+    return;
+  }
 
-    const result = dateSchema.safeParse({ fecha_inicio, fecha_fin });
+  const newErrors: { [key: string]: string } = {};
+
+  // Validar que las fechas no estén vacías
+  if (fecha_inicio && !fecha_fin) {
+    newErrors.fecha_fin = 'La fecha de fin es obligatoria';
+  }
+  if (fecha_fin && !fecha_inicio) {
+    newErrors.fecha_inicio = 'La fecha de inicio es obligatoria';
+  }
+
+  // Validar que fecha_fin sea posterior a fecha_inicio
+  if (fecha_inicio && fecha_fin) {
+    const start = new Date(fecha_inicio);
+    const end = new Date(fecha_fin);
+    
+    if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
+      if (end <= start) {
+        newErrors.fecha_fin = 'La fecha de fin debe ser posterior a la de inicio';
+      }
+    }
+  }
+
+  // Validar monto
+  if (monto) {
+    const montoNum = parseFloat(monto);
+    if (isNaN(montoNum) || montoNum <= 0) {
+      newErrors.monto = 'El monto debe ser un número positivo';
+    }
+  }
+
+  setFormErrors((prev) => {
+    // Mantener errores que no sean de fechas/monto
+    const { fecha_inicio, fecha_fin, monto, ...rest } = prev;
+    return { ...rest, ...newErrors };
+  });
+}, [fecha_inicio, fecha_fin, monto]);
+    const handleSubmit = async () => {
+    const data: Contrato = {
+      nombre,
+      tipo_contrato: tipoContrato as 'ALQUILER_LOCACION' | 'COMPRA_VENTA',
+      id_locador: tipoContrato === 'ALQUILER_LOCACION' ? id_locador : undefined,
+      id_locatario: tipoContrato === 'ALQUILER_LOCACION' ? id_locatario : undefined,
+      id_comprador: tipoContrato === 'COMPRA_VENTA' ? id_comprador : undefined,
+      id_vendedor: tipoContrato === 'COMPRA_VENTA' ? id_vendedor : undefined,
+      id_inmueble: id_inmueble!,
+      id_template: id_template!,
+      valores,
+      fecha_inicio,
+      fecha_fin,
+      monto,
+    };
+
+    const result = contractSchema.safeParse(data);
     if (!result.success) {
-      const firstError = result.error.issues[0];
-      setError(firstError.message);
+      const errors: { [key: string]: string } = {};
+      result.error.issues.forEach((issue) => {
+        const path = issue.path[0];
+        if (typeof path === 'string' || typeof path === 'number') {
+          errors[path.toString()] = issue.message;
+        }
+      });
+      setFormErrors((prev) => ({ ...prev, ...errors }));
+      setError(result.error.issues[0].message);
       return;
     }
 
     const montoNum = parseFloat(monto);
     if (montoNum > 999999999.99) {
+      setFormErrors((prev) => ({ ...prev, monto: 'El monto es demasiado grande' }));
       setError('El monto es demasiado grande. Máximo permitido: 999,999,999.99');
       return;
     }
 
-    if (Object.values(valores).some(v => !v)) {
+    if (Object.values(valores).some((v) => !v)) {
+      setFormErrors((prev) => ({ ...prev, valores: 'Completa todos los campos variables' }));
       setError('Por favor, completa todos los campos variables');
       return;
     }
@@ -278,27 +395,22 @@ export default function NewContract() {
     try {
       setLoading(true);
       setError(null);
+      setFormErrors({});
       const res = await fetch('/api/contracts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          nombre,
-          id_cliente,
-          id_inmueble,
-          id_template,
-          valores,
-          fecha_inicio,
-          fecha_fin,
-          monto,
-        }),
+        body: JSON.stringify(data),
       });
-      if (!res.ok) throw new Error('Error al crear contrato');
-      const data = await res.json();
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Error al crear contrato');
+      }
+      const responseData = await res.json();
 
-      window.location.href = data.downloadUrl;
+      window.location.href = responseData.downloadUrl;
       router.push('/contratos');
-    } catch (err) {
-      setError('Error al crear el contrato');
+    } catch (err: any) {
+      setError(err.message || 'Error al crear el contrato');
     } finally {
       setLoading(false);
     }
@@ -314,17 +426,37 @@ export default function NewContract() {
     label: inmueble.titulo,
   }));
 
-  const templateOptions = templates.map(template => ({
-    value: template.id,
-    label: template.nombre,
-  }));
+  const templateOptions = templates
+    .filter(t => !tipoContrato || t.tipo === tipoContrato)
+    .map(template => ({
+      value: template.id,
+      label: template.nombre,
+    }));
+
+  const isGeneralInfoComplete = !!nombre && !!tipoContrato;
+  const isPartesComplete = !!id_inmueble && (
+    (tipoContrato === 'ALQUILER_LOCACION' && !!id_locador && !!id_locatario && id_locador !== id_locatario) ||
+    (tipoContrato === 'COMPRA_VENTA' && !!id_comprador && !!id_vendedor && id_comprador !== id_vendedor)
+  );
+  const isFechasMontoComplete = !!fecha_inicio && !!fecha_fin && !!monto && !formErrors.fecha_inicio && !formErrors.fecha_fin && !formErrors.monto;
+  const isPrevStepComplete = isGeneralInfoComplete && isPartesComplete && isFechasMontoComplete;
 
   const steps = [
-    { id: 1, name: 'Información General', completed: !!nombre },
-    { id: 2, name: 'Partes', completed: !!(id_cliente && id_inmueble) },
-    { id: 3, name: 'Fechas y Monto', completed: !!(fecha_inicio && fecha_fin && monto && !fechaErrors.inicio && !fechaErrors.fin) },
+    { id: 1, name: 'Información General', completed: isGeneralInfoComplete },
+    { id: 2, name: 'Partes', completed: isPartesComplete },
+    { id: 3, name: 'Fechas y Monto', completed: isFechasMontoComplete },
     { id: 4, name: 'Template', completed: !!id_template },
   ];
+
+  console.log('=== DEBUG TEMPLATES ===');
+  console.log('Templates cargados:', templates);
+  console.log('Tipo contrato seleccionado:', tipoContrato);
+  console.log('Template options filtradas:', templateOptions);
+  console.log('isPrevStepComplete:', isPrevStepComplete);
+  console.log('isGeneralInfoComplete:', isGeneralInfoComplete);
+  console.log('isPartesComplete:', isPartesComplete);
+  console.log('isFechasMontoComplete:', isFechasMontoComplete);
+  console.log('======================');
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: '#f8f9fa' }}>
@@ -344,7 +476,7 @@ export default function NewContract() {
                 Completa la información necesaria para generar tu contrato de manera profesional
               </p>
 
-              <div className="mt-8 flex items-center gap-2">
+              <div className="mt-8 flex items-center gap-2 flex-wrap">
                 {steps.map((step, index) => (
                   <div key={step.id} className="flex items-center">
                     <div className="flex items-center gap-2 px-4 py-2 rounded-lg" style={{
@@ -404,245 +536,352 @@ export default function NewContract() {
                       Información General
                     </h2>
                     <p className="text-xs" style={{ color: '#969696' }}>
-                      Identificación del contrato
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-6">
-                <label className="block text-sm font-semibold mb-2" style={{ color: '#686363' }}>
-                  Nombre del Contrato
-                </label>
-                <input
-                  type="text"
-                  value={nombre}
-                  onChange={(e) => setNombre(e.target.value)}
-                  placeholder="Ej: Contrato de Alquiler - Departamento 3A"
-                  className="w-full px-4 py-3 rounded-lg border-2 transition-all duration-200 focus:outline-none"
-                  style={{
-                    borderColor: nombre ? '#63bae9' : '#e5e7eb',
-                    backgroundColor: nombre ? '#f0f9ff' : 'white',
-                    color: '#686363'
-                  }}
-                />
-              </div>
-            </div>
-
-            <div className="bg-white rounded-2xl shadow-sm border" style={{ borderColor: '#e5e7eb' }}>
-              <div className="p-6 border-b" style={{ borderColor: '#f3f4f6' }}>
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#e8f6fc' }}>
-                    <User className="w-5 h-5" style={{ color: '#63bae9' }} />
-                  </div>
-                  <div>
-                    <h2 className="text-lg font-bold" style={{ color: '#686363' }}>
-                      Partes del Contrato
-                    </h2>
-                    <p className="text-xs" style={{ color: '#969696' }}>
-                      Cliente e inmueble involucrados
+                      Identificación y tipo del contrato
                     </p>
                   </div>
                 </div>
               </div>
 
               <div className="p-6 space-y-5">
-                <Combobox
-                  options={clienteOptions}
-                  value={id_cliente}
-                  onChange={setIdCliente}
-                  placeholder="Selecciona un cliente"
-                  label={
-                    <span className="flex items-center gap-2">
-                      <User className="w-4 h-4" style={{ color: '#63bae9' }} />
-                      Cliente
-                    </span>
-                  }
-                  searchPlaceholder="Buscar cliente..."
-                />
+                <div>
+                  <label className="block text-sm font-semibold mb-2" style={{ color: '#686363' }}>
+                    Nombre del Contrato
+                  </label>
+                  <input
+                    type="text"
+                    value={nombre}
+                    onChange={(e) => setNombre(e.target.value)}
+                    placeholder="Ej: Contrato de Alquiler - Departamento 3A"
+                    className="w-full px-4 py-3 rounded-lg border-2 transition-all duration-200 focus:outline-none"
+                    style={{
+                      borderColor: formErrors.nombre ? '#ef4444' : (nombre ? '#63bae9' : '#e5e7eb'),
+                      backgroundColor: formErrors.nombre ? '#fef2f2' : (nombre ? '#f0f9ff' : 'white'),
+                      color: '#686363'
+                    }}
+                  />
+                  {formErrors.nombre && (
+                    <p className="mt-1 text-xs" style={{ color: '#ef4444' }}>{formErrors.nombre}</p>
+                  )}
+                </div>
 
-                <Combobox
-                  options={inmuebleOptions}
-                  value={id_inmueble}
-                  onChange={setIdInmueble}
-                  placeholder="Selecciona un inmueble"
-                  label={
-                    <span className="flex items-center gap-2">
-                      <Building2 className="w-4 h-4" style={{ color: '#63bae9' }} />
-                      Inmueble
-                    </span>
-                  }
-                  searchPlaceholder="Buscar inmueble..."
-                />
+                <div>
+                  <label className="block text-sm font-semibold mb-2" style={{ color: '#686363' }}>
+                    Tipo de Contrato
+                  </label>
+                  <select
+                    value={tipoContrato}
+                    onChange={(e) => setTipoContrato(e.target.value as 'ALQUILER_LOCACION' | 'COMPRA_VENTA' | '')}
+                    className="w-full px-4 py-3 rounded-lg border-2 transition-all duration-200 focus:outline-none"
+                    style={{
+                      borderColor: formErrors.tipo_contrato ? '#ef4444' : (tipoContrato ? '#63bae9' : '#e5e7eb'),
+                      backgroundColor: formErrors.tipo_contrato ? '#fef2f2' : (tipoContrato ? '#f0f9ff' : 'white'),
+                      color: '#686363'
+                    }}
+                  >
+                    <option value="">Selecciona un tipo</option>
+                    <option value="ALQUILER_LOCACION">Alquiler/Locación</option>
+                    <option value="COMPRA_VENTA">Compra/Venta</option>
+                  </select>
+                  {formErrors.tipo_contrato && (
+                    <p className="mt-1 text-xs" style={{ color: '#ef4444' }}>{formErrors.tipo_contrato}</p>
+                  )}
+                </div>
               </div>
             </div>
 
-            <div className="bg-white rounded-2xl shadow-sm border" style={{ borderColor: '#e5e7eb' }}>
-              <div className="p-6 border-b" style={{ borderColor: '#f3f4f6' }}>
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#e8f6fc' }}>
-                    <Calendar className="w-5 h-5" style={{ color: '#63bae9' }} />
+            {tipoContrato && (
+              <>
+                <div className="bg-white rounded-2xl shadow-sm border" style={{ borderColor: '#e5e7eb' }}>
+                  <div className="p-6 border-b" style={{ borderColor: '#f3f4f6' }}>
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#e8f6fc' }}>
+                        <User className="w-5 h-5" style={{ color: '#63bae9' }} />
+                      </div>
+                      <div>
+                        <h2 className="text-lg font-bold" style={{ color: '#686363' }}>
+                          Partes del Contrato
+                        </h2>
+                        <p className="text-xs" style={{ color: '#969696' }}>
+                          Clientes e inmueble involucrados
+                        </p>
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <h2 className="text-lg font-bold" style={{ color: '#686363' }}>
-                      Fechas y Monto
-                    </h2>
-                    <p className="text-xs" style={{ color: '#969696' }}>
-                      Vigencia y valor del contrato
-                    </p>
-                  </div>
-                </div>
-              </div>
 
-              <div className="p-6 grid md:grid-cols-2 gap-5">
-                <div>
-                  <label className="flex items-center gap-2 text-sm font-semibold mb-2" style={{ color: '#686363' }}>
-                    <Calendar className="w-4 h-4" style={{ color: '#63bae9' }} />
-                    Fecha de Inicio
-                  </label>
-                  <input
-                    type="date"
-                    value={fecha_inicio}
-                    onChange={(e) => setFechaInicio(e.target.value)}
-                    className="w-full px-4 py-3 rounded-lg border-2 transition-all duration-200 focus:outline-none"
-                    style={{
-                      borderColor: fechaErrors.inicio ? '#ef4444' : (fecha_inicio ? '#63bae9' : '#e5e7eb'),
-                      backgroundColor: fechaErrors.inicio ? '#fef2f2' : (fecha_inicio ? '#f0f9ff' : 'white')
-                    }}
-                  />
-                  {fechaErrors.inicio && (
-                    <p className="mt-1 text-xs" style={{ color: '#ef4444' }}>{fechaErrors.inicio}</p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="flex items-center gap-2 text-sm font-semibold mb-2" style={{ color: '#686363' }}>
-                    <Calendar className="w-4 h-4" style={{ color: '#63bae9' }} />
-                    Fecha de Fin
-                  </label>
-                  <input
-                    type="date"
-                    value={fecha_fin}
-                    onChange={(e) => setFechaFin(e.target.value)}
-                    className="w-full px-4 py-3 rounded-lg border-2 transition-all duration-200 focus:outline-none"
-                    style={{
-                      borderColor: fechaErrors.fin ? '#ef4444' : (fecha_fin ? '#63bae9' : '#e5e7eb'),
-                      backgroundColor: fechaErrors.fin ? '#fef2f2' : (fecha_fin ? '#f0f9ff' : 'white')
-                    }}
-                  />
-                  {fechaErrors.fin && (
-                    <p className="mt-1 text-xs" style={{ color: '#ef4444' }}>{fechaErrors.fin}</p>
-                  )}
-                </div>
-
-                <div className="md:col-span-2">
-                  <label className="flex items-center gap-2 text-sm font-semibold mb-2" style={{ color: '#686363' }}>
-                    <DollarSign className="w-4 h-4" style={{ color: '#63bae9' }} />
-                    Monto del Contrato
-                  </label>
-                  <div className="relative">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg font-bold" style={{ color: '#969696' }}>$</span>
-                    <input
-                      type="number"
-                      value={monto}
-                      onChange={(e) => setMonto(e.target.value)}
-                      placeholder="0.00"
-                      className="w-full pl-10 pr-4 py-3 rounded-lg border-2 transition-all duration-200 focus:outline-none"
-                      style={{
-                        borderColor: monto ? '#63bae9' : '#e5e7eb',
-                        backgroundColor: monto ? '#f0f9ff' : 'white',
-                        color: '#686363'
-                      }}
-                      step="0.01"
-                      min="0"
+                  <div className="p-6 space-y-5">
+                    {tipoContrato === 'ALQUILER_LOCACION' ? (
+                      <>
+                        <Combobox
+                          options={clienteOptions}
+                          value={id_locador}
+                          onChange={setIdLocador}
+                          placeholder="Selecciona el locador"
+                          label={
+                            <span className="flex items-center gap-2">
+                              <User className="w-4 h-4" style={{ color: '#63bae9' }} />
+                              Locador
+                            </span>
+                          }
+                          searchPlaceholder="Buscar locador..."
+                          error={formErrors.id_locador}
+                        />
+                        <Combobox
+                          options={clienteOptions}
+                          value={id_locatario}
+                          onChange={setIdLocatario}
+                          placeholder="Selecciona el locatario"
+                          label={
+                            <span className="flex items-center gap-2">
+                              <User className="w-4 h-4" style={{ color: '#63bae9' }} />
+                              Locatario
+                            </span>
+                          }
+                          searchPlaceholder="Buscar locatario..."
+                          error={formErrors.id_locatario}
+                        />
+                      </>
+                    ) : (
+                      <>
+                        <Combobox
+                          options={clienteOptions}
+                          value={id_comprador}
+                          onChange={setIdComprador}
+                          placeholder="Selecciona el comprador"
+                          label={
+                            <span className="flex items-center gap-2">
+                              <User className="w-4 h-4" style={{ color: '#63bae9' }} />
+                              Comprador
+                            </span>
+                          }
+                          searchPlaceholder="Buscar comprador..."
+                          error={formErrors.id_comprador}
+                        />
+                        <Combobox
+                          options={clienteOptions}
+                          value={id_vendedor}
+                          onChange={setIdVendedor}
+                          placeholder="Selecciona el vendedor"
+                          label={
+                            <span className="flex items-center gap-2">
+                              <User className="w-4 h-4" style={{ color: '#63bae9' }} />
+                              Vendedor
+                            </span>
+                          }
+                          searchPlaceholder="Buscar vendedor..."
+                          error={formErrors.id_vendedor}
+                        />
+                      </>
+                    )}
+                    <Combobox
+                      options={inmuebleOptions}
+                      value={id_inmueble}
+                      onChange={setIdInmueble}
+                      placeholder="Selecciona un inmueble"
+                      label={
+                        <span className="flex items-center gap-2">
+                          <Building2 className="w-4 h-4" style={{ color: '#63bae9' }} />
+                          Inmueble
+                        </span>
+                      }
+                      searchPlaceholder="Buscar inmueble..."
+                      error={formErrors.id_inmueble}
                     />
                   </div>
                 </div>
-              </div>
-            </div>
 
-            <div className="bg-white rounded-2xl shadow-sm border" style={{ borderColor: '#e5e7eb' }}>
-              <div className="p-6 border-b" style={{ borderColor: '#f3f4f6' }}>
+                <div className="bg-white rounded-2xl shadow-sm border" style={{ borderColor: '#e5e7eb' }}>
+                  <div className="p-6 border-b" style={{ borderColor: '#f3f4f6' }}>
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#e8f6fc' }}>
+                        <Calendar className="w-5 h-5" style={{ color: '#63bae9' }} />
+                      </div>
+                      <div>
+                        <h2 className="text-lg font-bold" style={{ color: '#686363' }}>
+                          Fechas y Monto
+                        </h2>
+                        <p className="text-xs" style={{ color: '#969696' }}>
+                          Vigencia y valor del contrato
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-6 grid md:grid-cols-2 gap-5">
+                    <div>
+                      <label className="flex items-center gap-2 text-sm font-semibold mb-2" style={{ color: '#686363' }}>
+                        <Calendar className="w-4 h-4" style={{ color: '#63bae9' }} />
+                        Fecha de Inicio
+                      </label>
+                      <input
+                        type="date"
+                        value={fecha_inicio}
+                        onChange={(e) => setFechaInicio(e.target.value)}
+                        className="w-full px-4 py-3 rounded-lg border-2 transition-all duration-200 focus:outline-none"
+                        style={{
+                          borderColor: formErrors.fecha_inicio ? '#ef4444' : (fecha_inicio ? '#63bae9' : '#e5e7eb'),
+                          backgroundColor: formErrors.fecha_inicio ? '#fef2f2' : (fecha_inicio ? '#f0f9ff' : 'white')
+                        }}
+                      />
+                      {formErrors.fecha_inicio && (
+                        <p className="mt-1 text-xs" style={{ color: '#ef4444' }}>{formErrors.fecha_inicio}</p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="flex items-center gap-2 text-sm font-semibold mb-2" style={{ color: '#686363' }}>
+                        <Calendar className="w-4 h-4" style={{ color: '#63bae9' }} />
+                        Fecha de Fin
+                      </label>
+                      <input
+                        type="date"
+                        value={fecha_fin}
+                        onChange={(e) => setFechaFin(e.target.value)}
+                        className="w-full px-4 py-3 rounded-lg border-2 transition-all duration-200 focus:outline-none"
+                        style={{
+                          borderColor: formErrors.fecha_fin ? '#ef4444' : (fecha_fin ? '#63bae9' : '#e5e7eb'),
+                          backgroundColor: formErrors.fecha_fin ? '#fef2f2' : (fecha_fin ? '#f0f9ff' : 'white')
+                        }}
+                      />
+                      {formErrors.fecha_fin && (
+                        <p className="mt-1 text-xs" style={{ color: '#ef4444' }}>{formErrors.fecha_fin}</p>
+                      )}
+                    </div>
+
+                    <div className="md:col-span-2">
+                      <label className="flex items-center gap-2 text-sm font-semibold mb-2" style={{ color: '#686363' }}>
+                        <DollarSign className="w-4 h-4" style={{ color: '#63bae9' }} />
+                        Monto del Contrato
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg font-bold" style={{ color: '#969696' }}>$</span>
+                        <input
+                          type="number"
+                          value={monto}
+                          onChange={(e) => setMonto(e.target.value)}
+                          placeholder="0.00"
+                          className="w-full pl-10 pr-4 py-3 rounded-lg border-2 transition-all duration-200 focus:outline-none"
+                          style={{
+                            borderColor: formErrors.monto ? '#ef4444' : (monto ? '#63bae9' : '#e5e7eb'),
+                            backgroundColor: formErrors.monto ? '#fef2f2' : (monto ? '#f0f9ff' : 'white'),
+                            color: '#686363'
+                          }}
+                          step="0.01"
+                          min="0"
+                        />
+                        {formErrors.monto && (
+                          <p className="mt-1 text-xs" style={{ color: '#ef4444' }}>{formErrors.monto}</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-2xl shadow-sm border" style={{ borderColor: '#e5e7eb' }}>
+                  <div className="p-6 border-b" style={{ borderColor: '#f3f4f6' }}>
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#e8f6fc' }}>
+                        <FileType className="w-5 h-5" style={{ color: '#63bae9' }} />
+                      </div>
+                      <div>
+                        <h2 className="text-lg font-bold" style={{ color: '#686363' }}>
+                          Seleccionar Plantilla
+                        </h2>
+                        <p className="text-xs" style={{ color: '#969696' }}>
+                          Tipo de contrato a generar
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-6">
+                    {!isPrevStepComplete && (
+                      <div className="mb-5 p-4 rounded-lg border-2 border-dashed flex items-center gap-3" style={{ borderColor: '#63bae9', backgroundColor: '#f0f9ff' }}>
+                        <Lock className="w-5 h-5" style={{ color: '#63bae9' }} />
+                        <p className="text-sm font-medium" style={{ color: '#63bae9' }}>
+                          Completa los pasos anteriores para desbloquear esta sección
+                        </p>
+                      </div>
+                    )}
+
+                    <Combobox
+                      options={templateOptions}
+                      value={id_template}
+                      onChange={setIdTemplate}
+                      placeholder="Selecciona una plantilla"
+                      label={
+                        <span className="flex items-center gap-2">
+                          <FileType className="w-4 h-4" style={{ color: '#63bae9' }} />
+                          Plantilla de Contrato
+                        </span>
+                      }
+                      searchPlaceholder="Buscar plantilla..."
+                      disabled={!isPrevStepComplete}
+                      error={formErrors.id_template}
+                    />
+                  </div>
+                </div>
+
+                {isPrevStepComplete && id_template && Object.keys(valores).length > 0 && (
+                  <div className="bg-white rounded-2xl shadow-sm border" style={{ borderColor: '#e5e7eb' }}>
+                    <div className="p-6 border-b" style={{ borderColor: '#f3f4f6' }}>
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#fff9e6' }}>
+                          <FileType className="w-5 h-5" style={{ color: '#fcc238' }} />
+                        </div>
+                        <div>
+                          <h2 className="text-lg font-bold" style={{ color: '#686363' }}>
+                            Campos Variables
+                          </h2>
+                          <p className="text-xs" style={{ color: '#969696' }}>
+                            Personaliza el contenido del contrato
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="p-6 grid md:grid-cols-2 gap-5">
+                      {Object.keys(valores).map((campo) => (
+                        <div key={campo}>
+                          <label className="block text-sm font-semibold mb-2" style={{ color: '#686363' }}>
+                            {campo}
+                          </label>
+                          <input
+                            type="text"
+                            value={valores[campo]}
+                            onChange={(e) => setValores({ ...valores, [campo]: e.target.value })}
+                            className="w-full px-4 py-3 rounded-lg border-2 transition-all duration-200 focus:outline-none"
+                            style={{
+                              borderColor: formErrors.valores && !valores[campo] ? '#ef4444' : (valores[campo] ? '#63bae9' : '#e5e7eb'),
+                              backgroundColor: formErrors.valores && !valores[campo] ? '#fef2f2' : (valores[campo] ? '#f0f9ff' : 'white'),
+                              color: '#686363'
+                            }}
+                            placeholder={`Ingresa ${campo.toLowerCase()}`}
+                          />
+                          {formErrors.valores && !valores[campo] && (
+                            <p className="mt-1 text-xs" style={{ color: '#ef4444' }}>Este campo es obligatorio</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
+            {!tipoContrato && (
+              <div className="bg-white rounded-2xl shadow-sm border p-6" style={{ borderColor: '#e5e7eb' }}>
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#e8f6fc' }}>
-                    <FileType className="w-5 h-5" style={{ color: '#63bae9' }} />
+                  <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#f0f9ff' }}>
+                    <Lock className="w-5 h-5" style={{ color: '#63bae9' }} />
                   </div>
                   <div>
                     <h2 className="text-lg font-bold" style={{ color: '#686363' }}>
-                      Seleccionar Plantilla
+                      Continuar Formulario
                     </h2>
-                    <p className="text-xs" style={{ color: '#969696' }}>
-                      Tipo de contrato a generar
+                    <p className="text-sm" style={{ color: '#969696' }}>
+                      Selecciona el tipo de contrato para desbloquear las siguientes secciones.
                     </p>
                   </div>
-                </div>
-              </div>
-
-              <div className="p-6">
-                {!isPrevStepComplete && (
-                  <div className="mb-5 p-4 rounded-lg border-2 border-dashed flex items-center gap-3" style={{ borderColor: '#63bae9', backgroundColor: '#f0f9ff' }}>
-                    <Lock className="w-5 h-5" style={{ color: '#63bae9' }} />
-                    <p className="text-sm font-medium" style={{ color: '#63bae9' }}>
-                      Completa los pasos anteriores para desbloquear esta sección
-                    </p>
-                  </div>
-                )}
-
-                <Combobox
-                  options={templateOptions}
-                  value={id_template}
-                  onChange={setIdTemplate}
-                  placeholder="Selecciona una plantilla"
-                  label={
-                    <span className="flex items-center gap-2">
-                      <FileType className="w-4 h-4" style={{ color: '#63bae9' }} />
-                      Plantilla de Contrato
-                    </span>
-                  }
-                  searchPlaceholder="Buscar plantilla..."
-                  disabled={!isPrevStepComplete}
-                />
-              </div>
-            </div>
-
-            {isPrevStepComplete && id_template && Object.keys(valores).length > 0 && (
-              <div className="bg-white rounded-2xl shadow-sm border" style={{ borderColor: '#e5e7eb' }}>
-                <div className="p-6 border-b" style={{ borderColor: '#f3f4f6' }}>
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#fff9e6' }}>
-                      <FileType className="w-5 h-5" style={{ color: '#fcc238' }} />
-                    </div>
-                    <div>
-                      <h2 className="text-lg font-bold" style={{ color: '#686363' }}>
-                        Campos Variables
-                      </h2>
-                      <p className="text-xs" style={{ color: '#969696' }}>
-                        Personaliza el contenido del contrato
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="p-6 grid md:grid-cols-2 gap-5">
-                  {Object.keys(valores).map((campo) => (
-                    <div key={campo}>
-                      <label className="block text-sm font-semibold mb-2" style={{ color: '#686363' }}>
-                        {campo}
-                      </label>
-                      <input
-                        type="text"
-                        value={valores[campo]}
-                        onChange={(e) => setValores({ ...valores, [campo]: e.target.value })}
-                        className="w-full px-4 py-3 rounded-lg border-2 transition-all duration-200 focus:outline-none"
-                        style={{
-                          borderColor: valores[campo] ? '#63bae9' : '#e5e7eb',
-                          backgroundColor: valores[campo] ? '#f0f9ff' : 'white',
-                          color: '#686363'
-                        }}
-                        placeholder={`Ingresa ${campo.toLowerCase()}`}
-                      />
-                    </div>
-                  ))}
                 </div>
               </div>
             )}
@@ -666,54 +905,102 @@ export default function NewContract() {
                   </div>
 
                   <div className="flex items-start gap-3 p-3 rounded-lg" style={{ backgroundColor: '#f8f9fa' }}>
-                    <CheckCircle2 className="w-5 h-5 mt-0.5" style={{ color: id_cliente ? '#63bae9' : '#969696' }} />
+                    <CheckCircle2 className="w-5 h-5 mt-0.5" style={{ color: tipoContrato ? '#63bae9' : '#969696' }} />
                     <div className="flex-1">
-                      <p className="text-sm font-medium" style={{ color: '#686363' }}>Cliente</p>
+                      <p className="text-sm font-medium" style={{ color: '#686363' }}>Tipo</p>
                       <p className="text-xs mt-0.5" style={{ color: '#969696' }}>
-                        {id_cliente ? clienteOptions.find(c => c.value === id_cliente)?.label : 'Pendiente'}
+                        {tipoContrato ? (tipoContrato === 'ALQUILER_LOCACION' ? 'Alquiler/Locación' : 'Compra/Venta') : 'Pendiente'}
                       </p>
                     </div>
                   </div>
 
-                  <div className="flex items-start gap-3 p-3 rounded-lg" style={{ backgroundColor: '#f8f9fa' }}>
-                    <CheckCircle2 className="w-5 h-5 mt-0.5" style={{ color: id_inmueble ? '#63bae9' : '#969696' }} />
-                    <div className="flex-1">
-                      <p className="text-sm font-medium" style={{ color: '#686363' }}>Inmueble</p>
-                      <p className="text-xs mt-0.5" style={{ color: '#969696' }}>
-                        {id_inmueble ? inmuebleOptions.find(i => i.value === id_inmueble)?.label : 'Pendiente'}
-                      </p>
-                    </div>
-                  </div>
+                  {tipoContrato === 'ALQUILER_LOCACION' ? (
+                    <>
+                      <div className="flex items-start gap-3 p-3 rounded-lg" style={{ backgroundColor: '#f8f9fa' }}>
+                        <CheckCircle2 className="w-5 h-5 mt-0.5" style={{ color: id_locador ? '#63bae9' : '#969696' }} />
+                        <div className="flex-1">
+                          <p className="text-sm font-medium" style={{ color: '#686363' }}>Locador</p>
+                          <p className="text-xs mt-0.5" style={{ color: '#969696' }}>
+                            {id_locador ? clienteOptions.find(c => c.value === id_locador)?.label : 'Pendiente'}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-3 p-3 rounded-lg" style={{ backgroundColor: '#f8f9fa' }}>
+                        <CheckCircle2 className="w-5 h-5 mt-0.5" style={{ color: id_locatario ? '#63bae9' : '#969696' }} />
+                        <div className="flex-1">
+                          <p className="text-sm font-medium" style={{ color: '#686363' }}>Locatario</p>
+                          <p className="text-xs mt-0.5" style={{ color: '#969696' }}>
+                            {id_locatario ? clienteOptions.find(c => c.value === id_locatario)?.label : 'Pendiente'}
+                          </p>
+                        </div>
+                      </div>
+                    </>
+                  ) : tipoContrato === 'COMPRA_VENTA' ? (
+                    <>
+                      <div className="flex items-start gap-3 p-3 rounded-lg" style={{ backgroundColor: '#f8f9fa' }}>
+                        <CheckCircle2 className="w-5 h-5 mt-0.5" style={{ color: id_comprador ? '#63bae9' : '#969696' }} />
+                        <div className="flex-1">
+                          <p className="text-sm font-medium" style={{ color: '#686363' }}>Comprador</p>
+                          <p className="text-xs mt-0.5" style={{ color: '#969696' }}>
+                            {id_comprador ? clienteOptions.find(c => c.value === id_comprador)?.label : 'Pendiente'}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-3 p-3 rounded-lg" style={{ backgroundColor: '#f8f9fa' }}>
+                        <CheckCircle2 className="w-5 h-5 mt-0.5" style={{ color: id_vendedor ? '#63bae9' : '#969696' }} />
+                        <div className="flex-1">
+                          <p className="text-sm font-medium" style={{ color: '#686363' }}>Vendedor</p>
+                          <p className="text-xs mt-0.5" style={{ color: '#969696' }}>
+                            {id_vendedor ? clienteOptions.find(c => c.value === id_vendedor)?.label : 'Pendiente'}
+                          </p>
+                        </div>
+                      </div>
+                    </>
+                  ) : null}
 
-                  <div className="flex items-start gap-3 p-3 rounded-lg" style={{ backgroundColor: '#f8f9fa' }}>
-                    <CheckCircle2 className="w-5 h-5 mt-0.5" style={{ color: (fecha_inicio && fecha_fin && !fechaErrors.inicio && !fechaErrors.fin) ? '#63bae9' : '#969696' }} />
-                    <div className="flex-1">
-                      <p className="text-sm font-medium" style={{ color: '#686363' }}>Vigencia</p>
-                      <p className="text-xs mt-0.5" style={{ color: '#969696' }}>
-                        {(fecha_inicio && fecha_fin) ? `${fecha_inicio} - ${fecha_fin}` : 'Pendiente'}
-                      </p>
-                    </div>
-                  </div>
+                  {tipoContrato && (
+                    <>
+                      <div className="flex items-start gap-3 p-3 rounded-lg" style={{ backgroundColor: '#f8f9fa' }}>
+                        <CheckCircle2 className="w-5 h-5 mt-0.5" style={{ color: id_inmueble ? '#63bae9' : '#969696' }} />
+                        <div className="flex-1">
+                          <p className="text-sm font-medium" style={{ color: '#686363' }}>Inmueble</p>
+                          <p className="text-xs mt-0.5" style={{ color: '#969696' }}>
+                            {id_inmueble ? inmuebleOptions.find(i => i.value === id_inmueble)?.label : 'Pendiente'}
+                          </p>
+                        </div>
+                      </div>
 
-                  <div className="flex items-start gap-3 p-3 rounded-lg" style={{ backgroundColor: '#f8f9fa' }}>
-                    <CheckCircle2 className="w-5 h-5 mt-0.5" style={{ color: monto ? '#63bae9' : '#969696' }} />
-                    <div className="flex-1">
-                      <p className="text-sm font-medium" style={{ color: '#686363' }}>Monto</p>
-                      <p className="text-xs mt-0.5" style={{ color: '#969696' }}>
-                        {monto ? `$ ${parseFloat(monto).toLocaleString('es-AR', { minimumFractionDigits: 2 })}` : 'Pendiente'}
-                      </p>
-                    </div>
-                  </div>
+                      <div className="flex items-start gap-3 p-3 rounded-lg" style={{ backgroundColor: '#f8f9fa' }}>
+                        <CheckCircle2 className="w-5 h-5 mt-0.5" style={{ color: (fecha_inicio && fecha_fin && !formErrors.fecha_inicio && !formErrors.fecha_fin) ? '#63bae9' : '#969696' }} />
+                        <div className="flex-1">
+                          <p className="text-sm font-medium" style={{ color: '#686363' }}>Vigencia</p>
+                          <p className="text-xs mt-0.5" style={{ color: '#969696' }}>
+                            {(fecha_inicio && fecha_fin) ? `${fecha_inicio} - ${fecha_fin}` : 'Pendiente'}
+                          </p>
+                        </div>
+                      </div>
 
-                  <div className="flex items-start gap-3 p-3 rounded-lg" style={{ backgroundColor: '#f8f9fa' }}>
-                    <CheckCircle2 className="w-5 h-5 mt-0.5" style={{ color: id_template ? '#63bae9' : '#969696' }} />
-                    <div className="flex-1">
-                      <p className="text-sm font-medium" style={{ color: '#686363' }}>Plantilla</p>
-                      <p className="text-xs mt-0.5" style={{ color: '#969696' }}>
-                        {id_template ? templateOptions.find(t => t.value === id_template)?.label : 'Pendiente'}
-                      </p>
-                    </div>
-                  </div>
+                      <div className="flex items-start gap-3 p-3 rounded-lg" style={{ backgroundColor: '#f8f9fa' }}>
+                        <CheckCircle2 className="w-5 h-5 mt-0.5" style={{ color: monto && !formErrors.monto ? '#63bae9' : '#969696' }} />
+                        <div className="flex-1">
+                          <p className="text-sm font-medium" style={{ color: '#686363' }}>Monto</p>
+                          <p className="text-xs mt-0.5" style={{ color: '#969696' }}>
+                            {monto ? `$ ${parseFloat(monto).toLocaleString('es-AR', { minimumFractionDigits: 2 })}` : 'Pendiente'}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-3 p-3 rounded-lg" style={{ backgroundColor: '#f8f9fa' }}>
+                        <CheckCircle2 className="w-5 h-5 mt-0.5" style={{ color: id_template ? '#63bae9' : '#969696' }} />
+                        <div className="flex-1">
+                          <p className="text-sm font-medium" style={{ color: '#686363' }}>Plantilla</p>
+                          <p className="text-xs mt-0.5" style={{ color: '#969696' }}>
+                            {id_template ? templateOptions.find(t => t.value === id_template)?.label : 'Pendiente'}
+                          </p>
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
 

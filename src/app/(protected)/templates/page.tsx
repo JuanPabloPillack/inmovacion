@@ -1,4 +1,4 @@
-//src/app/(protected)/templates/page.tsx
+// src/app/(protected)/templates/page.tsx
 'use client';
 import { useState, useEffect } from 'react';
 import { FileText, Upload, Trash2, AlertCircle, Check, ArrowLeft, Tag, Download, Search, Calendar } from 'lucide-react';
@@ -10,12 +10,14 @@ interface Template {
   nombre: string;
   archivoPath: string;
   camposVariables: string[] | null;
+  tipo: 'ALQUILER_LOCACION' | 'COMPRA_VENTA';
   createdAt: string;
 }
 
 function TemplatePage() {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [nombre, setNombre] = useState('');
+  const [tipo, setTipo] = useState<'ALQUILER_LOCACION' | 'COMPRA_VENTA' | ''>('');
   const [file, setFile] = useState<File | null>(null);
   const [campos, setCampos] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -25,14 +27,15 @@ function TemplatePage() {
   const [itemToDelete, setItemToDelete] = useState<{ id: number; nombre: string } | null>(null);
   const [search, setSearch] = useState('');
   const [fechaDesde, setFechaDesde] = useState('');
+  const [filterTipo, setFilterTipo] = useState<'ALQUILER_LOCACION' | 'COMPRA_VENTA' | ''>('');
   const [page, setPage] = useState(1);
   const [pageSize] = useState(10);
   const [total, setTotal] = useState(0);
 
   useEffect(() => {
-    setPage(1); // Resetear a la primera página al cambiar la búsqueda
+    setPage(1); // Resetear a la primera página al cambiar la búsqueda o filtros
     fetchTemplates();
-  }, [search]);
+  }, [search, filterTipo]);
 
   useEffect(() => {
     fetchTemplates(); // Carga inicial
@@ -44,6 +47,7 @@ function TemplatePage() {
       const params = new URLSearchParams();
       if (search) params.append('search', search);
       if (fechaDesde) params.append('fechaDesde', fechaDesde);
+      if (filterTipo) params.append('tipo', filterTipo);
       params.append('page', page.toString());
       params.append('pageSize', pageSize.toString());
       const url = `/api/templates?${params.toString()}`;
@@ -66,13 +70,14 @@ function TemplatePage() {
   };
 
   const handleUpload = async () => {
-    if (!nombre || !file) {
-      setError('Por favor, ingresa un nombre y selecciona un archivo .docx');
+    if (!nombre || !tipo || !file) {
+      setError('Por favor, ingresa un nombre, selecciona un tipo y selecciona un archivo .docx');
       return;
     }
 
     const formData = new FormData();
     formData.append('nombre', nombre);
+    formData.append('tipo', tipo);
     formData.append('file', file);
 
     try {
@@ -82,17 +87,21 @@ function TemplatePage() {
         method: 'POST',
         body: formData,
       });
-      if (!res.ok) throw new Error('Error al subir el template');
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Error al subir el template');
+      }
       const data = await res.json();
       setCampos(data.campos || []);
       setNombre('');
+      setTipo('');
       setFile(null);
       setSuccessMessage('Template subido exitosamente');
       setTimeout(() => setSuccessMessage(null), 5000);
       setPage(1); // Resetear a la primera página después de subir
       fetchTemplates();
-    } catch (err) {
-      setError('Error al subir el template');
+    } catch (err: any) {
+      setError(err.message);
     } finally {
       setLoading(false);
     }
@@ -235,6 +244,26 @@ function TemplatePage() {
 
             <div>
               <label className="block text-sm font-semibold mb-2 flex items-center gap-2" style={{ color: '#686363' }}>
+                <span>Tipo de Plantilla</span>
+                <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: '#fef9e7', color: '#fcc238' }}>Requerido</span>
+              </label>
+              <select
+                value={tipo}
+                onChange={(e) => setTipo(e.target.value as 'ALQUILER_LOCACION' | 'COMPRA_VENTA' | '')}
+                className="w-full px-4 py-3 rounded-lg border-2 border-gray-300 focus:outline-none focus:border-opacity-100 transition-all"
+                style={{
+                  color: '#686363',
+                  borderColor: tipo ? '#63bae9' : '#e5e7eb'
+                }}
+              >
+                <option value="">Seleccione un tipo</option>
+                <option value="ALQUILER_LOCACION">Alquiler/Locación</option>
+                <option value="COMPRA_VENTA">Compra/Venta</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold mb-2 flex items-center gap-2" style={{ color: '#686363' }}>
                 <span>Archivo .docx</span>
                 <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: '#fef9e7', color: '#fcc238' }}>Requerido</span>
               </label>
@@ -272,7 +301,7 @@ function TemplatePage() {
 
             <button
               onClick={handleUpload}
-              disabled={loading || !nombre || !file}
+              disabled={loading || !nombre || !tipo || !file}
               className="w-full py-4 px-6 rounded-lg font-semibold text-white flex items-center justify-center gap-3 transition-all hover:shadow-lg hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
               style={{ backgroundColor: '#fcc238' }}
             >
@@ -333,6 +362,24 @@ function TemplatePage() {
                 />
                 <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5" style={{ color: '#969696' }} />
               </div>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold mb-2" style={{ color: '#686363' }}>
+                Tipo de Plantilla
+              </label>
+              <select
+                value={filterTipo}
+                onChange={(e) => setFilterTipo(e.target.value as 'ALQUILER_LOCACION' | 'COMPRA_VENTA' | '')}
+                className="w-full px-4 py-3 rounded-lg border-2 border-gray-300 focus:outline-none focus:border-opacity-100 transition-all"
+                style={{
+                  color: '#686363',
+                  borderColor: filterTipo ? '#63bae9' : '#e5e7eb'
+                }}
+              >
+                <option value="">Todos los tipos</option>
+                <option value="ALQUILER_LOCACION">Alquiler/Locación</option>
+                <option value="COMPRA_VENTA">Compra/Venta</option>
+              </select>
             </div>
             <div>
               <label className="block text-sm font-semibold mb-2" style={{ color: '#686363' }}>
@@ -418,6 +465,10 @@ function TemplatePage() {
                           <p className="text-sm mb-3 flex items-center gap-2" style={{ color: '#969696' }}>
                             <span className="w-2 h-2 rounded-full" style={{ backgroundColor: '#63bae9' }}></span>
                             {template.archivoPath}
+                          </p>
+                          <p className="text-sm mb-3 flex items-center gap-2" style={{ color: '#969696' }}>
+                            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: '#63bae9' }}></span>
+                            Tipo: {template.tipo === 'ALQUILER_LOCACION' ? 'Alquiler/Locación' : 'Compra/Venta'}
                           </p>
 
                           {template.camposVariables && template.camposVariables.length > 0 && (

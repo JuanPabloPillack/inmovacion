@@ -10,6 +10,18 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ========== ENUMS PARA TIPOS ==========
+
+enum TemplateType {
+  ALQUILER_LOCACION
+  COMPRA_VENTA
+}
+
+enum ContractType {
+  ALQUILER_LOCACION
+  COMPRA_VENTA
+}
+
 // ========== MODELOS DE AUTENTICACIÓN ==========
 
 enum Role {
@@ -84,7 +96,8 @@ model Cliente {
   descripcion     String?      @db.Text
   activo          Boolean      @default(true)
   inmuebles       Inmueble[]
-  contratos       Contrato[]
+  contratos_1     Contrato[]   @relation("Cliente1") // Relación para id_cliente_1
+  contratos_2     Contrato[]   @relation("Cliente2") // Relación para id_cliente_2
   cobranzas       Cobranza[]
   pagos           Pago[]
   historial       Historial[]  @relation("HistorialCliente")
@@ -176,29 +189,33 @@ model InmuebleImagen {
 }
 
 model Template {
-  id              Int        @id @default(autoincrement())
-  nombre          String     @db.VarChar(100) // Nombre del template, ej: "Contrato Alquiler"
-  archivoPath     String     @db.VarChar(255) // Ruta donde se guarda el .docx
-  camposVariables Json?      // Lista de campos variables
-  createdAt       DateTime   @default(now())
+  id              Int          @id @default(autoincrement())
+  nombre          String       @db.VarChar(100) // Nombre del template, ej: "Contrato Alquiler"
+  archivoPath     String       @db.VarChar(255) // Ruta donde se guarda el .docx
+  camposVariables Json?        // Lista de campos variables
+  tipo            TemplateType // Nuevo campo obligatorio
+  createdAt       DateTime     @default(now())
   contratos       Contrato[]
 }
 
 model Contrato {
-  id_contrato  Int       @id @default(autoincrement())
-  id_inmueble  Int
-  inmueble     Inmueble  @relation(fields: [id_inmueble], references: [id_inmueble], onDelete: Restrict, onUpdate: Cascade)
-  id_cliente   Int
-  cliente      Cliente   @relation(fields: [id_cliente], references: [id_cliente], onDelete: Restrict, onUpdate: Cascade)
-  id_template  Int?
-  template     Template? @relation(fields: [id_template], references: [id], onDelete: SetNull, onUpdate: Cascade)
-  nombre       String?   @db.VarChar(100) // Nombre del contrato
-  valores      Json?     // Valores de los campos variables
-  archivoPath  String?   @db.VarChar(255) // Ruta del contrato generado
-  fecha_inicio DateTime
-  fecha_fin    DateTime
-  monto        Decimal   @db.Decimal(10, 2)
-  createdAt    DateTime  @default(now())
+  id_contrato   Int          @id @default(autoincrement())
+  id_inmueble   Int
+  inmueble      Inmueble     @relation(fields: [id_inmueble], references: [id_inmueble], onDelete: Restrict, onUpdate: Cascade)
+  id_cliente_1  Int          // Reemplaza id_cliente
+  cliente_1     Cliente      @relation("Cliente1", fields: [id_cliente_1], references: [id_cliente], onDelete: Restrict, onUpdate: Cascade)
+  id_cliente_2  Int          // Nuevo campo para segundo cliente
+  cliente_2     Cliente      @relation("Cliente2", fields: [id_cliente_2], references: [id_cliente], onDelete: Restrict, onUpdate: Cascade)
+  id_template   Int?
+  template      Template?    @relation(fields: [id_template], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  nombre        String?      @db.VarChar(100) // Nombre del contrato
+  valores       Json?        // Valores de los campos variables
+  archivoPath   String?      @db.VarChar(255) // Ruta del contrato generado
+  fecha_inicio  DateTime
+  fecha_fin     DateTime
+  monto         Decimal      @db.Decimal(10, 2)
+  tipo_contrato ContractType // Nuevo campo obligatorio
+  createdAt     DateTime     @default(now())
 }
 
 model Cobranza {

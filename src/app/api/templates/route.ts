@@ -4,15 +4,25 @@ import path from 'path';
 import fs from 'fs/promises';
 import { parseOfficeAsync } from 'officeparser';
 import { db } from '@/lib/db';
+import { z } from 'zod';
+
+// Esquema de validación para POST
+const templateSchema = z.object({
+  nombre: z.string().min(1, 'El nombre es obligatorio'),
+  tipo: z.enum(['ALQUILER_LOCACION', 'COMPRA_VENTA'], { message: 'Tipo inválido' }),
+});
 
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
     const file = formData.get('file') as File;
     const nombre = formData.get('nombre') as string;
+    const tipo = formData.get('tipo') as string;
 
-    if (!file || !nombre) {
-      return NextResponse.json({ error: 'Faltan el nombre o el archivo' }, { status: 400 });
+    // Validar datos
+    const validatedData = templateSchema.parse({ nombre, tipo });
+    if (!file) {
+      return NextResponse.json({ error: 'Falta el archivo' }, { status: 400 });
     }
 
     // Guardar archivo
@@ -22,27 +32,29 @@ export async function POST(req: NextRequest) {
     await fs.writeFile(filePath, buffer);
 
     // Extraer texto y campos variables
-    const text = await parseOfficeAsync(filePath) as string;
-    
-    // CLAVE: Extraer el nombre del campo SIN las llaves
+    const text = (await parseOfficeAsync(filePath)) as string;
     const regex = /\{([^}]+)\}/g;
     const matches = text.matchAll(regex);
-    const campos = [...new Set([...matches].map(match => match[1].trim()))];
-    
+    const campos = [...new Set([...matches].map((match) => match[1].trim()))];
+
     console.log('Campos encontrados (sin llaves):', campos);
 
     // Guardar en la base de datos
     const template = await db.template.create({
       data: {
-        nombre,
+        nombre: validatedData.nombre,
         archivoPath: `/uploads/templates/${filename}`,
         camposVariables: campos,
+        tipo: validatedData.tipo,
       },
     });
 
     return NextResponse.json({ template, campos }, { status: 201 });
   } catch (error) {
     console.error('Error al subir template:', error);
+    if (error instanceof z.ZodError) {
+return NextResponse.json({ error: error.issues }, { status: 400 });
+    }
     return NextResponse.json({ error: 'Error al procesar el archivo' }, { status: 500 });
   }
 }
@@ -52,17 +64,22 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const search = searchParams.get('search');
     const fechaDesde = searchParams.get('fechaDesde');
+    const tipo = searchParams.get('tipo');
     const page = parseInt(searchParams.get('page') || '1');
     const pageSize = parseInt(searchParams.get('pageSize') || '10');
 
     const where: any = {};
 
     if (search) {
-      where.nombre = { contains: search };
+      where.nombre = { contains: search, mode: 'insensitive' };
     }
 
     if (fechaDesde) {
       where.createdAt = { gte: new Date(fechaDesde) };
+    }
+
+    if (tipo) {
+      where.tipo = tipo;
     }
 
     const [templates, total] = await Promise.all([
@@ -98,16 +115,16 @@ export async function DELETE(req: NextRequest) {
     });
 
     if (contratos.length > 0) {
-      const contratoNames = contratos.map(c => c.nombre).join(', ');
+      const contratoNames = contratos.map((c) => c.nombre).join(', ');
       return NextResponse.json(
         { error: `No se puede eliminar el template porque está en uso por los siguientes contratos: ${contratoNames}` },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     // Eliminar el archivo del template
     await fs.unlink(path.join(process.cwd(), 'public', template.archivoPath));
-    
+
     // Eliminar el template de la base de datos
     await db.template.delete({ where: { id } });
 
