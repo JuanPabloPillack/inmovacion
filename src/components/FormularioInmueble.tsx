@@ -175,23 +175,27 @@ export default function FormularioInmueble({
       }
 
       const payload = {
-        ...fields,
-        id_cliente: Number(id_cliente),
-        id_barrio: Number(id_barrio),
-        id_tipo_inmueble: Number(fields.id_tipo_inmueble),
-        id_estado: Number(fields.id_estado),
-        id_operacion: fields.id_operacion ? Number(fields.id_operacion) : undefined,
-        superficie_total: fields.superficie_total ? Number(fields.superficie_total) : undefined,
-        superficie_cubierta: fields.superficie_cubierta ? Number(fields.superficie_cubierta) : undefined,
-        cantidad_ambientes: fields.cantidad_ambientes ? Number(fields.cantidad_ambientes) : undefined,
-        cantidad_banos: fields.cantidad_banos ? Number(fields.cantidad_banos) : undefined,
-        cantidad_dormitorios: fields.cantidad_dormitorios ? Number(fields.cantidad_dormitorios) : undefined,
-        cantidad_cocheras: fields.cantidad_cocheras ? Number(fields.cantidad_cocheras) : undefined,
-        cantidad_pisos: fields.cantidad_pisos ? Number(fields.cantidad_pisos) : undefined,
-        antiguedad: fields.antiguedad ? Number(fields.antiguedad) : undefined,
-        precio: fields.precio ? Number(fields.precio) : undefined,
-        imagenes: uploadedImages,
-      };
+      ...fields,
+      id_cliente: Number(id_cliente),
+      id_barrio: Number(id_barrio),
+      id_tipo_inmueble: Number(fields.id_tipo_inmueble),
+      id_estado: Number(fields.id_estado),
+      id_operacion: fields.id_operacion ? Number(fields.id_operacion) : undefined,
+      superficie_total: fields.superficie_total ? Number(fields.superficie_total) : undefined,
+      superficie_cubierta: fields.superficie_cubierta ? Number(fields.superficie_cubierta) : undefined,
+      cantidad_ambientes: fields.cantidad_ambientes ? Number(fields.cantidad_ambientes) : undefined,
+      cantidad_banos: fields.cantidad_banos ? Number(fields.cantidad_banos) : undefined,
+      cantidad_dormitorios: fields.cantidad_dormitorios ? Number(fields.cantidad_dormitorios) : undefined,
+      cantidad_cocheras: fields.cantidad_cocheras ? Number(fields.cantidad_cocheras) : undefined,
+      cantidad_pisos: fields.cantidad_pisos ? Number(fields.cantidad_pisos) : undefined,
+      antiguedad: fields.antiguedad ? Number(fields.antiguedad) : undefined,
+      precio: fields.precio ? Number(fields.precio) : undefined,
+      direccion: fields.direccion || null,
+      ciudad: fields.ciudad || null,
+      provincia: fields.provincia || null,
+      imagenes: uploadedImages,
+    };
+
 
       const method = initialData ? "PUT" : "POST";
       const url = initialData
@@ -542,19 +546,29 @@ export default function FormularioInmueble({
   </div>
 </div>
 
+{/* Botones de acción */}
+<div className="flex justify-end gap-4 mt-8">
+  {/* Botón Cancelar */}
+  <button
+    type="button"
+    onClick={() => router.push('/propiedades/modulo')}
+    className="px-6 py-3 rounded-xl font-semibold border border-gray-300 text-gray-600 bg-white hover:bg-gray-100 transition"
+  >
+    Cancelar
+  </button>
 
-  {/* Botón enviar */}
-  <div className="flex justify-end">
-    <button
-      type="submit"
-      disabled={loading}
-      className={`px-6 py-3 rounded-xl font-semibold text-white transition ${
-        loading ? "bg-gray-400" : "bg-blue-600 hover:bg-blue-700"
-      }`}
-    >
-      {loading ? "Guardando..." : submitLabel ?? "Guardar Inmueble"}
-    </button>
-  </div>
+  {/* Botón Guardar */}
+  <button
+    type="submit"
+    disabled={loading}
+    className={`px-6 py-3 rounded-xl font-semibold text-white transition ${
+      loading ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'
+    }`}
+  >
+    {loading ? 'Guardando...' : submitLabel ?? 'Guardar Inmueble'}
+  </button>
+</div>
+
 </form>
 
       </div>

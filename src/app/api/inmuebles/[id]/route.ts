@@ -1,8 +1,10 @@
+//app/api/inmuebles/[id]/route.ts
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import type { InmuebleDTO } from "@/types/inmuebles";
-import { Prisma } from "@prisma/client";
+import { Prisma } from "@/generated/prisma";
+
 
 const toNumberOrUndefined = (v: any): number | undefined =>
   v !== undefined && v !== null && v !== "" ? Number(v) : undefined;

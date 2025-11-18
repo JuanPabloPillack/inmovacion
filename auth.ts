@@ -15,6 +15,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (user) { // User is available during sign-in
         token.id = user.id; // Copiar id al token
         token.role = user.role;
+        token.name = user.name;
       }
       return token
     },
@@ -22,6 +23,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (session.user) {
         session.user.id = token.id; // Copiar id a la sesión
         session.user.role = token.role;
+        session.user.name = token.name;
       }
       return session
     },
