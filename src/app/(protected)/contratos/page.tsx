@@ -1,19 +1,19 @@
-// src/app/(protected)/contratos/page.tsx
+//src/app/(protected)/contratos/page.tsx
+
 'use client';
-import { useState, useEffect } from 'react';
-import { FileText, PlusCircle, AlertCircle, Download, Trash2, Calendar, DollarSign, User, Home, Search, ArrowLeft, Filter, X, Edit3, Eye } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { FileText, PlusCircle, AlertCircle, Download, Trash2, Calendar, DollarSign, User, Home, Search, ArrowLeft, Filter, X, Edit3, Eye, CheckCircle, XCircle, MoreVertical } from 'lucide-react';
 import Combobox from '@/components/ui/combobox';
 
 interface Cliente { id_cliente: number; nombre: string; }
 interface Inmueble { id_inmueble: number; titulo: string; }
 interface Template { id: number; nombre: string; }
+interface UserInfo { id: string; name: string; }
 
-// Actualizamos la interfaz Contrato para reflejar los nombres según el tipo
 interface Contrato {
   id_contrato: number;
   nombre: string;
   tipo_contrato: 'ALQUILER_LOCACION' | 'COMPRA_VENTA';
-  // Usamos un objeto genérico para cliente_1 y cliente_2, pero con nombres dinámicos al mostrar
   cliente_1: { id_cliente: number; nombre: string };
   cliente_2: { id_cliente: number; nombre: string };
   inmueble: { id_inmueble: number; titulo: string };
@@ -23,7 +23,12 @@ interface Contrato {
   fecha_fin: string;
   monto: number;
   archivoPath: string;
+  activo: boolean;
+  firmado: boolean;
   createdAt: string;
+  updatedAt: string;
+  createdBy: UserInfo;
+  updatedBy: UserInfo;
 }
 
 function Contratos() {
@@ -33,8 +38,9 @@ function Contratos() {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-  const [itemToDelete, setItemToDelete] = useState<{ id: number; nombre: string } | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalAction, setModalAction] = useState<'desactivar' | 'activar' | 'eliminar' | 'firmar' | 'desfirmar'>('desactivar');
+  const [itemToAction, setItemToAction] = useState<{ id: number; nombre: string } | null>(null);
   const [search, setSearch] = useState('');
   const [fechaDesde, setFechaDesde] = useState('');
   const [fechaHasta, setFechaHasta] = useState('');
@@ -43,19 +49,22 @@ function Contratos() {
   const [id_cliente_2, setIdCliente2] = useState<number | undefined>(undefined);
   const [id_inmueble, setIdInmueble] = useState<number | undefined>(undefined);
   const [id_template, setIdTemplate] = useState<number | undefined>(undefined);
+  const [firmado, setFirmado] = useState<boolean | undefined>(undefined);
+  const [activo, setActivo] = useState<boolean | undefined>(undefined);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(10);
   const [total, setTotal] = useState(0);
   const [showFilters, setShowFilters] = useState(false);
+  const [openMenuId, setOpenMenuId] = useState<number | null>(null);
+  const menuRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
 
-  // Nueva función para obtener las etiquetas dinámicas según el tipo de contrato
   const getClienteLabels = (tipo: 'ALQUILER_LOCACION' | 'COMPRA_VENTA' | '') => {
     if (tipo === 'ALQUILER_LOCACION') {
       return { cliente1: 'Locador', cliente2: 'Locatario' };
     } else if (tipo === 'COMPRA_VENTA') {
       return { cliente1: 'Vendedor', cliente2: 'Comprador' };
     }
-    return { cliente1: 'Cliente 1', cliente2: 'Cliente 2' }; // Por defecto, si no hay tipo seleccionado
+    return { cliente1: 'Cliente 1', cliente2: 'Cliente 2' };
   };
 
   useEffect(() => {
@@ -69,9 +78,21 @@ function Contratos() {
       setPage(1);
       fetchContratos();
     }, search ? 400 : 0);
-
     return () => clearTimeout(timer);
-  }, [search, fechaDesde, fechaHasta, tipoContrato, id_cliente_1, id_cliente_2, id_inmueble, id_template, page]);
+  }, [search, fechaDesde, fechaHasta, tipoContrato, id_cliente_1, id_cliente_2, id_inmueble, id_template, firmado, activo, page]);
+
+useEffect(() => {
+  const handleClickOutside = (event: MouseEvent) => {
+    if (openMenuId !== null) {
+      const menuRef = menuRefs.current[openMenuId];
+      if (menuRef && !menuRef.contains(event.target as Node)) {
+        setOpenMenuId(null);
+      }
+    }
+  };
+  document.addEventListener('mousedown', handleClickOutside);
+  return () => document.removeEventListener('mousedown', handleClickOutside);
+}, [openMenuId]);
 
   const fetchClientes = async () => {
     try {
@@ -118,6 +139,8 @@ function Contratos() {
       if (id_cliente_2) params.append('id_cliente_2', id_cliente_2.toString());
       if (id_inmueble) params.append('id_inmueble', id_inmueble.toString());
       if (id_template) params.append('id_template', id_template.toString());
+      if (firmado !== undefined) params.append('firmado', firmado.toString());
+      if (activo !== undefined) params.append('activo', activo.toString());
       params.append('page', page.toString());
       params.append('pageSize', pageSize.toString());
 
@@ -134,33 +157,46 @@ function Contratos() {
     }
   };
 
-  const handleDelete = (id: number, nombre: string) => {
-    setItemToDelete({ id, nombre });
-    setDeleteModalOpen(true);
+  const handleAction = (id: number, nombre: string, action: 'desactivar' | 'activar' | 'eliminar' | 'firmar' | 'desfirmar') => {
+    setItemToAction({ id, nombre });
+    setModalAction(action);
+    setModalOpen(true);
+    setOpenMenuId(null);
   };
 
-  const confirmDelete = async () => {
-    if (!itemToDelete) return;
+  const confirmAction = async () => {
+    if (!itemToAction) return;
     try {
-      const res = await fetch('/api/contracts', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: itemToDelete.id }),
-      });
-      if (!res.ok) throw new Error('Error al eliminar el contrato');
+      if (modalAction === 'desactivar' || modalAction === 'activar' || modalAction === 'firmar' || modalAction === 'desfirmar') {
+        const res = await fetch(`/api/contracts/${itemToAction.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            activo: modalAction === 'activar' ? true : modalAction === 'desactivar' ? false : undefined,
+            firmado: modalAction === 'firmar' ? true : modalAction === 'desfirmar' ? false : undefined,
+          }),
+        });
+        if (!res.ok) throw new Error(`Error al ${modalAction === 'desactivar' ? 'desactivar' : modalAction === 'activar' ? 'activar' : modalAction === 'firmar' ? 'marcar como firmado' : 'desmarcar como firmado'} el contrato`);
+      } else if (modalAction === 'eliminar') {
+        const res = await fetch(`/api/contracts/${itemToAction.id}`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        if (!res.ok) throw new Error('Error al eliminar permanentemente el contrato');
+      }
       setError(null);
       fetchContratos();
-    } catch (err) {
-      setError('Error al eliminar el contrato');
+    } catch (err: any) {
+      setError(err.message);
     } finally {
-      setDeleteModalOpen(false);
-      setItemToDelete(null);
+      setModalOpen(false);
+      setItemToAction(null);
     }
   };
 
   const closeModal = () => {
-    setDeleteModalOpen(false);
-    setItemToDelete(null);
+    setModalOpen(false);
+    setItemToAction(null);
   };
 
   const clearFilters = () => {
@@ -172,16 +208,17 @@ function Contratos() {
     setIdCliente2(undefined);
     setIdInmueble(undefined);
     setIdTemplate(undefined);
+    setFirmado(undefined);
+    setActivo(undefined);
     setPage(1);
   };
 
-  const hasActiveFilters = search || fechaDesde || fechaHasta || tipoContrato || id_cliente_1 || id_cliente_2 || id_inmueble || id_template;
+  const hasActiveFilters = search || fechaDesde || fechaHasta || tipoContrato || id_cliente_1 || id_cliente_2 || id_inmueble || id_template || firmado !== undefined || activo !== undefined;
 
   const clienteOptions = clientes.map(c => ({ value: c.id_cliente, label: c.nombre }));
   const inmuebleOptions = inmuebles.map(i => ({ value: i.id_inmueble, label: i.titulo }));
   const templateOptions = templates.map(t => ({ value: t.id, label: t.nombre }));
 
-  // Obtener las etiquetas dinámicas para los filtros
   const { cliente1: labelCliente1, cliente2: labelCliente2 } = getClienteLabels(tipoContrato);
 
   return (
@@ -246,7 +283,7 @@ function Contratos() {
 
           <a
             href="/templates"
-            className="group relative overflow-hidden p-6 rounded-2xl bg-white border-2 border-[#fcc238]/30 hover:border-[#fcc238] shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
+            className="group relative overflow-hidden p-6 deaths rounded-2xl bg-white border-2 border-[#fcc238]/30 hover:border-[#fcc238] shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
           >
             <div className="absolute inset-0 bg-gradient-to-r from-amber-50/0 to-amber-50/50 opacity-0 group-hover:opacity-100 transition-opacity"></div>
             <div className="relative flex items-center gap-4">
@@ -347,9 +384,8 @@ function Contratos() {
                   </div>
                 </div>
 
-                {/* Actualizamos los Combobox para usar etiquetas dinámicas */}
                 <div>
-                  <Combobox
+                  <Combobox<number>
                     options={clienteOptions}
                     value={id_cliente_1}
                     onChange={setIdCliente1}
@@ -365,7 +401,7 @@ function Contratos() {
                 </div>
 
                 <div>
-                  <Combobox
+                  <Combobox<number>
                     options={clienteOptions}
                     value={id_cliente_2}
                     onChange={setIdCliente2}
@@ -381,7 +417,7 @@ function Contratos() {
                 </div>
 
                 <div>
-                  <Combobox
+                  <Combobox<number>
                     options={inmuebleOptions}
                     value={id_inmueble}
                     onChange={setIdInmueble}
@@ -397,7 +433,7 @@ function Contratos() {
                 </div>
 
                 <div>
-                  <Combobox
+                  <Combobox<number>
                     options={templateOptions}
                     value={id_template}
                     onChange={setIdTemplate}
@@ -410,6 +446,36 @@ function Contratos() {
                     }
                     searchPlaceholder="Buscar Plantilla..."
                   />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-[#686363] mb-2">
+                    Estado de Firma
+                  </label>
+                  <select
+                    value={firmado === undefined ? '' : firmado ? 'true' : 'false'}
+                    onChange={(e) => setFirmado(e.target.value === '' ? undefined : e.target.value === 'true')}
+                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-[#63bae9] focus:outline-none transition-all text-[#686363]"
+                  >
+                    <option value="">Todos</option>
+                    <option value="true">Firmado</option>
+                    <option value="false">No Firmado</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-[#686363] mb-2">
+                    Estado
+                  </label>
+                  <select
+                    value={activo === undefined ? '' : activo ? 'true' : 'false'}
+                    onChange={(e) => setActivo(e.target.value === '' ? undefined : e.target.value === 'true')}
+                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-[#63bae9] focus:outline-none transition-all text-[#686363]"
+                  >
+                    <option value="">Todos</option>
+                    <option value="true">Activo</option>
+                    <option value="false">Inactivo</option>
+                  </select>
                 </div>
               </div>
 
@@ -467,152 +533,240 @@ function Contratos() {
             ) : (
               <div className="space-y-4">
                 {contratos.map((contrato) => {
-                  // Obtener etiquetas dinámicas para cada contrato
                   const { cliente1, cliente2 } = getClienteLabels(contrato.tipo_contrato);
 
                   return (
                     <div
                       key={contrato.id_contrato}
-                      className="group border-2 border-gray-100 rounded-2xl p-6 hover:border-[#63bae9]/30 hover:shadow-lg transition-all duration-300 bg-gradient-to-br from-white to-gray-50/30"
+                      className="group border border-gray-200 rounded-xl overflow-hidden hover:shadow-xl transition-all duration-300 bg-white relative"
                     >
-                      <div className="flex flex-col xl:flex-row gap-6">
-                        <div className="flex gap-4 flex-1 min-w-0">
-                          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#63bae9] to-[#4a9fd4] flex items-center justify-center flex-shrink-0 shadow-md group-hover:scale-110 group-hover:rotate-3 transition-transform duration-300">
-                            <FileText className="w-8 h-8 text-white" strokeWidth={2.5} />
+                      <div className="bg-gradient-to-r from-[#63bae9]/5 via-[#63bae9]/3 to-transparent p-6 border-b border-gray-100">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex items-start gap-4 flex-1 min-w-0">
+                            <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-[#63bae9] to-[#63bae9]/80 flex items-center justify-center flex-shrink-0 shadow-sm">
+                              <FileText className="w-7 h-7 text-white" strokeWidth={2} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h3 className="text-xl font-bold text-[#686363] mb-2 group-hover:text-[#63bae9] transition-colors">
+                                {contrato.nombre}
+                              </h3>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg bg-white border-2 border-[#63bae9]/20 text-[#63bae9]">
+                                  <FileText className="w-3.5 h-3.5" />
+                                  {contrato.tipo_contrato === 'ALQUILER_LOCACION' ? 'Alquiler/Locación' : 'Compra/Venta'}
+                                </span>
+                                <span className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border-2 ${contrato.activo ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-100 text-[#969696] border-gray-300'}`}>
+                                  {contrato.activo ? <CheckCircle className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
+                                  {contrato.activo ? 'Activo' : 'Inactivo'}
+                                </span>
+                                <span className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border-2 ${contrato.firmado ? 'bg-[#fcc238]/10 text-[#fcc238] border-[#fcc238]/30' : 'bg-gray-100 text-[#969696] border-gray-300'}`}>
+                                  {contrato.firmado ? <CheckCircle className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
+                                  {contrato.firmado ? 'Firmado' : 'Sin Firmar'}
+                                </span>
+                              </div>
+                            </div>
                           </div>
-
-                          <div className="flex-1 min-w-0">
-                            <h3 className="text-xl font-bold text-[#686363] mb-4 group-hover:text-[#63bae9] transition-colors">
-                              {contrato.nombre}
-                            </h3>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-                              <div className="flex items-start gap-3 p-3 rounded-xl bg-blue-50/50 border border-blue-100/50">
-                                <FileText className="w-5 h-5 mt-0.5 flex-shrink-0 text-[#63bae9]" />
-                                <div className="min-w-0">
-                                  <p className="text-xs font-semibold text-[#969696] uppercase tracking-wide mb-1">Tipo</p>
-                                  <p className="text-sm font-bold text-[#686363]">
-                                    {contrato.tipo_contrato === 'ALQUILER_LOCACION' ? 'Alquiler/Locación' : 'Compra/Venta'}
-                                  </p>
-                                </div>
+                         <div ref={(el) => {
+  menuRefs.current[contrato.id_contrato] = el;
+}}>
+                            <button
+                              onClick={() => setOpenMenuId(openMenuId === contrato.id_contrato ? null : contrato.id_contrato)}
+                              className="p-2.5 rounded-lg bg-white border border-gray-200 hover:border-[#63bae9] hover:bg-[#63bae9]/5 transition-colors"
+                            >
+                              <MoreVertical className="w-5 h-5 text-[#686363]" />
+                            </button>
+                            {openMenuId === contrato.id_contrato && (
+                              <div className="absolute right-6 top-20 w-52 bg-white border border-gray-200 rounded-xl shadow-2xl z-10 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                                {contrato.activo && (
+                                  <>
+                                    <a
+                                      href={`/contratos/preview/${contrato.id_contrato}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="flex items-center gap-2 px-4 py-2 text-sm text-[#686363] hover:bg-[#63bae9] hover:text-white transition-colors"
+                                    >
+                                      <Eye className="w-4 h-4" />
+                                      Vista Previa
+                                    </a>
+                                    <a
+                                      href={`/contratos/editar/${contrato.id_contrato}`}
+                                      className="flex items-center gap-2 px-4 py-2 text-sm text-[#686363] hover:bg-[#10b981] hover:text-white transition-colors"
+                                    >
+                                      <Edit3 className="w-4 h-4" />
+                                      Editar
+                                    </a>
+                                    <a
+                                      href={contrato.archivoPath}
+                                      download
+                                      className="flex items-center gap-2 px-4 py-2 text-sm text-[#686363] hover:bg-[#63bae9] hover:text-white transition-colors"
+                                    >
+                                      <Download className="w-4 h-4" />
+                                      Descargar
+                                    </a>
+                                    <button
+                                      onClick={() => handleAction(contrato.id_contrato, contrato.nombre, contrato.firmado ? 'desfirmar' : 'firmar')}
+                                      disabled={loading}
+                                      className="flex items-center gap-2 px-4 py-2 text-sm w-full text-left text-[#686363] hover:bg-[#10b981] hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                      {contrato.firmado ? <XCircle className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
+                                      {contrato.firmado ? 'Desmarcar Firmado' : 'Marcar Firmado'}
+                                    </button>
+                                    <button
+                                      onClick={() => handleAction(contrato.id_contrato, contrato.nombre, 'desactivar')}
+                                      disabled={loading || contrato.firmado}
+                                      className="flex items-center gap-2 px-4 py-2 text-sm w-full text-left text-[#686363] hover:bg-[#fcc238] hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                      <XCircle className="w-4 h-4" />
+                                      Desactivar
+                                    </button>
+                                  </>
+                                )}
+                                {!contrato.activo && (
+                                  <>
+                                    {contrato.firmado && (
+                                      <button
+                                        onClick={() => handleAction(contrato.id_contrato, contrato.nombre, 'desfirmar')}
+                                        disabled={loading}
+                                        className="flex items-center gap-2 px-4 py-2 text-sm w-full text-left text-[#686363] hover:bg-[#ef4444] hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                      >
+                                        <XCircle className="w-4 h-4" />
+                                        Desmarcar Firmado
+                                      </button>
+                                    )}
+                                    <button
+                                      onClick={() => handleAction(contrato.id_contrato, contrato.nombre, 'activar')}
+                                      disabled={loading}
+                                      className="flex items-center gap-2 px-4 py-2 text-sm w-full text-left text-[#686363] hover:bg-[#10b981] hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                      <CheckCircle className="w-4 h-4" />
+                                      Activar
+                                    </button>
+                                    <button
+                                      onClick={() => handleAction(contrato.id_contrato, contrato.nombre, 'eliminar')}
+                                      disabled={loading}
+                                      className="flex items-center gap-2 px-4 py-2 text-sm w-full text-left text-[#686363] hover:bg-[#ef4444] hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                      Eliminar Permanentemente
+                                    </button>
+                                  </>
+                                )}
                               </div>
-
-                              {/* Actualizamos Cliente 1 con la etiqueta dinámica */}
-                              <div className="flex items-start gap-3 p-3 rounded-xl bg-blue-50/50 border border-blue-100/50">
-                                <User className="w-5 h-5 mt-0.5 flex-shrink-0 text-[#63bae9]" />
-                                <div className="min-w-0">
-                                  <p className="text-xs font-semibold text-[#969696] uppercase tracking-wide mb-1">{cliente1}</p>
-                                  <p className="text-sm font-bold text-[#686363] truncate">{contrato.cliente_1.nombre}</p>
-                                </div>
-                              </div>
-
-                              {/* Actualizamos Cliente 2 con la etiqueta dinámica */}
-                              <div className="flex items-start gap-3 p-3 rounded-xl bg-blue-50/50 border border-blue-100/50">
-                                <User className="w-5 h-5 mt-0.5 flex-shrink-0 text-[#63bae9]" />
-                                <div className="min-w-0">
-                                  <p className="text-xs font-semibold text-[#969696] uppercase tracking-wide mb-1">{cliente2}</p>
-                                  <p className="text-sm font-bold text-[#686363] truncate">{contrato.cliente_2.nombre}</p>
-                                </div>
-                              </div>
-
-                              <div className="flex items-start gap-3 p-3 rounded-xl bg-blue-50/50 border border-blue-100/50">
-                                <Home className="w-5 h-5 mt-0.5 flex-shrink-0 text-[#63bae9]" />
-                                <div className="min-w-0">
-                                  <p className="text-xs font-semibold text-[#969696] uppercase tracking-wide mb-1">Inmueble</p>
-                                  <p className="text-sm font-bold text-[#686363] truncate">{contrato.inmueble.titulo}</p>
-                                </div>
-                              </div>
-
-                              <div className="flex items-start gap-3 p-3 rounded-xl bg-amber-50/50 border border-amber-100/50">
-                                <Calendar className="w-5 h-5 mt-0.5 flex-shrink-0 text-[#fcc238]" />
-                                <div className="min-w-0">
-                                  <p className="text-xs font-semibold text-[#969696] uppercase tracking-wide mb-1">Periodo</p>
-                                  <p className="text-sm font-bold text-[#686363]">
-                                    {new Date(contrato.fecha_inicio).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })} - {new Date(contrato.fecha_fin).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}
-                                  </p>
-                                </div>
-                              </div>
-
-                              <div className="flex items-start gap-3 p-3 rounded-xl bg-amber-50/50 border border-amber-100/50">
-                                <DollarSign className="w-5 h-5 mt-0.5 flex-shrink-0 text-[#fcc238]" />
-                                <div className="min-w-0">
-                                  <p className="text-xs font-semibold text-[#969696] uppercase tracking-wide mb-1">Monto</p>
-                                  <p className="text-lg font-bold text-[#686363]">
-                                    ${parseFloat(contrato.monto.toString()).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                  </p>
-                                </div>
-                              </div>
-                            </div>
-
-                            <div className="flex items-center gap-2 mb-3">
-                              <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-gradient-to-r from-blue-50 to-cyan-50 text-[#63bae9] border border-[#63bae9]/20">
-                                <FileText className="w-3.5 h-3.5" />
-                                {contrato.template.nombre}
-                              </span>
-                            </div>
-
-                            {Object.keys(contrato.valores).length > 0 && (
-                              <details className="group/details">
-                                <summary className="cursor-pointer text-sm font-semibold px-4 py-2 rounded-lg inline-flex items-center gap-2 bg-gray-50 hover:bg-gray-100 text-[#686363] transition-colors">
-                                  Campos Variables ({Object.keys(contrato.valores).length})
-                                </summary>
-                                <div className="mt-3 p-4 rounded-xl bg-gradient-to-br from-gray-50 to-gray-100/50 border border-gray-200">
-                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                    {Object.entries(contrato.valores).map(([key, value]) => (
-                                      <div key={key} className="flex gap-2 p-2 rounded-lg bg-white/80">
-                                        <span className="text-xs font-bold text-[#969696] uppercase tracking-wide">{key}:</span>
-                                        <span className="text-xs font-medium text-[#686363]">{value}</span>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-                              </details>
                             )}
                           </div>
                         </div>
-
-                        {/* BOTONES DE ACCIÓN */}
-                        <div className="flex xl:flex-col gap-2 justify-end flex-shrink-0">
-                          <a
-                            href={`/contratos/preview/${contrato.id_contrato}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="px-4 py-3 rounded-lg font-medium text-white flex items-center gap-2 transition-all hover:shadow-md hover:scale-105 active:scale-95"
-                            style={{ backgroundColor: '#63bae9' }}
-                          >
-                            <Eye className="w-5 h-5" />
-                            <span className="hidden sm:inline">Vista Previa</span>
-                          </a>
-
-                          <a
-                            href={`/contratos/editar/${contrato.id_contrato}`}
-                            className="px-4 py-3 rounded-lg font-medium text-white flex items-center gap-2 transition-all hover:shadow-md hover:scale-105 active:scale-95"
-                            style={{ backgroundColor: '#10b981' }}
-                          >
-                            <Edit3 className="w-5 h-5" />
-                            <span className="hidden sm:inline">Editar</span>
-                          </a>
-
-                          <a
-                            href={contrato.archivoPath}
-                            download
-                            className="px-4 py-3 rounded-lg font-medium text-white flex items-center gap-2 transition-all hover:shadow-md hover:scale-105 active:scale-95"
-                            style={{ backgroundColor: '#63bae9' }}
-                          >
-                            <Download className="w-5 h-5" />
-                            <span className="hidden sm:inline">Descargar</span>
-                          </a>
-
-                          <button
-                            onClick={() => handleDelete(contrato.id_contrato, contrato.nombre)}
-                            disabled={loading}
-                            className="px-4 py-3 rounded-lg font-medium text-white flex items-center gap-2 transition-all hover:shadow-md hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
-                            style={{ backgroundColor: '#fcc238' }}
-                          >
-                            <Trash2 className="w-5 h-5" />
-                            <span className="hidden sm:inline">Eliminar</span>
-                          </button>
+                      </div>
+                      <div className="p-6">
+                        <div className="mb-6">
+                          <h4 className="text-xs font-bold text-[#969696] uppercase tracking-wider mb-3 flex items-center gap-2">
+                            <User className="w-4 h-4" />
+                            Partes del Contrato
+                          </h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div className="p-4 rounded-lg bg-gradient-to-br from-[#63bae9]/5 to-[#63bae9]/0 border border-[#63bae9]/10">
+                              <p className="text-xs font-bold text-[#63bae9] uppercase mb-1">{cliente1}</p>
+                              <p className="text-base font-bold text-[#686363]">{contrato.cliente_1.nombre}</p>
+                            </div>
+                            <div className="p-4 rounded-lg bg-gradient-to-br from-[#63bae9]/5 to-[#63bae9]/0 border border-[#63bae9]/10">
+                              <p className="text-xs font-bold text-[#63bae9] uppercase mb-1">{cliente2}</p>
+                              <p className="text-base font-bold text-[#686363]">{contrato.cliente_2.nombre}</p>
+                            </div>
+                          </div>
                         </div>
+                        <div className="mb-6">
+                          <h4 className="text-xs font-bold text-[#969696] uppercase tracking-wider mb-3 flex items-center gap-2">
+                            <Home className="w-4 h-4" />
+                            Detalles del Contrato
+                          </h4>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="p-4 rounded-lg bg-gradient-to-br from-gray-50 to-white border border-gray-200">
+                              <div className="flex items-center gap-2 mb-2">
+                                <div className="w-8 h-8 rounded-lg bg-[#63bae9]/10 flex items-center justify-center">
+                                  <Home className="w-4 h-4 text-[#63bae9]" />
+                                </div>
+                                <p className="text-xs font-bold text-[#969696] uppercase">Inmueble</p>
+                              </div>
+                              <p className="text-sm font-bold text-[#686363]">{contrato.inmueble.titulo}</p>
+                            </div>
+                            <div className="p-4 rounded-lg bg-gradient-to-br from-[#fcc238]/5 to-[#fcc238]/0 border border-[#fcc238]/20">
+                              <div className="flex items-center gap-2 mb-2">
+                                <div className="w-8 h-8 rounded-lg bg-[#fcc238]/10 flex items-center justify-center">
+                                  <DollarSign className="w-4 h-4 text-[#fcc238]" />
+                                </div>
+                                <p className="text-xs font-bold text-[#969696] uppercase">Monto</p>
+                              </div>
+                              <p className="text-lg font-bold text-[#686363]">
+                                ${parseFloat(contrato.monto.toString()).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </p>
+                            </div>
+                            <div className="p-4 rounded-lg bg-gradient-to-br from-gray-50 to-white border border-gray-200">
+                              <div className="flex items-center gap-2 mb-2">
+                                <div className="w-8 h-8 rounded-lg bg-[#63bae9]/10 flex items-center justify-center">
+                                  <Calendar className="w-4 h-4 text-[#63bae9]" />
+                                </div>
+                                <p className="text-xs font-bold text-[#969696] uppercase">Vigencia</p>
+                              </div>
+                              <p className="text-xs font-bold text-[#686363] leading-relaxed">
+                                {new Date(contrato.fecha_inicio).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                <br />
+                                <span className="text-[#969696]">hasta</span> {new Date(contrato.fecha_fin).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="pt-4 border-t border-gray-100">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                            <div className="flex items-center gap-2 text-xs text-[#969696]">
+                              <User className="w-3.5 h-3.5" />
+                              <span className="font-medium">Creado por:</span>
+                              <span className="font-bold text-[#686363]">{contrato.createdBy.name}</span>
+                            </div>
+                            <div className="flex items-center gap-2 text-xs text-[#969696]">
+                              <Calendar className="w-3.5 h-3.5" />
+                              <span className="font-medium">Creado:</span>
+                              <span className="font-bold text-[#686363]">
+                                {new Date(contrato.createdAt).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 text-xs text-[#969696]">
+                              <User className="w-3.5 h-3.5" />
+                              <span className="font-medium">Actualizado por:</span>
+                              <span className="font-bold text-[#686363]">{contrato.updatedBy.name}</span>
+                            </div>
+                            <div className="flex items-center gap-2 text-xs text-[#969696]">
+                              <Calendar className="w-3.5 h-3.5" />
+                              <span className="font-medium">Actualizado:</span>
+                              <span className="font-bold text-[#686363]">
+                                {new Date(contrato.updatedAt).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <FileText className="w-3.5 h-3.5 text-[#63bae9]" />
+                            <span className="text-xs font-medium text-[#969696]">Plantilla:</span>
+                            <span className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-md bg-[#63bae9]/10 text-[#63bae9] border border-[#63bae9]/20">
+                              {contrato.template.nombre}
+                            </span>
+                          </div>
+                        </div>
+                        {Object.keys(contrato.valores).length > 0 && (
+                          <details className="mt-4 group/details">
+                            <summary className="cursor-pointer text-sm font-bold px-4 py-2.5 rounded-lg inline-flex items-center gap-2 bg-gray-50 hover:bg-gray-100 text-[#686363] border border-gray-200 transition-colors">
+                              <FileText className="w-4 h-4 text-[#63bae9]" />
+                              Ver Campos Variables ({Object.keys(contrato.valores).length})
+                            </summary>
+                            <div className="mt-3 p-4 rounded-lg bg-gradient-to-br from-gray-50 to-white border border-gray-200">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                {Object.entries(contrato.valores).map(([key, value]) => (
+                                  <div key={key} className="flex items-start gap-2 p-2.5 rounded-md bg-white border border-gray-100">
+                                    <span className="text-xs font-bold text-[#63bae9] uppercase tracking-wide shrink-0">{key}:</span>
+                                    <span className="text-xs font-medium text-[#686363]">{value}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </details>
+                        )}
                       </div>
                     </div>
                   );
@@ -644,18 +798,27 @@ function Contratos() {
           </div>
         </div>
 
-        {/* MODAL DE ELIMINACIÓN */}
-        {deleteModalOpen && (
+        {modalOpen && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
             <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 animate-in zoom-in-95 duration-200">
               <div className="flex items-center gap-4 mb-4">
                 <div className="w-12 h-12 rounded-xl bg-red-100 flex items-center justify-center">
                   <AlertCircle className="w-6 h-6 text-red-600" />
                 </div>
-                <h3 className="text-xl font-bold text-[#686363]">¿Eliminar contrato?</h3>
+                <h3 className="text-xl font-bold text-[#686363]">
+                  {modalAction === 'desactivar' ? '¿Desactivar contrato?' :
+                   modalAction === 'activar' ? '¿Activar contrato?' :
+                   modalAction === 'eliminar' ? '¿Eliminar permanentemente?' :
+                   modalAction === 'firmar' ? '¿Marcar como firmado?' : '¿Desmarcar como firmado?'}
+                </h3>
               </div>
               <p className="text-[#969696] mb-6">
-                ¿Estás seguro de que quieres eliminar el contrato <span className="font-bold text-[#686363]">"{itemToDelete?.nombre}"</span>? Esta acción no se puede deshacer.
+                ¿Estás seguro de que quieres {modalAction === 'desactivar' ? 'desactivar' :
+                                         modalAction === 'activar' ? 'activar' :
+                                         modalAction === 'eliminar' ? 'eliminar permanentemente' :
+                                         modalAction === 'firmar' ? 'marcar como firmado' : 'desmarcar como firmado'}
+                el contrato <span className="font-bold text-[#686363]">"{itemToAction?.nombre}"</span>?
+                {modalAction === 'eliminar' && ' Esta acción no se puede deshacer.'}
               </p>
               <div className="flex gap-3">
                 <button
@@ -665,10 +828,16 @@ function Contratos() {
                   Cancelar
                 </button>
                 <button
-                  onClick={confirmDelete}
-                  className="flex-1 px-4 py-3 rounded-xl bg-gradient-to-r from-red-500 to-red-600 text-white font-semibold hover:shadow-lg transition-all hover:scale-105 active:scale-95"
+                  onClick={confirmAction}
+                  className={`flex-1 px-4 py-3 rounded-xl font-semibold text-white transition-all hover:shadow-lg hover:scale-105 active:scale-95 ${
+                    modalAction === 'activar' || modalAction === 'firmar' ? 'bg-green-500 hover:bg-green-600' :
+                    'bg-red-500 hover:bg-red-600'
+                  }`}
                 >
-                  Eliminar
+                  {modalAction === 'desactivar' ? 'Desactivar' :
+                   modalAction === 'activar' ? 'Activar' :
+                   modalAction === 'eliminar' ? 'Eliminar' :
+                   modalAction === 'firmar' ? 'Marcar Firmado' : 'Desmarcar Firmado'}
                 </button>
               </div>
             </div>

@@ -3,23 +3,23 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ChevronDown, Search, X } from 'lucide-react';
 
-interface ComboboxOption {
-  value: number;
+interface ComboboxOption<T extends number | string> {
+  value: T;
   label: string;
 }
 
-interface ComboboxProps {
-  options: ComboboxOption[];
-  value: number | undefined;
-  onChange: (value: number | undefined) => void;
+interface ComboboxProps<T extends number | string> {
+  options: ComboboxOption<T>[];
+  value: T | undefined;
+  onChange: (value: T | undefined) => void;
   placeholder: string;
   label: string | React.ReactNode;
   searchPlaceholder?: string;
   disabled?: boolean;
-  error?: string; // ← AGREGADO
+  error?: string;
 }
 
-export default function Combobox({
+export default function Combobox<T extends number | string>({
   options,
   value,
   onChange,
@@ -27,11 +27,11 @@ export default function Combobox({
   label,
   searchPlaceholder = 'Buscar...',
   disabled = false,
-  error, // ← AGREGADO
-}: ComboboxProps) {
+  error,
+}: ComboboxProps<T>) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filteredOptions, setFilteredOptions] = useState<ComboboxOption[]>(options);
+  const [filteredOptions, setFilteredOptions] = useState<ComboboxOption<T>[]>(options);
   const [focusedIndex, setFocusedIndex] = useState(-1);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -111,7 +111,7 @@ export default function Combobox({
     }
   };
 
-  const handleOptionClick = (option: ComboboxOption) => {
+  const handleOptionClick = (option: ComboboxOption<T>) => {
     if (disabled) return;
     onChange(option.value);
     setIsOpen(false);
@@ -154,8 +154,8 @@ export default function Combobox({
             isOpen ? 'rounded-b-none border-b-0' : 'rounded-lg'
           }`}
           style={{
-            borderColor: disabled ? '#e5e7eb' : (error ? '#ef4444' : (value ? '#63bae9' : '#e5e7eb')), // ← MODIFICADO: color rojo si hay error
-            backgroundColor: disabled ? '#f9fafb' : (error ? '#fef2f2' : 'white'), // ← MODIFICADO: fondo rojo claro si hay error
+            borderColor: disabled ? '#e5e7eb' : (error ? '#ef4444' : (value ? '#63bae9' : '#e5e7eb')),
+            backgroundColor: disabled ? '#f9fafb' : (error ? '#fef2f2' : 'white'),
           }}
           onClick={() => !disabled && setIsOpen(!isOpen)}
           onKeyDown={handleKeyDown}
@@ -242,7 +242,7 @@ export default function Combobox({
         )}
       </div>
 
-      {/* Mensaje de error - AGREGADO */}
+      {/* Mensaje de error */}
       {error && (
         <p className="mt-1 text-xs" style={{ color: '#ef4444' }}>
           {error}

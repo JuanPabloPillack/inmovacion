@@ -43,6 +43,9 @@ model User {
   accounts      Account[]
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+  // Nuevas relaciones con Contrato para rastrear creación y actualización (aplicar una lógica similar en otros modelos si es necesario)
+  createdContracts Contrato[] @relation("CreatedContracts")
+  updatedContracts Contrato[] @relation("UpdatedContracts")
 }
 
 model Account {
@@ -202,20 +205,28 @@ model Contrato {
   id_contrato   Int          @id @default(autoincrement())
   id_inmueble   Int
   inmueble      Inmueble     @relation(fields: [id_inmueble], references: [id_inmueble], onDelete: Restrict, onUpdate: Cascade)
-  id_cliente_1  Int          // Reemplaza id_cliente
+  id_cliente_1  Int
   cliente_1     Cliente      @relation("Cliente1", fields: [id_cliente_1], references: [id_cliente], onDelete: Restrict, onUpdate: Cascade)
-  id_cliente_2  Int          // Nuevo campo para segundo cliente
+  id_cliente_2  Int
   cliente_2     Cliente      @relation("Cliente2", fields: [id_cliente_2], references: [id_cliente], onDelete: Restrict, onUpdate: Cascade)
   id_template   Int?
   template      Template?    @relation(fields: [id_template], references: [id], onDelete: SetNull, onUpdate: Cascade)
-  nombre        String?      @db.VarChar(100) // Nombre del contrato
-  valores       Json?        // Valores de los campos variables
-  archivoPath   String?      @db.VarChar(255) // Ruta del contrato generado
+  nombre        String?      @db.VarChar(100)
+  valores       Json?
+  archivoPath   String?      @db.VarChar(255)
   fecha_inicio  DateTime
   fecha_fin     DateTime
   monto         Decimal      @db.Decimal(10, 2)
-  tipo_contrato ContractType // Nuevo campo obligatorio
+  tipo_contrato ContractType
+  activo        Boolean      @default(true) // Nuevo campo
+  firmado       Boolean      @default(false) // Nuevo campo
   createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt // Nuevo campo
+  // Nuevos campos para rastrear usuarios
+  createdById   String
+  createdBy     User         @relation("CreatedContracts", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  updatedById   String
+  updatedBy     User         @relation("UpdatedContracts", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Cascade)
 }
 
 model Cobranza {

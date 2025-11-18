@@ -7,7 +7,7 @@ import PizZip from 'pizzip';
 import Docxtemplater from 'docxtemplater';
 import { z } from 'zod';
 
-// Esquema de validación para PUT
+// Esquema de validación para PUT (sin cambios)
 const contractSchema = z.object({
   nombre: z.string().min(1, 'El nombre es obligatorio'),
   tipo_contrato: z.enum(['ALQUILER_LOCACION', 'COMPRA_VENTA'], { message: 'Tipo de contrato inválido' }),
@@ -32,7 +32,15 @@ const contractSchema = z.object({
   message: 'Deben especificarse dos clientes diferentes según el tipo de contrato',
 });
 
-export async function GET(req: Request, context: { params: Promise<{ id: string }> }) {
+// Esquema para PATCH
+const patchSchema = z.object({
+  firmado: z.boolean().optional(),
+  activo: z.boolean().optional(),
+}).refine((data) => data.firmado !== undefined || data.activo !== undefined, {
+  message: 'Se debe proporcionar al menos un campo: firmado o activo',
+});
+
+export async function GET(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
     const params = await context.params;
     const id = parseInt(params.id);
@@ -56,6 +64,10 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
         id_inmueble: true,
         id_template: true,
         tipo_contrato: true,
+        activo: true,
+        firmado: true,
+        createdAt: true,
+        updatedAt: true,
         cliente_1: {
           select: {
             nombre: true,
@@ -101,10 +113,17 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
     const data = await req.json();
     const validatedData = contractSchema.parse(data);
 
+    const contrato = await db.contrato.findUnique({ where: { id_contrato: id } });
+    if (!contrato) return NextResponse.json({ error: 'Contrato no encontrado' }, { status: 404 });
+
+    // Evitar edición de contratos inactivos
+    if (!contrato.activo) {
+      return NextResponse.json({ error: 'No se puede editar un contrato inactivo' }, { status: 400 });
+    }
+
     const template = await db.template.findUnique({ where: { id: validatedData.id_template } });
     if (!template) return NextResponse.json({ error: 'Template no encontrado' }, { status: 404 });
 
-    // Validar que el tipo de plantilla coincide con el tipo de contrato
     if (template.tipo !== validatedData.tipo_contrato) {
       return NextResponse.json(
         { error: 'El tipo de plantilla no coincide con el tipo de contrato' },
@@ -126,7 +145,6 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
     const buffer = doc.getZip().generate({ type: 'nodebuffer' });
     await fs.writeFile(outputPath, buffer);
 
-    // Determinar id_cliente_1 y id_cliente_2 según el tipo de contrato
     const id_cliente_1 = validatedData.tipo_contrato === 'ALQUILER_LOCACION' 
       ? validatedData.id_locador! 
       : validatedData.id_comprador!;
@@ -159,5 +177,82 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
       return NextResponse.json({ error: error.issues }, { status: 400 });
     }
     return NextResponse.json({ error: 'Error al actualizar' }, { status: 500 });
+  }
+}
+
+export async function PATCH(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+  try {
+    const params = await context.params;
+    const id = parseInt(params.id);
+    if (isNaN(id)) return NextResponse.json({ error: 'ID inválido' }, { status: 400 });
+
+    const data = await req.json();
+    const validatedData = patchSchema.parse(data);
+
+    const contrato = await db.contrato.findUnique({ where: { id_contrato: id } });
+    if (!contrato) return NextResponse.json({ error: 'Contrato no encontrado' }, { status: 404 });
+
+    // Validar que no se pueda desactivar un contrato firmado
+    if (validatedData.activo === false && contrato.firmado) {
+      return NextResponse.json(
+        { error: 'No se puede desactivar un contrato firmado' },
+        { status: 400 },
+      );
+    }
+
+    const updatedContrato = await db.contrato.update({
+      where: { id_contrato: id },
+      data: {
+        ...(validatedData.firmado !== undefined && { firmado: validatedData.firmado }),
+        ...(validatedData.activo !== undefined && { activo: validatedData.activo }),
+      },
+    });
+
+    return NextResponse.json(updatedContrato, { status: 200 });
+  } catch (error) {
+    console.error('Error al actualizar estado:', error);
+    if (error instanceof z.ZodError) {
+      return NextResponse.json({ error: error.issues }, { status: 400 });
+    }
+    return NextResponse.json({ error: 'Error al actualizar el estado' }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+  try {
+    const params = await context.params;
+    const id = parseInt(params.id);
+    if (isNaN(id)) return NextResponse.json({ error: 'ID inválido' }, { status: 400 });
+
+    const contrato = await db.contrato.findUnique({ where: { id_contrato: id } });
+    if (!contrato) {
+      return NextResponse.json({ error: 'Contrato no encontrado' }, { status: 404 });
+    }
+
+    // Validar que el contrato esté inactivo
+    if (contrato.activo) {
+      return NextResponse.json(
+        { error: 'No se puede eliminar permanentemente un contrato activo' },
+        { status: 400 },
+      );
+    }
+
+    // Eliminar el archivo asociado
+    if (contrato.archivoPath) {
+      const filePath = path.join(process.cwd(), 'public', contrato.archivoPath);
+      try {
+        await fs.unlink(filePath);
+      } catch (err) {
+        console.warn('Archivo no encontrado para eliminar:', filePath);
+      }
+    }
+
+    // Eliminar el contrato
+    await db.contrato.delete({ where: { id_contrato: id } });
+
+    return NextResponse.json({ success: true }, { status: 200 });
+  } catch (error) {
+    console.error('Error al eliminar contrato permanentemente:', error);
+    return NextResponse.json({ error: 'Error al eliminar el contrato permanentemente' }, { status: 500 });
   }
 }

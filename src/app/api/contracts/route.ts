@@ -6,8 +6,9 @@ import PizZip from 'pizzip';
 import fs from 'fs/promises';
 import path from 'path';
 import { z } from 'zod';
+import { auth } from '../../../../auth';
 
-// Esquema de validación para POST
+// Esquema de validación para POST (sin cambios)
 const contractSchema = z.object({
   nombre: z.string().min(1, 'El nombre es obligatorio'),
   tipo_contrato: z.enum(['ALQUILER_LOCACION', 'COMPRA_VENTA'], { message: 'Tipo de contrato inválido' }),
@@ -43,13 +44,15 @@ export async function GET(req: NextRequest) {
     const id_inmueble = parseInt(searchParams.get('id_inmueble') || '0') || undefined;
     const id_template = parseInt(searchParams.get('id_template') || '0') || undefined;
     const tipo_contrato = searchParams.get('tipo_contrato') || undefined;
+    const firmado = searchParams.get('firmado');
+    const activo = searchParams.get('activo');
     const page = parseInt(searchParams.get('page') || '1');
     const pageSize = parseInt(searchParams.get('pageSize') || '10');
 
     const where: any = {};
 
     if (search) {
-      where.nombre = { contains: search, mode: 'insensitive' };
+      where.nombre = { contains: search };
     }
 
     if (fechaDesde || fechaHasta) {
@@ -73,6 +76,8 @@ export async function GET(req: NextRequest) {
     if (id_inmueble) where.id_inmueble = id_inmueble;
     if (id_template) where.id_template = id_template;
     if (tipo_contrato) where.tipo_contrato = tipo_contrato;
+    if (firmado !== null) where.firmado = firmado === 'true';
+    if (activo !== null) where.activo = activo === 'true';
 
     const [contratos, total] = await Promise.all([
       db.contrato.findMany({
@@ -82,6 +87,8 @@ export async function GET(req: NextRequest) {
           cliente_2: { select: { nombre: true, apellido: true } },
           inmueble: { select: { titulo: true } },
           template: { select: { nombre: true } },
+          createdBy: { select: { id: true, name: true, email: true } },
+          updatedBy: { select: { id: true, name: true, email: true } },
         },
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * pageSize,
@@ -90,14 +97,32 @@ export async function GET(req: NextRequest) {
       db.contrato.count({ where }),
     ]);
 
-    return NextResponse.json({ contratos, total, page, pageSize }, { status: 200 });
+    const formattedContratos = contratos.map((contrato) => ({
+      ...contrato,
+      createdBy: {
+        id: contrato.createdBy.id,
+        name: contrato.createdBy.name || contrato.createdBy.email || 'Usuario desconocido',
+      },
+      updatedBy: {
+        id: contrato.updatedBy.id,
+        name: contrato.updatedBy.name || contrato.updatedBy.email || 'Usuario desconocido',
+      },
+    }));
+
+    return NextResponse.json({ contratos: formattedContratos, total, page, pageSize }, { status: 200 });
   } catch (error) {
     console.error('Error al listar contratos:', error);
     return NextResponse.json({ error: 'Error al obtener contratos' }, { status: 500 });
   }
 }
 
+// POST and DELETE handlers remain unchanged
 export async function POST(req: NextRequest) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+  }
+
   try {
     const data = await req.json();
     const validatedData = contractSchema.parse(data);
@@ -107,7 +132,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Template no encontrado' }, { status: 404 });
     }
 
-    // Validar que el tipo de plantilla coincide con el tipo de contrato
     if (template.tipo !== validatedData.tipo_contrato) {
       return NextResponse.json(
         { error: 'El tipo de plantilla no coincide con el tipo de contrato' },
@@ -134,7 +158,6 @@ export async function POST(req: NextRequest) {
     const buffer = doc.getZip().generate({ type: 'nodebuffer' });
     await fs.writeFile(outputPath, buffer);
 
-    // Determinar id_cliente_1 y id_cliente_2 según el tipo de contrato
     const id_cliente_1 = validatedData.tipo_contrato === 'ALQUILER_LOCACION' 
       ? validatedData.id_locador! 
       : validatedData.id_comprador!;
@@ -156,11 +179,34 @@ export async function POST(req: NextRequest) {
         fecha_inicio: new Date(validatedData.fecha_inicio),
         fecha_fin: new Date(validatedData.fecha_fin),
         monto: parseFloat(validatedData.monto),
-        createdAt: new Date(),
+        activo: true,
+        firmado: false,
+        createdById: session.user.id,
+        updatedById: session.user.id,
+      },
+      include: {
+        cliente_1: { select: { nombre: true, apellido: true } },
+        cliente_2: { select: { nombre: true, apellido: true } },
+        inmueble: { select: { titulo: true } },
+        template: { select: { nombre: true } },
+        createdBy: { select: { id: true, name: true, email: true } },
+        updatedBy: { select: { id: true, name: true, email: true } },
       },
     });
 
-    return NextResponse.json({ contrato, downloadUrl: filePath }, { status: 201 });
+    const formattedContrato = {
+      ...contrato,
+      createdBy: {
+        id: contrato.createdBy.id,
+        name: contrato.createdBy.name || contrato.createdBy.email || 'Usuario desconocido',
+      },
+      updatedBy: {
+        id: contrato.updatedBy.id,
+        name: contrato.updatedBy.name || contrato.updatedBy.email || 'Usuario desconocido',
+      },
+    };
+
+    return NextResponse.json({ contrato: formattedContrato, downloadUrl: filePath }, { status: 201 });
   } catch (error) {
     console.error('Error al crear contrato:', error);
     if (error instanceof z.ZodError) {
@@ -171,6 +217,11 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+  }
+
   try {
     const { id } = await req.json();
     if (!id) {
@@ -182,20 +233,44 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: 'Contrato no encontrado' }, { status: 404 });
     }
 
-    if (contrato.archivoPath) {
-      const filePath = path.join(process.cwd(), 'public', contrato.archivoPath);
-      try {
-        await fs.unlink(filePath);
-      } catch (err) {
-        console.warn('Archivo no encontrado para eliminar:', filePath);
-      }
+    if (contrato.firmado) {
+      return NextResponse.json(
+        { error: 'No se puede desactivar un contrato firmado' },
+        { status: 400 },
+      );
     }
 
-    await db.contrato.delete({ where: { id_contrato: id } });
+    const updatedContrato = await db.contrato.update({
+      where: { id_contrato: id },
+      data: {
+        activo: false,
+        updatedById: session.user.id,
+      },
+      include: {
+        cliente_1: { select: { nombre: true, apellido: true } },
+        cliente_2: { select: { nombre: true, apellido: true } },
+        inmueble: { select: { titulo: true } },
+        template: { select: { nombre: true } },
+        createdBy: { select: { id: true, name: true, email: true } },
+        updatedBy: { select: { id: true, name: true, email: true } },
+      },
+    });
 
-    return NextResponse.json({ success: true }, { status: 200 });
+    const formattedContrato = {
+      ...updatedContrato,
+      createdBy: {
+        id: updatedContrato.createdBy.id,
+        name: updatedContrato.createdBy.name || updatedContrato.createdBy.email || 'Usuario desconocido',
+      },
+      updatedBy: {
+        id: updatedContrato.updatedBy.id,
+        name: updatedContrato.updatedBy.name || updatedContrato.updatedBy.email || 'Usuario desconocido',
+      },
+    };
+
+    return NextResponse.json({ success: true, contrato: formattedContrato }, { status: 200 });
   } catch (error) {
-    console.error('Error al eliminar contrato:', error);
-    return NextResponse.json({ error: 'Error al eliminar el contrato' }, { status: 500 });
+    console.error('Error al desactivar contrato:', error);
+    return NextResponse.json({ error: 'Error al desactivar el contrato' }, { status: 500 });
   }
 }
