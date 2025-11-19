@@ -1,6 +1,7 @@
 export interface FiltrosInmueble {
-  estadoId?: number;
   tipoId?: number;
-  precioMin?: string;
-  precioMax?: string;
+  operacionId?: number;
+  estadoId?: number; 
+  precioMin?: number;
+  precioMax?: number;
 }

@@ -40,27 +40,27 @@ export default function InmuebleCard({ inmueble }: Props) {
       {/* 🖼 Galería */}
       <div className="relative w-full md:col-span-2 h-80 md:h-96 rounded-md overflow-hidden">
         <Image
-          src={images[currentImageIndex] || "/placeholder.jpg"}
-          alt={inmueble.tipo_inmueble?.nombre || "Imagen de inmueble"}
+          src={images[currentImageIndex] || inmueble.fotoPrincipal || "/placeholder.jpg"}
+          alt={inmueble.titulo || "Imagen de inmueble"}
           fill
           className="object-cover"
         />
 
         {images.length > 1 && (
           <>
-           <button
-            onClick={handlePrevImage}
-            className="absolute left-2 top-1/2 transform -translate-y-1/2 bg-white shadow-md rounded-full p-2 hover:bg-blue-500 hover:text-white transition-colors duration-200"
-          >
-            <ChevronLeft className="w-6 h-6" />
-          </button>
+            <button
+              onClick={handlePrevImage}
+              className="absolute left-2 top-1/2 transform -translate-y-1/2 bg-white shadow-md rounded-full p-2 hover:bg-blue-500 hover:text-white transition-colors duration-200"
+            >
+              <ChevronLeft className="w-6 h-6" />
+            </button>
 
-          <button
-            onClick={handleNextImage}
-            className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-white shadow-md rounded-full p-2 hover:bg-blue-500 hover:text-white transition-colors duration-200"
-          >
-            <ChevronRight className="w-6 h-6" />
-          </button>
+            <button
+              onClick={handleNextImage}
+              className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-white shadow-md rounded-full p-2 hover:bg-blue-500 hover:text-white transition-colors duration-200"
+            >
+              <ChevronRight className="w-6 h-6" />
+            </button>
 
             {/* Indicadores */}
             <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 flex space-x-2">
@@ -80,13 +80,13 @@ export default function InmuebleCard({ inmueble }: Props) {
       {/* 📄 Detalles */}
       <div className="bg-white p-4 rounded-md flex flex-col justify-between">
         <div>
-          <h2 className="text-2xl font-semibold mb-2">
-            {inmueble.tipo_inmueble?.nombre} en {barrio}
-          </h2>
+          {/* 🔹 Título siempre visible */}
+          <h2 className="text-2xl font-semibold mb-2">{inmueble.titulo}</h2>
 
-          <p className="text-gray-700 mb-2">
-            {inmueble.detalles || "Sin descripción disponible."}
-          </p>
+          {/* 🔹 Descripción solo si existe y no está vacía */}
+          {inmueble.detalles && inmueble.detalles.trim() !== "" && (
+            <p className="text-gray-700 mb-2">{inmueble.detalles}</p>
+          )}
 
           <p className="text-gray-700 mt-1">
             Dirección: {direccion}, {ciudad}, {provincia}
@@ -113,7 +113,7 @@ export default function InmuebleCard({ inmueble }: Props) {
           </p>
         </div>
 
-        {/* Contacto siempre igual */}
+        {/* Contacto */}
         <div className="mt-4">
           <h3 className="text-lg font-semibold">Contacto</h3>
           <p className="text-gray-700 flex items-center">

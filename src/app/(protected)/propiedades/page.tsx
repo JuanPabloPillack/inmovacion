@@ -1,3 +1,4 @@
+// src/app/(protected)/propiedades/page.tsx
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
