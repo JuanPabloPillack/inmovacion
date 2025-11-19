@@ -1,6 +1,6 @@
 // ===============================================
-// Archivo: src/app/(protected)/pagos/page.tsx
-// Descripción: Gestión de Pagos a Proveedores
+// Archivo: src/app/(protected)/proveedores/page.tsx
+// Descripción: Gestión de Proveedores (solo activos, con eliminar soft + filtros)
 // Proyecto: inmovacion (GBS y Asociados)
 // ===============================================
 
@@ -15,7 +15,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/Badge";
-
 import {
   Table,
   TableBody,
@@ -24,7 +23,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -39,40 +37,42 @@ import {
   MoreHorizontal,
   Eye,
   Edit,
-  FileText,
-  Trash2
+  Building,
+  Trash2,
 } from "lucide-react";
 
 // Actions
-import { getPagos, deletePago } from "@/actions/pagos/pagos-actions"; 
- 
+import { getProveedores } from "@/actions/proveedores/getProveedores";
+import { softDeleteProveedor } from "@/actions/proveedores/proveedor-actions";
+
 // Components
 import Header from "@/components/ui/Header";
 import Loading from "@/components/ui/Loading";
 import ConfirmationModal from "@/components/ui/confirmation-modal";
 
-export default function PagosProveedoresPage() {
+export default function ProveedoresPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
 
-  const [pagos, setPagos] = useState<any[]>([]);
+  const [proveedores, setProveedores] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterField, setFilterField] = useState("proveedor");
+  const [filterField, setFilterField] = useState("nombre_razon_social");
   const [loading, setLoading] = useState(true);
 
-  // Modal eliminar
+  // Modal soft delete
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [pagoId, setPagoId] = useState<number | null>(null);
+  const [proveedorId, setProveedorId] = useState<number | null>(null);
 
   // =======================
-  // RECARGAR PAGOS
+  // RECARGAR PROVEEDORES
   // =======================
-  const refreshPagos = useCallback(async () => {
+  const refreshProveedores = useCallback(async () => {
     try {
-      const data = await getPagos();
-      setPagos(data);
+      const data = await getProveedores();
+      const activos = data.filter((p: any) => p.estado === true);
+      setProveedores(activos);
     } catch (error) {
-      console.error("Error al cargar pagos:", error);
+      console.error("Error al cargar proveedores:", error);
     }
   }, []);
 
@@ -87,52 +87,56 @@ export default function PagosProveedoresPage() {
       return;
     }
 
-    refreshPagos().finally(() => setLoading(false));
-  }, [session, status, router, refreshPagos]);
+    refreshProveedores().finally(() => setLoading(false));
+  }, [session, status, router, refreshProveedores]);
 
   // =======================
   // CONFIRMAR ELIMINACIÓN
   // =======================
   const confirmDelete = async () => {
-    if (!pagoId) return;
+    if (!proveedorId) return;
 
     try {
-      await deletePago(pagoId);
-      await refreshPagos();
+      await softDeleteProveedor(proveedorId);
+      await refreshProveedores();
     } catch (error) {
-      console.error("Error eliminando pago:", error);
+      console.error("Error eliminando proveedor:", error);
     } finally {
       setIsModalOpen(false);
-      setPagoId(null);
+      setProveedorId(null);
     }
   };
 
   // =======================
   // FILTRO AVANZADO
   // =======================
-  const filteredPagos = useMemo(() => {
+  const filteredProveedores = useMemo(() => {
     const term = searchTerm.toLowerCase();
 
-    return pagos.filter((p) => {
+    return proveedores.filter((p) => {
       switch (filterField) {
-        case "proveedor":
-          return p.proveedor?.nombre_razon_social.toLowerCase().includes(term);
-        case "concepto":
-          return p.concepto.toLowerCase().includes(term);
-        case "medioPago":
-          return p.medioPago?.nombre.toLowerCase().includes(term);
-        case "estadoPago":
-          return p.estadoPago?.nombre.toLowerCase().includes(term);
+        case "nombre_razon_social":
+          return p.nombre_razon_social.toLowerCase().includes(term);
+        case "cuit_cuil":
+          return p.cuit_cuil.toLowerCase().includes(term);
+        case "correo_contacto":
+          return (p.correo_contacto || "").toLowerCase().includes(term);
+        case "telefono_contacto":
+          return (p.telefono_contacto || "").toLowerCase().includes(term);
+        case "direccion":
+          return (p.direccion || "").toLowerCase().includes(term);
+        case "tipoServicio":
+          return (p.tipoServicio?.nombre || "").toLowerCase().includes(term);
         default:
           return true;
       }
     });
-  }, [pagos, searchTerm, filterField]);
+  }, [proveedores, searchTerm, filterField]);
 
   // =======================
   // LOADING
   // =======================
-  if (loading) return <Loading message="Cargando pagos a proveedores..." />;
+  if (loading) return <Loading message="Cargando proveedores..." />;
 
   // =======================
   // TABLA
@@ -142,13 +146,13 @@ export default function PagosProveedoresPage() {
       <CardHeader className="pb-4 bg-gradient-to-r from-[#63bae9]/5 to-transparent">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <FileText className="h-5 w-5 text-[#63bae9]" />
+            <Building className="h-5 w-5 text-[#63bae9]" />
             <CardTitle className="text-xl text-[#686363]">
-              Lista de Pagos
+              Lista de Proveedores
             </CardTitle>
           </div>
           <Badge className="bg-[#969696]/10 text-[#686363] border border-[#969696]/30">
-            {filteredPagos.length} pagos
+            {filteredProveedores.length} proveedores
           </Badge>
         </div>
       </CardHeader>
@@ -158,41 +162,33 @@ export default function PagosProveedoresPage() {
           <TableHeader>
             <TableRow className="border-[#969696]/20">
               <TableHead className="text-[#686363] font-medium">Proveedor</TableHead>
-              <TableHead className="text-[#686363] font-medium">Concepto</TableHead>
-              <TableHead className="text-[#686363] font-medium">Importe</TableHead>
-              <TableHead className="text-[#686363] font-medium">Medio</TableHead>
-              <TableHead className="text-[#686363] font-medium">Estado</TableHead>
-              <TableHead className="text-[#686363] font-medium">Fecha</TableHead>
+              <TableHead className="text-[#686363] font-medium">CUIT/CUIL</TableHead>
+              <TableHead className="text-[#686363] font-medium">Teléfono</TableHead>
+              <TableHead className="text-[#686363] font-medium">Servicio</TableHead>
               <TableHead className="text-right text-[#686363] font-medium">Acciones</TableHead>
             </TableRow>
           </TableHeader>
 
           <TableBody>
-            {filteredPagos.map((p) => (
+            {filteredProveedores.map((p) => (
               <TableRow
-                key={p.id_pago}
+                key={p.id_proveedor}
                 className="hover:bg-[#63bae9]/5 border-[#969696]/10"
               >
-                <TableCell className="font-medium text-[#686363]">
-                  {p.proveedor?.nombre_razon_social}
+                <TableCell>
+                  <span className="font-medium text-[#686363]">
+                    {p.nombre_razon_social}
+                  </span>
                 </TableCell>
 
-                <TableCell className="text-[#686363]">{p.concepto}</TableCell>
+                <TableCell className="text-[#686363]">{p.cuit_cuil}</TableCell>
 
                 <TableCell className="text-[#686363]">
-                  ${p.importe}
-                </TableCell>
-
-                <TableCell className="text-[#686363]">
-                  {p.medioPago?.nombre}
-                </TableCell>
-
-                <TableCell className="text-[#686363]">
-                  {p.estadoPago?.nombre}
+                  {p.telefono_contacto || "Sin teléfono"}
                 </TableCell>
 
                 <TableCell className="text-[#686363]">
-                  {new Date(p.fecha_pago).toLocaleDateString("es-AR")}
+                  {p.tipoServicio?.nombre || "Sin tipo"}
                 </TableCell>
 
                 <TableCell className="text-right">
@@ -206,30 +202,30 @@ export default function PagosProveedoresPage() {
                       </Button>
                     </DropdownMenuTrigger>
 
-                    <DropdownMenuContent
-                      align="end"
-                      className="border-[#969696]/20"
-                    >
+                    <DropdownMenuContent align="end" className="border-[#969696]/20">
                       <DropdownMenuItem
-                        onClick={() => router.push(/pagos/${p.id_pago})}
-                        className="text-[#686363] hover:bg-[#63bae9]/10 hover:text-[#63bae9]">
+                        onClick={() => router.push(/proveedores/${p.id_proveedor})}
+                        className="text-[#686363] hover:bg-[#63bae9]/10 hover:text-[#63bae9]"
+                      >
                         <Eye className="mr-2 h-4 w-4" />
                         Ver detalles
                       </DropdownMenuItem>
 
                       <DropdownMenuItem
-                        onClick={() => router.push(/pagos/editar?id=${p.id_pago})}
-                        className="text-[#686363] hover:bg-[#63bae9]/10 hover:text-[#63bae9]">
+                        onClick={() => router.push(/proveedores/editar?id=${p.id_proveedor})}
+                        className="text-[#686363] hover:bg-[#63bae9]/10 hover:text-[#63bae9]"
+                      >
                         <Edit className="mr-2 h-4 w-4" />
                         Editar
                       </DropdownMenuItem>
 
                       <DropdownMenuItem
                         onClick={() => {
-                          setPagoId(p.id_pago);
+                          setProveedorId(p.id_proveedor);
                           setIsModalOpen(true);
                         }}
-                        className="text-red-500 hover:bg-red-500/10">
+                        className="text-red-500 hover:bg-red-500/10"
+                      >
                         <Trash2 className="mr-2 h-4 w-4" />
                         Eliminar
                       </DropdownMenuItem>
@@ -251,12 +247,10 @@ export default function PagosProveedoresPage() {
       <div className="container mx-auto px-4 py-8">
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-2">
-            <FileText className="h-8 w-8 text-[#63bae9]" />
-            <h1 className="text-3xl font-bold text-[#686363]">
-              Pagos a Proveedores
-            </h1>
+            <Building className="h-8 w-8 text-[#63bae9]" />
+            <h1 className="text-3xl font-bold text-[#686363]">Gestión de Proveedores</h1>
           </div>
-          <p className="text-[#969696]">Administra todos los pagos realizados</p>
+          <p className="text-[#969696]">Administra los proveedores del sistema</p>
         </div>
 
         {/* Buscador + Filtros + Crear */}
@@ -264,36 +258,38 @@ export default function PagosProveedoresPage() {
           <CardContent className="p-6">
             <div className="flex flex-col sm:flex-row gap-4 items-center">
 
-              {/* Filtro */}
+              {/* SELECT DE CAMPO */}
               <select
                 value={filterField}
                 onChange={(e) => setFilterField(e.target.value)}
                 className="h-10 px-3 rounded-md border border-[#969696]/30 bg-background text-sm text-[#686363] focus:border-[#63bae9]"
               >
-                <option value="proveedor">Proveedor</option>
-                <option value="concepto">Concepto</option>
-                <option value="medioPago">Medio de pago</option>
-                <option value="estadoPago">Estado</option>
+                <option value="nombre_razon_social">Nombre</option>
+                <option value="cuit_cuil">CUIT/CUIL</option>
+                <option value="correo_contacto">Correo</option>
+                <option value="telefono_contacto">Teléfono</option>
+                <option value="direccion">Dirección</option>
+                <option value="tipoServicio">Tipo de servicio</option>
               </select>
 
-              {/* Buscador */}
+              {/* INPUT BUSCAR */}
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#969696] h-4 w-4" />
                 <Input
-                  placeholder="Buscar pago..."
+                  placeholder="Buscar proveedor..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-10 border-[#969696]/30 focus:border-[#63bae9] text-[#686363]"
                 />
               </div>
 
-              {/* Botón Crear */}
+              {/* BOTÓN NUEVO */}
               <Button
-                onClick={() => router.push("/pagos/crear")}
+                onClick={() => router.push("/proveedores/crear")}
                 className="gap-2 bg-[#fcc238] text-[#686363] hover:bg-[#fcc238]/90"
               >
                 <Plus className="h-4 w-4" />
-                Registrar Pago
+                Crear Proveedor
               </Button>
             </div>
           </CardContent>
@@ -302,12 +298,13 @@ export default function PagosProveedoresPage() {
         <TableView />
       </div>
 
+      {/* Modal de confirmación */}
       <ConfirmationModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onConfirm={confirmDelete}
-        title="¿Eliminar pago?"
-        message="Esta acción eliminará el pago definitivamente."
+        title="¿Eliminar proveedor?"
+        message="Esta acción lo ocultará del sistema, pero no lo borrará de la base de datos."
         confirmText="Eliminar"
         cancelText="Cancelar"
         variant="danger"

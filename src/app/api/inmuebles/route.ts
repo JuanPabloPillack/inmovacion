@@ -50,25 +50,42 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     console.log("📦 Payload recibido:", body);
 
-    if (!body.id_cliente) {
+    // Manejar cliente: id directo o desde objeto
+    const clienteId = body.id_cliente || (body.cliente && typeof body.cliente === 'object' ? body.cliente.id : null);
+    if (!clienteId) {
       return NextResponse.json({ error: "Debe seleccionar un propietario" }, { status: 400 });
     }
 
-    if (!body.barrio) {
-      return NextResponse.json({ error: "Debe escribir un barrio" }, { status: 400 });
-    }
+    // Manejar barrio: id directo o nombre para crear/buscar
+    let idBarrio: number;
+    if (body.id_barrio) {
+      idBarrio = Number(body.id_barrio);
+    } else if (body.barrio) {
+      // Buscar o crear barrio
+      let barrioDb = await db.barrio.findFirst({ where: { nombre: body.barrio } });
+      if (!barrioDb) {
+        let localidadId = body.localidadId;
+        if (!localidadId) {
+          // Buscar primera localidad o crear una por defecto
+          const defaultLocalidad = await db.localidad.findFirst();
+          if (!defaultLocalidad) {
+            // Crear localidad por defecto si no existe ninguna
+            const createdLocalidad = await db.localidad.create({
+              data: { nombre: "Localidad por defecto" }
+            });
+            localidadId = createdLocalidad.id_localidad;
+          } else {
+            localidadId = defaultLocalidad.id_localidad;
+          }
+        }
 
-    // Buscar o crear barrio
-    let barrioDb = await db.barrio.findFirst({ where: { nombre: body.barrio } });
-    if (!barrioDb) {
-      const localidadId =
-        body.localidadId || (await db.localidad.findFirst())?.id_localidad;
-      if (!localidadId)
-        return NextResponse.json({ error: "No se pudo determinar la localidad para el barrio" }, { status: 400 });
-
-      barrioDb = await db.barrio.create({
-        data: { nombre: body.barrio, id_localidad: Number(localidadId) },
-      });
+        barrioDb = await db.barrio.create({
+          data: { nombre: body.barrio, id_localidad: Number(localidadId) },
+        });
+      }
+      idBarrio = barrioDb.id_barrio;
+    } else {
+      return NextResponse.json({ error: "Debe seleccionar o escribir un barrio" }, { status: 400 });
     }
 
     // Crear inmueble con ubicación conectada
@@ -92,7 +109,7 @@ export async function POST(req: NextRequest) {
         estado: body.id_estado
           ? { connect: { id_estado: Number(body.id_estado) } }
           : undefined,
-        cliente: { connect: { id_cliente: Number(body.id_cliente) } },
+        cliente: { connect: { id_cliente: Number(clienteId) } },
         operacion: body.id_operacion
           ? { connect: { id_operacion: Number(body.id_operacion) } }
           : undefined,
@@ -101,7 +118,7 @@ export async function POST(req: NextRequest) {
             direccion: body.direccion ?? null,
             ciudad: body.ciudad ?? null,
             provincia: body.provincia ?? null,
-            id_barrio: barrioDb.id_barrio,
+            id_barrio: idBarrio,
           },
         },
         foto: body.imagenes?.find((i: any) => i.principal)?.url ?? "/placeholder.jpg",
