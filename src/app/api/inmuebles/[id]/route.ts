@@ -1,8 +1,10 @@
+//app/api/inmuebles/[id]/route.ts
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import type { InmuebleDTO } from "@/types/inmuebles";
-import { Prisma } from "@prisma/client";
+import { Prisma } from "@/generated/prisma";
+
 
 const toNumberOrUndefined = (v: any): number | undefined =>
   v !== undefined && v !== null && v !== "" ? Number(v) : undefined;
@@ -184,15 +186,64 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
   }
 }
 
-// 🔴 DELETE
+// 🔴 DELETE → Eliminar inmueble (solo si está archivado)
 export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
+  const id = Number(params.id);
   try {
-    const id = Number(params.id);
+    // ✅ Verificar si existe y está archivado
+    const inmueble = await db.inmueble.findUnique({
+      where: { id_inmueble: id },
+    });
+
+    if (!inmueble) {
+      return NextResponse.json({ error: "Inmueble no encontrado" }, { status: 404 });
+    }
+
+    if (!inmueble.archivado) {
+      return NextResponse.json({ error: "Solo se pueden eliminar inmuebles archivados" }, { status: 400 });
+    }
+
+    // ✅ Eliminar todos los registros dependientes del inmueble (debido a onDelete: Restrict)
+    // Contratos
+    await db.contrato.deleteMany({ where: { id_inmueble: id } });
+    // Cobranzas
+    await db.cobranza.deleteMany({ where: { id_inmueble: id } });
+    // Rendiciones
+    await db.rendicion.deleteMany({ where: { id_inmueble: id } });
+    // Pagos
+    await db.pago.deleteMany({ where: { id_inmueble: id } });
+    // Historial (para Inmueble)
+    await db.historial.deleteMany({ where: { id_inmueble: id } });
+    // Imágenes
+    await db.inmuebleImagen.deleteMany({ where: { inmuebleId: id } });
+
+    // ✅ Ahora eliminar el inmueble (las relaciones required como tipo_inmueble, estado, cliente no bloquean el delete del child)
     await db.inmueble.delete({ where: { id_inmueble: id } });
+
+    // ✅ Finalmente, eliminar la ubicación si existía (ahora sin referencia del inmueble)
+    const ubicacionToDelete = await db.ubicacion.findFirst({
+      where: {
+        inmuebles: {
+          none: {} // No more inmuebles referencing it
+        }
+      },
+      select: { id_ubicacion: true }
+    });
+
+    if (ubicacionToDelete) {
+      // Desconectar barrio si es necesario
+      await db.ubicacion.update({
+        where: { id_ubicacion: ubicacionToDelete.id_ubicacion },
+        data: { id_barrio: null }
+      });
+      await db.ubicacion.delete({ where: { id_ubicacion: ubicacionToDelete.id_ubicacion } });
+    }
+
     return NextResponse.json({ message: "Inmueble eliminado correctamente" });
-  } catch (error) {
+  } catch (error: any) {
     console.error("❌ Error DELETE /inmueble/id:", error);
-    return NextResponse.json({ error: "Error al eliminar inmueble" }, { status: 500 });
+    console.error("Error details:", error.message);
+    return NextResponse.json({ error: "Error al eliminar inmueble: " + error.message }, { status: 500 });
   }
 }
 
