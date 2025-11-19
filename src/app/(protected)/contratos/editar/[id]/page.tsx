@@ -1,8 +1,8 @@
-// src/app/(protected)/contratos/nuevo/page.tsx
+// src/app/(protected)/contratos/editar/[id]/page.tsx
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { FileText, Save, AlertCircle, Calendar, DollarSign, Building2, User, FileType, Lock, CheckCircle2, ChevronRight } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import Header from '@/components/ui/Header';
 import Combobox from '@/components/ui/combobox';
 import { z } from 'zod';
@@ -53,18 +53,24 @@ interface Template {
 }
 
 interface Contrato {
+  id_contrato: number;
   nombre: string;
   tipo_contrato: 'ALQUILER_LOCACION' | 'COMPRA_VENTA';
-  id_locador?: number;
-  id_locatario?: number;
-  id_comprador?: number;
-  id_vendedor?: number;
+  id_cliente_1: number;
+  id_cliente_2: number;
   id_inmueble: number;
   id_template: number;
   valores: { [key: string]: string };
   fecha_inicio: string;
   fecha_fin: string;
-  monto: string;
+  monto: number;
+  cliente_1: Cliente;
+  cliente_2: Cliente;
+  inmueble: Inmueble;
+  template: Template;
+  firmado: boolean;
+  activo: boolean;
+  archivoPath: string;
 }
 
 const contractSchema = z.object({
@@ -98,10 +104,11 @@ const contractSchema = z.object({
   path: ['id_locatario', 'id_vendedor'],
 });
 
-export default function NewContract() {
+export default function EditContract() {
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [inmuebles, setInmuebles] = useState<Inmueble[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
+  const [contrato, setContrato] = useState<Contrato | null>(null);
   const [nombre, setNombre] = useState('');
   const [tipoContrato, setTipoContrato] = useState<'ALQUILER_LOCACION' | 'COMPRA_VENTA' | ''>('');
   const [id_locador, setIdLocador] = useState<number | undefined>(undefined);
@@ -111,6 +118,7 @@ export default function NewContract() {
   const [id_inmueble, setIdInmueble] = useState<number | undefined>(undefined);
   const [id_template, setIdTemplate] = useState<number | undefined>(undefined);
   const [valores, setValores] = useState<{ [key: string]: string }>({});
+  const [editedFields, setEditedFields] = useState<Set<string>>(new Set());
   const [fecha_inicio, setFechaInicio] = useState('');
   const [fecha_fin, setFechaFin] = useState('');
   const [monto, setMonto] = useState('');
@@ -122,54 +130,132 @@ export default function NewContract() {
   const [selectedVendedor, setSelectedVendedor] = useState<Cliente | null>(null);
   const [selectedInmueble, setSelectedInmueble] = useState<Inmueble | null>(null);
   const [formErrors, setFormErrors] = useState<{ [key: string]: string }>({});
-  const router = useRouter();
   const [hasUserEditedMonto, setHasUserEditedMonto] = useState(false);
+  const router = useRouter();
+  const params = useParams();
+  const id = params.id;
 
+  // Stabilize selected objects using useMemo
+  const stableSelectedLocador = useMemo(() => selectedLocador, [selectedLocador]);
+  const stableSelectedLocatario = useMemo(() => selectedLocatario, [selectedLocatario]);
+  const stableSelectedComprador = useMemo(() => selectedComprador, [selectedComprador]);
+  const stableSelectedVendedor = useMemo(() => selectedVendedor, [selectedVendedor]);
+  const stableSelectedInmueble = useMemo(() => selectedInmueble, [selectedInmueble]);
+
+  // Memoizar opciones
+  const clienteOptions = useMemo(
+    () =>
+      clientes.map((cliente) => ({
+        value: cliente.id_cliente,
+        label: `${cliente.nombre} ${cliente.apellido || ''}`.trim(),
+      })),
+    [clientes]
+  );
+
+  const inmuebleOptions = useMemo(
+    () =>
+      inmuebles.map((inmueble) => ({
+        value: inmueble.id_inmueble,
+        label: inmueble.titulo,
+      })),
+    [inmuebles]
+  );
+
+  const templateOptions = useMemo(
+    () =>
+      templates
+        .filter((t) => !tipoContrato || t.tipo === tipoContrato)
+        .map((template) => ({
+          value: template.id,
+          label: template.nombre,
+        })),
+    [templates, tipoContrato]
+  );
+
+  // Cargar datos iniciales
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const [clientesRes, inmueblesRes, templatesRes] = await Promise.all([
+        const [contratoRes, clientesRes, inmueblesRes, templatesRes] = await Promise.all([
+          fetch(`/api/contracts/${id}`),
           fetch('/api/clientes'),
           fetch('/api/inmuebles'),
           fetch('/api/templates?pageSize=1000'),
         ]);
-        if (!clientesRes.ok || !inmueblesRes.ok || !templatesRes.ok) {
+
+        if (!contratoRes.ok || !clientesRes.ok || !inmueblesRes.ok || !templatesRes.ok) {
           throw new Error('Error al cargar datos');
         }
+
+        const contratoData = await contratoRes.json();
+        setContrato(contratoData);
         setClientes(await clientesRes.json());
         setInmuebles(await inmueblesRes.json());
         const templatesData = await templatesRes.json();
         setTemplates(templatesData.templates || []);
+
+        // Precargar datos del contrato
+        setNombre(contratoData.nombre);
+        setTipoContrato(contratoData.tipo_contrato);
+        setIdInmueble(contratoData.id_inmueble);
+        setIdTemplate(contratoData.id_template);
+        setValores(contratoData.valores || {});
+        setFechaInicio(new Date(contratoData.fecha_inicio).toISOString().split('T')[0]);
+        setFechaFin(new Date(contratoData.fecha_fin).toISOString().split('T')[0]);
+        setMonto(contratoData.monto.toString());
+
+        if (contratoData.tipo_contrato === 'ALQUILER_LOCACION') {
+          setIdLocador(contratoData.id_cliente_1);
+          setIdLocatario(contratoData.id_cliente_2);
+        } else {
+          setIdComprador(contratoData.id_cliente_1);
+          setIdVendedor(contratoData.id_cliente_2);
+        }
+
+        setSelectedLocador(contratoData.cliente_1);
+        setSelectedLocatario(contratoData.cliente_2);
+        setSelectedComprador(contratoData.cliente_1);
+        setSelectedVendedor(contratoData.cliente_2);
+        setSelectedInmueble(contratoData.inmueble);
       } catch (err) {
-        setError('Error al cargar datos');
+        setError('Error al cargar datos del contrato');
       } finally {
         setLoading(false);
       }
     };
     fetchData();
-  }, []);
+  }, [id]);
 
-  useEffect(() => {
-    const fetchCliente = async (id: number | undefined, setCliente: (cliente: Cliente | null) => void) => {
-      if (id) {
-        try {
-          const res = await fetch(`/api/clientes/${id}`);
-          if (!res.ok) throw new Error('Error al cargar cliente');
-          setCliente(await res.json());
-        } catch (err) {
-          setError('Error al cargar cliente');
-        }
-      } else {
+  // Memoizar fetchCliente
+  const fetchCliente = useCallback(
+    async (id: number | undefined, setCliente: (cliente: Cliente | null) => void) => {
+      if (!id) {
+        setCliente(null);
+        return;
+      }
+      try {
+        const res = await fetch(`/api/clientes/${id}`);
+        if (!res.ok) throw new Error('Error al cargar cliente');
+        const data = await res.json();
+        setCliente(data);
+      } catch (err) {
+        setError('Error al cargar cliente');
         setCliente(null);
       }
-    };
+    },
+    []
+  );
+
+  // Actualizar clientes seleccionados
+  useEffect(() => {
     fetchCliente(id_locador, setSelectedLocador);
     fetchCliente(id_locatario, setSelectedLocatario);
     fetchCliente(id_comprador, setSelectedComprador);
     fetchCliente(id_vendedor, setSelectedVendedor);
-  }, [id_locador, id_locatario, id_comprador, id_vendedor]);
+  }, [id_locador, id_locatario, id_comprador, id_vendedor, fetchCliente]);
 
+  // Actualizar inmueble seleccionado
   useEffect(() => {
     const fetchInmueble = async () => {
       if (id_inmueble) {
@@ -186,178 +272,178 @@ export default function NewContract() {
     };
     fetchInmueble();
   }, [id_inmueble]);
-
 useEffect(() => {
   if (selectedInmueble?.precio && !hasUserEditedMonto) {
     setMonto(selectedInmueble.precio.toString());
   }
 }, [selectedInmueble, hasUserEditedMonto]);
 
-  useEffect(() => {
-    setIdTemplate(undefined);
-    setValores({});
-    setIdLocador(undefined);
-    setIdLocatario(undefined);
-    setIdComprador(undefined);
-    setIdVendedor(undefined);
-    setIdInmueble(undefined);
-    setFechaInicio('');
-    setFechaFin('');
-    setMonto('');
-  }, [tipoContrato]);
+  // Autocompletado de campos variables
+  const autoCompleteField = useCallback(
+    (campo: string): string | null => {
+      const lowerCampo = campo.toLowerCase();
 
-  const autoCompleteField = useCallback((campo: string): string | null => {
-    const lowerCampo = campo.toLowerCase();
+      if (lowerCampo.includes('locador_nombre') && stableSelectedLocador?.nombre) return stableSelectedLocador.nombre;
+      if (lowerCampo.includes('locador_apellido') && stableSelectedLocador?.apellido) return stableSelectedLocador.apellido || '';
+      if (lowerCampo.includes('locador_email') && stableSelectedLocador?.email) return stableSelectedLocador.email || '';
+      if (lowerCampo.includes('locador_telefono') && stableSelectedLocador?.telefono) return stableSelectedLocador.telefono || '';
+      if (lowerCampo.includes('locador_tipo_documento') && stableSelectedLocador?.tipo_documento) return stableSelectedLocador.tipo_documento || '';
+      if (lowerCampo.includes('locador_descripcion') && stableSelectedLocador?.descripcion) return stableSelectedLocador.descripcion || '';
+      if (lowerCampo.includes('locador_activo') && stableSelectedLocador?.activo !== undefined) return stableSelectedLocador.activo.toString();
+      if (lowerCampo.includes('locador_tipo') && stableSelectedLocador?.tipoCliente?.nombre) return stableSelectedLocador.tipoCliente.nombre || '';
 
-    if (lowerCampo.includes('locador_nombre') && selectedLocador?.nombre) return selectedLocador.nombre;
-    if (lowerCampo.includes('locador_apellido') && selectedLocador?.apellido) return selectedLocador.apellido || '';
-    if (lowerCampo.includes('locador_email') && selectedLocador?.email) return selectedLocador.email || '';
-    if (lowerCampo.includes('locador_telefono') && selectedLocador?.telefono) return selectedLocador.telefono || '';
-    if (lowerCampo.includes('locador_tipo_documento') && selectedLocador?.tipo_documento) return selectedLocador.tipo_documento || '';
-    if (lowerCampo.includes('locador_descripcion') && selectedLocador?.descripcion) return selectedLocador.descripcion || '';
-    if (lowerCampo.includes('locador_activo') && selectedLocador?.activo !== undefined) return selectedLocador.activo.toString();
-    if (lowerCampo.includes('locador_tipo') && selectedLocador?.tipoCliente?.nombre) return selectedLocador.tipoCliente.nombre || '';
+      if (lowerCampo.includes('locatario_nombre') && stableSelectedLocatario?.nombre) return stableSelectedLocatario.nombre;
+      if (lowerCampo.includes('locatario_apellido') && stableSelectedLocatario?.apellido) return stableSelectedLocatario.apellido || '';
+      if (lowerCampo.includes('locatario_email') && stableSelectedLocatario?.email) return stableSelectedLocatario.email || '';
+      if (lowerCampo.includes('locatario_telefono') && stableSelectedLocatario?.telefono) return stableSelectedLocatario.telefono || '';
+      if (lowerCampo.includes('locatario_tipo_documento') && stableSelectedLocatario?.tipo_documento) return stableSelectedLocatario.tipo_documento || '';
+      if (lowerCampo.includes('locatario_descripcion') && stableSelectedLocatario?.descripcion) return stableSelectedLocatario.descripcion || '';
+      if (lowerCampo.includes('locatario_activo') && stableSelectedLocatario?.activo !== undefined) return stableSelectedLocatario.activo.toString();
+      if (lowerCampo.includes('locatario_tipo') && stableSelectedLocatario?.tipoCliente?.nombre) return stableSelectedLocatario.tipoCliente.nombre || '';
 
-    if (lowerCampo.includes('locatario_nombre') && selectedLocatario?.nombre) return selectedLocatario.nombre;
-    if (lowerCampo.includes('locatario_apellido') && selectedLocatario?.apellido) return selectedLocatario.apellido || '';
-    if (lowerCampo.includes('locatario_email') && selectedLocatario?.email) return selectedLocatario.email || '';
-    if (lowerCampo.includes('locatario_telefono') && selectedLocatario?.telefono) return selectedLocatario.telefono || '';
-    if (lowerCampo.includes('locatario_tipo_documento') && selectedLocatario?.tipo_documento) return selectedLocatario.tipo_documento || '';
-    if (lowerCampo.includes('locatario_descripcion') && selectedLocatario?.descripcion) return selectedLocatario.descripcion || '';
-    if (lowerCampo.includes('locatario_activo') && selectedLocatario?.activo !== undefined) return selectedLocatario.activo.toString();
-    if (lowerCampo.includes('locatario_tipo') && selectedLocatario?.tipoCliente?.nombre) return selectedLocatario.tipoCliente.nombre || '';
+      if (lowerCampo.includes('comprador_nombre') && stableSelectedComprador?.nombre) return stableSelectedComprador.nombre;
+      if (lowerCampo.includes('comprador_apellido') && stableSelectedComprador?.apellido) return stableSelectedComprador.apellido || '';
+      if (lowerCampo.includes('comprador_email') && stableSelectedComprador?.email) return stableSelectedComprador.email || '';
+      if (lowerCampo.includes('comprador_telefono') && stableSelectedComprador?.telefono) return stableSelectedComprador.telefono || '';
+      if (lowerCampo.includes('comprador_tipo_documento') && stableSelectedComprador?.tipo_documento) return stableSelectedComprador.tipo_documento || '';
+      if (lowerCampo.includes('comprador_descripcion') && stableSelectedComprador?.descripcion) return stableSelectedComprador.descripcion || '';
+      if (lowerCampo.includes('comprador_activo') && stableSelectedComprador?.activo !== undefined) return stableSelectedComprador.activo.toString();
+      if (lowerCampo.includes('comprador_tipo') && stableSelectedComprador?.tipoCliente?.nombre) return stableSelectedComprador.tipoCliente.nombre || '';
 
-    if (lowerCampo.includes('comprador_nombre') && selectedComprador?.nombre) return selectedComprador.nombre;
-    if (lowerCampo.includes('comprador_apellido') && selectedComprador?.apellido) return selectedComprador.apellido || '';
-    if (lowerCampo.includes('comprador_email') && selectedComprador?.email) return selectedComprador.email || '';
-    if (lowerCampo.includes('comprador_telefono') && selectedComprador?.telefono) return selectedComprador.telefono || '';
-    if (lowerCampo.includes('comprador_tipo_documento') && selectedComprador?.tipo_documento) return selectedComprador.tipo_documento || '';
-    if (lowerCampo.includes('comprador_descripcion') && selectedComprador?.descripcion) return selectedComprador.descripcion || '';
-    if (lowerCampo.includes('comprador_activo') && selectedComprador?.activo !== undefined) return selectedComprador.activo.toString();
-    if (lowerCampo.includes('comprador_tipo') && selectedComprador?.tipoCliente?.nombre) return selectedComprador.tipoCliente.nombre || '';
+      if (lowerCampo.includes('vendedor_nombre') && stableSelectedVendedor?.nombre) return stableSelectedVendedor.nombre;
+      if (lowerCampo.includes('vendedor_apellido') && stableSelectedVendedor?.apellido) return stableSelectedVendedor.apellido || '';
+      if (lowerCampo.includes('vendedor_email') && stableSelectedVendedor?.email) return stableSelectedVendedor.email || '';
+      if (lowerCampo.includes('vendedor_telefono') && stableSelectedVendedor?.telefono) return stableSelectedVendedor.telefono || '';
+      if (lowerCampo.includes('vendedor_tipo_documento') && stableSelectedVendedor?.tipo_documento) return stableSelectedVendedor.tipo_documento || '';
+      if (lowerCampo.includes('vendedor_descripcion') && stableSelectedVendedor?.descripcion) return stableSelectedVendedor.descripcion || '';
+      if (lowerCampo.includes('vendedor_activo') && stableSelectedVendedor?.activo !== undefined) return stableSelectedVendedor.activo.toString();
+      if (lowerCampo.includes('vendedor_tipo') && stableSelectedVendedor?.tipoCliente?.nombre) return stableSelectedVendedor.tipoCliente.nombre || '';
 
-    if (lowerCampo.includes('vendedor_nombre') && selectedVendedor?.nombre) return selectedVendedor.nombre;
-    if (lowerCampo.includes('vendedor_apellido') && selectedVendedor?.apellido) return selectedVendedor.apellido || '';
-    if (lowerCampo.includes('vendedor_email') && selectedVendedor?.email) return selectedVendedor.email || '';
-    if (lowerCampo.includes('vendedor_telefono') && selectedVendedor?.telefono) return selectedVendedor.telefono || '';
-    if (lowerCampo.includes('vendedor_tipo_documento') && selectedVendedor?.tipo_documento) return selectedVendedor.tipo_documento || '';
-    if (lowerCampo.includes('vendedor_descripcion') && selectedVendedor?.descripcion) return selectedVendedor.descripcion || '';
-    if (lowerCampo.includes('vendedor_activo') && selectedVendedor?.activo !== undefined) return selectedVendedor.activo.toString();
-    if (lowerCampo.includes('vendedor_tipo') && selectedVendedor?.tipoCliente?.nombre) return selectedVendedor.tipoCliente.nombre || '';
+      if (lowerCampo.includes('inmueble_titulo') && stableSelectedInmueble?.titulo) return stableSelectedInmueble.titulo;
+      if (lowerCampo.includes('inmueble_superficie_total') && stableSelectedInmueble?.superficie_total) return stableSelectedInmueble.superficie_total.toString();
+      if (lowerCampo.includes('inmueble_superficie_cubierta') && stableSelectedInmueble?.superficie_cubierta) return stableSelectedInmueble.superficie_cubierta.toString();
+      if (lowerCampo.includes('inmueble_cantidad_ambientes') && stableSelectedInmueble?.cantidad_ambientes) return stableSelectedInmueble.cantidad_ambientes.toString();
+      if (lowerCampo.includes('inmueble_cantidad_banos') && stableSelectedInmueble?.cantidad_banos) return stableSelectedInmueble.cantidad_banos.toString();
+      if (lowerCampo.includes('inmueble_cantidad_dormitorios') && stableSelectedInmueble?.cantidad_dormitorios) return stableSelectedInmueble.cantidad_dormitorios.toString();
+      if (lowerCampo.includes('inmueble_cantidad_cocheras') && stableSelectedInmueble?.cantidad_cocheras) return stableSelectedInmueble.cantidad_cocheras.toString();
+      if (lowerCampo.includes('inmueble_cantidad_pisos') && stableSelectedInmueble?.cantidad_pisos) return stableSelectedInmueble.cantidad_pisos.toString();
+      if (lowerCampo.includes('inmueble_antiguedad') && stableSelectedInmueble?.antiguedad) return stableSelectedInmueble.antiguedad.toString();
+      if (lowerCampo.includes('inmueble_precio') && stableSelectedInmueble?.precio) return stableSelectedInmueble.precio.toString();
+      if (lowerCampo.includes('inmueble_detalles') && stableSelectedInmueble?.detalles) return stableSelectedInmueble.detalles || '';
+      if (lowerCampo.includes('inmueble_archivado') && stableSelectedInmueble?.archivado !== undefined) return stableSelectedInmueble.archivado.toString();
+      if (lowerCampo.includes('inmueble_direccion') && stableSelectedInmueble?.ubicacion?.direccion) return stableSelectedInmueble.ubicacion.direccion;
+      if (lowerCampo.includes('inmueble_ciudad') && stableSelectedInmueble?.ubicacion?.ciudad) return stableSelectedInmueble.ubicacion.ciudad || '';
+      if (lowerCampo.includes('inmueble_provincia') && stableSelectedInmueble?.ubicacion?.provincia) return stableSelectedInmueble.ubicacion.provincia || '';
+      if (lowerCampo.includes('inmueble_barrio') && stableSelectedInmueble?.ubicacion?.barrio?.nombre) return stableSelectedInmueble.ubicacion.barrio.nombre || '';
+      if (lowerCampo.includes('inmueble_localidad') && stableSelectedInmueble?.ubicacion?.barrio?.localidad?.nombre) return stableSelectedInmueble.ubicacion.barrio.localidad.nombre || '';
+      if (lowerCampo.includes('inmueble_tipo') && stableSelectedInmueble?.tipo_inmueble?.nombre) return stableSelectedInmueble.tipo_inmueble.nombre || '';
+      if (lowerCampo.includes('inmueble_estado') && stableSelectedInmueble?.estado?.nombre) return stableSelectedInmueble.estado.nombre || '';
+      if (lowerCampo.includes('inmueble_operacion') && stableSelectedInmueble?.operacion?.nombre) return stableSelectedInmueble.operacion.nombre || '';
+      if (lowerCampo.includes('inmueble_propietario') && stableSelectedInmueble?.cliente?.nombre && stableSelectedInmueble?.cliente?.apellido) {
+        return `${stableSelectedInmueble.cliente.nombre} ${stableSelectedInmueble.cliente.apellido || ''}`.trim();
+      }
 
-    if (lowerCampo.includes('inmueble_titulo') && selectedInmueble?.titulo) return selectedInmueble.titulo;
-    if (lowerCampo.includes('inmueble_superficie_total') && selectedInmueble?.superficie_total) return selectedInmueble.superficie_total.toString();
-    if (lowerCampo.includes('inmueble_superficie_cubierta') && selectedInmueble?.superficie_cubierta) return selectedInmueble.superficie_cubierta.toString();
-    if (lowerCampo.includes('inmueble_cantidad_ambientes') && selectedInmueble?.cantidad_ambientes) return selectedInmueble.cantidad_ambientes.toString();
-    if (lowerCampo.includes('inmueble_cantidad_banos') && selectedInmueble?.cantidad_banos) return selectedInmueble.cantidad_banos.toString();
-    if (lowerCampo.includes('inmueble_cantidad_dormitorios') && selectedInmueble?.cantidad_dormitorios) return selectedInmueble.cantidad_dormitorios.toString();
-    if (lowerCampo.includes('inmueble_cantidad_cocheras') && selectedInmueble?.cantidad_cocheras) return selectedInmueble.cantidad_cocheras.toString();
-    if (lowerCampo.includes('inmueble_cantidad_pisos') && selectedInmueble?.cantidad_pisos) return selectedInmueble.cantidad_pisos.toString();
-    if (lowerCampo.includes('inmueble_antiguedad') && selectedInmueble?.antiguedad) return selectedInmueble.antiguedad.toString();
-   if (lowerCampo.includes('inmueble_precio') && selectedInmueble?.precio) return selectedInmueble.precio.toString();
-    if (lowerCampo.includes('inmueble_detalles') && selectedInmueble?.detalles) return selectedInmueble.detalles || '';
-    if (lowerCampo.includes('inmueble_archivado') && selectedInmueble?.archivado !== undefined) return selectedInmueble.archivado.toString();
-    if (lowerCampo.includes('inmueble_direccion') && selectedInmueble?.ubicacion?.direccion) return selectedInmueble.ubicacion.direccion;
-    if (lowerCampo.includes('inmueble_ciudad') && selectedInmueble?.ubicacion?.ciudad) return selectedInmueble.ubicacion.ciudad || '';
-    if (lowerCampo.includes('inmueble_provincia') && selectedInmueble?.ubicacion?.provincia) return selectedInmueble.ubicacion.provincia || '';
-    if (lowerCampo.includes('inmueble_barrio') && selectedInmueble?.ubicacion?.barrio?.nombre) return selectedInmueble.ubicacion.barrio.nombre || '';
-    if (lowerCampo.includes('inmueble_localidad') && selectedInmueble?.ubicacion?.barrio?.localidad?.nombre) return selectedInmueble.ubicacion.barrio.localidad.nombre || '';
-    if (lowerCampo.includes('inmueble_tipo') && selectedInmueble?.tipo_inmueble?.nombre) return selectedInmueble.tipo_inmueble.nombre || '';
-    if (lowerCampo.includes('inmueble_estado') && selectedInmueble?.estado?.nombre) return selectedInmueble.estado.nombre || '';
-    if (lowerCampo.includes('inmueble_operacion') && selectedInmueble?.operacion?.nombre) return selectedInmueble.operacion.nombre || '';
-    if (lowerCampo.includes('inmueble_propietario') && selectedInmueble?.cliente?.nombre && selectedInmueble?.cliente?.apellido) {
-      return `${selectedInmueble.cliente.nombre} ${selectedInmueble.cliente.apellido || ''}`.trim();
-    }
+      if (lowerCampo.includes('contrato_nombre') && nombre) return nombre;
+      if (lowerCampo.includes('contrato_tipo') && tipoContrato) return tipoContrato === 'ALQUILER_LOCACION' ? 'Alquiler/Locación' : 'Compra/Venta';
+      if (lowerCampo.includes('contrato_fecha_inicio') && fecha_inicio) return fecha_inicio;
+      if (lowerCampo.includes('contrato_fecha_fin') && fecha_fin) return fecha_fin;
+      if (lowerCampo.includes('contrato_monto') && monto) return monto;
 
-    if (lowerCampo.includes('contrato_nombre') && nombre) return nombre;
-    if (lowerCampo.includes('contrato_tipo') && tipoContrato) return tipoContrato === 'ALQUILER_LOCACION' ? 'Alquiler/Locación' : 'Compra/Venta';
-    if (lowerCampo.includes('contrato_fecha_inicio') && fecha_inicio) return fecha_inicio;
-    if (lowerCampo.includes('contrato_fecha_fin') && fecha_fin) return fecha_fin;
-    if (lowerCampo.includes('contrato_monto') && monto) return monto;
+      return null;
+    },
+    [stableSelectedLocador, stableSelectedLocatario, stableSelectedComprador, stableSelectedVendedor, stableSelectedInmueble, nombre, tipoContrato, fecha_inicio, fecha_fin, monto]
+  );
 
-    return null;
-  }, [selectedLocador, selectedLocatario, selectedComprador, selectedVendedor, selectedInmueble, nombre, tipoContrato, fecha_inicio, fecha_fin, monto]);
-
+  // Actualizar valores cuando cambie la plantilla o datos relevantes
   useEffect(() => {
     if (!id_template) {
-      setValores({});
+      if (Object.keys(valores).length > 0 || editedFields.size > 0) {
+        setValores({});
+        setEditedFields(new Set());
+      }
       return;
     }
 
-    const selectedTemplate = templates.find(t => t.id === id_template);
+    const selectedTemplate = templates.find((t) => t.id === id_template);
     if (!selectedTemplate?.camposVariables) {
-      setValores({});
+      if (JSON.stringify(valores) !== JSON.stringify(contrato?.valores || {})) {
+        setValores(contrato?.valores || {});
+      }
+      if (editedFields.size > 0) {
+        setEditedFields(new Set());
+      }
       return;
     }
 
     const newValores = selectedTemplate.camposVariables.reduce((acc, campo) => {
       const autoValue = autoCompleteField(campo);
-      return { ...acc, [campo]: autoValue || '' };
+      return {
+        ...acc,
+        [campo]: editedFields.has(campo) && valores[campo] !== undefined ? valores[campo] : autoValue || contrato?.valores[campo] || '',
+      };
     }, {} as { [key: string]: string });
 
-    setValores(newValores);
+    // Only update if newValores is different from current valores
+    if (JSON.stringify(newValores) !== JSON.stringify(valores)) {
+      setValores(newValores);
+    }
   }, [
     id_template,
     templates,
-    selectedLocador,
-    selectedLocatario,
-    selectedComprador,
-    selectedVendedor,
-    selectedInmueble,
+    autoCompleteField,
+    editedFields,
+    stableSelectedLocador,
+    stableSelectedLocatario,
+    stableSelectedComprador,
+    stableSelectedVendedor,
+    stableSelectedInmueble,
     nombre,
     tipoContrato,
     fecha_inicio,
     fecha_fin,
     monto,
-    autoCompleteField
+    contrato, // Note: contrato is included, but not contrato?.valores
   ]);
 
     // Validar dinámicamente fechas y monto
-  // Validar dinámicamente fechas y monto
-useEffect(() => {
-  // Solo validar si hay valores para validar
-  if (!fecha_inicio && !fecha_fin && !monto) {
-    return;
-  }
+  useEffect(() => {
+    const data = {
+      fecha_inicio,
+      fecha_fin,
+      monto,
+      tipo_contrato: tipoContrato as 'ALQUILER_LOCACION' | 'COMPRA_VENTA' | '',
+      id_locador,
+      id_locatario,
+      id_comprador,
+      id_vendedor,
+      id_inmueble,
+      id_template,
+      nombre,
+    };
 
-  const newErrors: { [key: string]: string } = {};
+    const result = contractSchema.safeParse(data);
+    setFormErrors((prev) => {
+      // Mantener errores que no sean de fechas/monto
+      const { fecha_inicio, fecha_fin, monto, ...rest } = prev;
+      const newErrors: { [key: string]: string } = {};
 
-  // Validar que las fechas no estén vacías
-  if (fecha_inicio && !fecha_fin) {
-    newErrors.fecha_fin = 'La fecha de fin es obligatoria';
-  }
-  if (fecha_fin && !fecha_inicio) {
-    newErrors.fecha_inicio = 'La fecha de inicio es obligatoria';
-  }
-
-  // Validar que fecha_fin sea posterior a fecha_inicio
-  if (fecha_inicio && fecha_fin) {
-    const start = new Date(fecha_inicio);
-    const end = new Date(fecha_fin);
-    
-    if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
-      if (end <= start) {
-        newErrors.fecha_fin = 'La fecha de fin debe ser posterior a la de inicio';
+      if (!result.success) {
+        result.error.issues.forEach((issue) => {
+          const path = issue.path[0];
+          if (typeof path === 'string' && ['fecha_inicio', 'fecha_fin', 'monto'].includes(path)) {
+            newErrors[path] = issue.message;
+          }
+        });
       }
-    }
-  }
 
-  // Validar monto
-  if (monto) {
-    const montoNum = parseFloat(monto);
-    if (isNaN(montoNum) || montoNum <= 0) {
-      newErrors.monto = 'El monto debe ser un número positivo';
-    }
-  }
+      return { ...rest, ...newErrors };
+    });
+  }, [fecha_inicio, fecha_fin, monto, tipoContrato, id_locador, id_locatario, id_comprador, id_vendedor, id_inmueble, id_template, nombre]);
 
-  setFormErrors((prev) => {
-    // Mantener errores que no sean de fechas/monto
-    const { fecha_inicio, fecha_fin, monto, ...rest } = prev;
-    return { ...rest, ...newErrors };
-  });
-}, [fecha_inicio, fecha_fin, monto]);
-    const handleSubmit = async () => {
-    const data: Contrato = {
+  
+   // Manejar envío del formulario
+  const handleSubmit = async () => {
+    const data: any = {
       nombre,
       tipo_contrato: tipoContrato as 'ALQUILER_LOCACION' | 'COMPRA_VENTA',
       id_locador: tipoContrato === 'ALQUILER_LOCACION' ? id_locador : undefined,
@@ -393,6 +479,12 @@ useEffect(() => {
       return;
     }
 
+    if (Object.keys(valores).length === 0) {
+      setFormErrors((prev) => ({ ...prev, valores: 'Selecciona una plantilla con campos variables' }));
+      setError('Debe haber al menos un campo variable definido');
+      return;
+    }
+
     if (Object.values(valores).some((v) => !v)) {
       setFormErrors((prev) => ({ ...prev, valores: 'Completa todos los campos variables' }));
       setError('Por favor, completa todos los campos variables');
@@ -403,42 +495,26 @@ useEffect(() => {
       setLoading(true);
       setError(null);
       setFormErrors({});
-      const res = await fetch('/api/contracts', {
-        method: 'POST',
+      const res = await fetch(`/api/contracts/${id}`, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       });
+
       if (!res.ok) {
         const errorData = await res.json();
-        throw new Error(errorData.error || 'Error al crear contrato');
+        throw new Error(errorData.error || 'Error al actualizar contrato');
       }
-      const responseData = await res.json();
 
+      const responseData = await res.json();
       window.location.href = responseData.downloadUrl;
       router.push('/contratos');
     } catch (err: any) {
-      setError(err.message || 'Error al crear el contrato');
+      setError(err.message || 'Error al actualizar el contrato');
     } finally {
       setLoading(false);
     }
   };
-
-  const clienteOptions = clientes.map(cliente => ({
-    value: cliente.id_cliente,
-    label: `${cliente.nombre} ${cliente.apellido || ''}`.trim(),
-  }));
-
-  const inmuebleOptions = inmuebles.map(inmueble => ({
-    value: inmueble.id_inmueble,
-    label: inmueble.titulo,
-  }));
-
-  const templateOptions = templates
-    .filter(t => !tipoContrato || t.tipo === tipoContrato)
-    .map(template => ({
-      value: template.id,
-      label: template.nombre,
-    }));
 
   const isGeneralInfoComplete = !!nombre && !!tipoContrato;
   const isPartesComplete = !!id_inmueble && (
@@ -455,15 +531,117 @@ useEffect(() => {
     { id: 4, name: 'Template', completed: !!id_template },
   ];
 
-  console.log('=== DEBUG TEMPLATES ===');
-  console.log('Templates cargados:', templates);
-  console.log('Tipo contrato seleccionado:', tipoContrato);
-  console.log('Template options filtradas:', templateOptions);
-  console.log('isPrevStepComplete:', isPrevStepComplete);
-  console.log('isGeneralInfoComplete:', isGeneralInfoComplete);
-  console.log('isPartesComplete:', isPartesComplete);
-  console.log('isFechasMontoComplete:', isFechasMontoComplete);
-  console.log('======================');
+  if (loading && !contrato) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#f8f9fa' }}>
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-gray-200 border-t-[#63bae9] rounded-full animate-spin mb-4"></div>
+          <p className="text-lg font-semibold text-[#686363]">Cargando contrato...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // CONTRATO FIRMADO O INACTIVO → pantalla bloqueada
+
+// CONTRATO FIRMADO O INACTIVO → pantalla bloqueada
+if (contrato && (contrato.firmado || !contrato.activo)) {
+  const esFirmado = contrato.firmado;
+  const motivo = esFirmado
+    ? 'Este contrato ya fue firmado y no puede modificarse.' 
+    : 'Este contrato está inactivo y no puede ser editado.';
+
+  return (
+    <div className="min-h-screen bg-white">
+      <Header />
+
+      <div className="max-w-5xl mx-auto px-6 py-16">
+        <div className="bg-gradient-to-br from-gray-50 to-white rounded-3xl shadow-xl border border-gray-100 overflow-hidden">
+          <div 
+            className="h-2"
+            style={{ 
+              background: esFirmado 
+                ? 'linear-gradient(90deg, #63bae9 0%, #fcc238 100%)' 
+                : 'linear-gradient(90deg, #969696 0%, #686363 100%)'
+            }}
+          />
+
+          <div className="px-8 py-16 sm:px-12 sm:py-20 text-center">
+            <div 
+              className="inline-flex p-6 rounded-2xl mb-8 shadow-lg"
+              style={{ 
+                backgroundColor: esFirmado ? '#e0f2fe' : '#f5f5f5',
+                border: `2px solid ${esFirmado ? '#63bae9' : '#969696'}`
+              }}
+            >
+              <Lock 
+                className="w-16 h-16" 
+                style={{ color: esFirmado ? '#63bae9' : '#686363' }} 
+                strokeWidth={2.5}
+              />
+            </div>
+
+            <h1 
+              className="text-4xl sm:text-5xl font-bold mb-4"
+              style={{ color: '#686363' }}
+            >
+              Edición Bloqueada
+            </h1>
+
+            <div className="max-w-2xl mx-auto space-y-8">
+              <p 
+                className="text-lg sm:text-xl leading-relaxed"
+                style={{ color: '#969696' }}
+              >
+                {motivo}
+              </p>
+
+              {esFirmado && contrato.archivoPath && (
+                <div className="pt-4">
+                  <a
+                    href={contrato.archivoPath}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-3 px-8 py-4 rounded-xl font-semibold text-white shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:scale-105"
+                    style={{ backgroundColor: '#63bae9' }}
+                  >
+                    <FileText className="w-5 h-5" />
+                    Descargar Contrato Firmado
+                  </a>
+                </div>
+              )}
+
+              <div className="pt-8 border-t" style={{ borderColor: '#e5e5e5' }}>
+                <button
+                  onClick={() => router.push('/contratos')}
+                  className="inline-flex items-center gap-2 px-10 py-4 rounded-xl font-semibold shadow-md hover:shadow-xl transition-all duration-300 transform hover:scale-105"
+                  style={{ 
+                    backgroundColor: '#fcc238',
+                    color: '#686363'
+                  }}
+                >
+                  Volver al Listado
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div 
+          className="mt-8 text-center text-sm"
+          style={{ color: '#969696' }}
+        >
+          {esFirmado && (
+            <p className="flex items-center justify-center gap-2">
+              <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: '#63bae9' }} />
+              Contrato procesado y archivado correctamente
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: '#f8f9fa' }}>
@@ -477,10 +655,10 @@ useEffect(() => {
             </div>
             <div className="flex-1">
               <h1 className="text-4xl font-bold mb-2" style={{ color: '#686363' }}>
-                Crear Nuevo Contrato
+                Editar Contrato
               </h1>
               <p className="text-base" style={{ color: '#969696' }}>
-                Completa la información necesaria para generar tu contrato de manera profesional
+                Modifica la información del contrato existente
               </p>
 
               <div className="mt-8 flex items-center gap-2 flex-wrap">
@@ -761,7 +939,7 @@ useEffect(() => {
                       </label>
                       <div className="relative">
                         <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg font-bold" style={{ color: '#969696' }}>$</span>
-                       <input
+<input
   type="number"
   value={monto}
   onChange={(e) => {
@@ -858,7 +1036,10 @@ useEffect(() => {
                           <input
                             type="text"
                             value={valores[campo]}
-                            onChange={(e) => setValores({ ...valores, [campo]: e.target.value })}
+                            onChange={(e) => {
+                              setValores({ ...valores, [campo]: e.target.value });
+                              setEditedFields((prev) => new Set(prev).add(campo));
+                            }}
                             className="w-full px-4 py-3 rounded-lg border-2 transition-all duration-200 focus:outline-none"
                             style={{
                               borderColor: formErrors.valores && !valores[campo] ? '#ef4444' : (valores[campo] ? '#63bae9' : '#e5e7eb'),
@@ -1025,7 +1206,7 @@ useEffect(() => {
                     }}
                   >
                     <Save className="w-5 h-5" />
-                    {loading ? 'Creando...' : 'Crear Contrato'}
+                    {loading ? 'Actualizando...' : 'Actualizar Contrato'}
                   </button>
 
                   <button

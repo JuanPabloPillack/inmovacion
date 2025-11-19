@@ -64,6 +64,28 @@ export async function getUserById(id: string) {
   };
 }
 
+export async function getActiveUsers() {
+  const session = await auth();
+  if (!session?.user) {
+    throw new Error("No autenticado");
+  }
+
+  const users = await db.user.findMany({
+    where: { status: "active" },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+    },
+    orderBy: { name: "asc" },
+  });
+
+  return users.map((user) => ({
+    id: user.id,
+    name: user.name || user.email || "Usuario desconocido",
+  }));
+}
+
 export async function updateUser(id: string, data: { name: string; email: string; phone: string; role: "user" | "admin" }) {
   const session = await auth();
   console.log("updateUser - Session:", session);

@@ -1,4 +1,4 @@
-//src/app/(protected)/templates/page.tsx
+// src/app/(protected)/templates/page.tsx
 'use client';
 import { useState, useEffect } from 'react';
 import { FileText, Upload, Trash2, AlertCircle, Check, ArrowLeft, Tag, Download, Search, Calendar } from 'lucide-react';
@@ -10,12 +10,18 @@ interface Template {
   nombre: string;
   archivoPath: string;
   camposVariables: string[] | null;
+  tipo: 'ALQUILER_LOCACION' | 'COMPRA_VENTA';
   createdAt: string;
+  createdBy: {
+    id: string;
+    name: string;
+  };
 }
 
 function TemplatePage() {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [nombre, setNombre] = useState('');
+  const [tipo, setTipo] = useState<'ALQUILER_LOCACION' | 'COMPRA_VENTA' | ''>('');
   const [file, setFile] = useState<File | null>(null);
   const [campos, setCampos] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -25,14 +31,15 @@ function TemplatePage() {
   const [itemToDelete, setItemToDelete] = useState<{ id: number; nombre: string } | null>(null);
   const [search, setSearch] = useState('');
   const [fechaDesde, setFechaDesde] = useState('');
+  const [filterTipo, setFilterTipo] = useState<'ALQUILER_LOCACION' | 'COMPRA_VENTA' | ''>('');
   const [page, setPage] = useState(1);
   const [pageSize] = useState(10);
   const [total, setTotal] = useState(0);
 
   useEffect(() => {
-    setPage(1); // Resetear a la primera página al cambiar la búsqueda
+    setPage(1); // Resetear a la primera página al cambiar la búsqueda o filtros
     fetchTemplates();
-  }, [search]);
+  }, [search, filterTipo]);
 
   useEffect(() => {
     fetchTemplates(); // Carga inicial
@@ -44,6 +51,7 @@ function TemplatePage() {
       const params = new URLSearchParams();
       if (search) params.append('search', search);
       if (fechaDesde) params.append('fechaDesde', fechaDesde);
+      if (filterTipo) params.append('tipo', filterTipo);
       params.append('page', page.toString());
       params.append('pageSize', pageSize.toString());
       const url = `/api/templates?${params.toString()}`;
@@ -66,13 +74,14 @@ function TemplatePage() {
   };
 
   const handleUpload = async () => {
-    if (!nombre || !file) {
-      setError('Por favor, ingresa un nombre y selecciona un archivo .docx');
+    if (!nombre || !tipo || !file) {
+      setError('Por favor, ingresa un nombre, selecciona un tipo y selecciona un archivo .docx');
       return;
     }
 
     const formData = new FormData();
     formData.append('nombre', nombre);
+    formData.append('tipo', tipo);
     formData.append('file', file);
 
     try {
@@ -82,17 +91,21 @@ function TemplatePage() {
         method: 'POST',
         body: formData,
       });
-      if (!res.ok) throw new Error('Error al subir el template');
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Error al subir el template');
+      }
       const data = await res.json();
       setCampos(data.campos || []);
       setNombre('');
+      setTipo('');
       setFile(null);
       setSuccessMessage('Template subido exitosamente');
       setTimeout(() => setSuccessMessage(null), 5000);
       setPage(1); // Resetear a la primera página después de subir
       fetchTemplates();
-    } catch (err) {
-      setError('Error al subir el template');
+    } catch (err: any) {
+      setError(err.message);
     } finally {
       setLoading(false);
     }
@@ -148,7 +161,7 @@ function TemplatePage() {
               </div>
               <div>
                 <h1 className="text-3xl font-bold" style={{ color: '#686363' }}>
-                  Gestión de Templates
+                  Gestión de Plantillas
                 </h1>
                 <p className="text-sm mt-1" style={{ color: '#969696' }}>
                   Administra plantillas para generación de contratos
@@ -205,7 +218,7 @@ function TemplatePage() {
               </div>
               <div>
                 <h2 className="text-xl font-semibold" style={{ color: '#686363' }}>
-                  Subir Nuevo Template
+                  Subir Nueva Plantilla
                 </h2>
                 <p className="text-sm" style={{ color: '#969696' }}>
                   Carga un archivo .docx con campos variables
@@ -217,7 +230,7 @@ function TemplatePage() {
           <div className="p-6 space-y-5">
             <div>
               <label className="block text-sm font-semibold mb-2 flex items-center gap-2" style={{ color: '#686363' }}>
-                <span>Nombre del Template</span>
+                <span>Nombre de la Plantilla</span>
                 <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: '#fef9e7', color: '#fcc238' }}>Requerido</span>
               </label>
               <input
@@ -235,44 +248,106 @@ function TemplatePage() {
 
             <div>
               <label className="block text-sm font-semibold mb-2 flex items-center gap-2" style={{ color: '#686363' }}>
-                <span>Archivo .docx</span>
+                <span>Tipo de Plantilla</span>
                 <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: '#fef9e7', color: '#fcc238' }}>Requerido</span>
               </label>
-              <div className="relative">
-                <div className="border-2 border-dashed rounded-lg p-6 transition-all hover:border-opacity-100" style={{ borderColor: file ? '#63bae9' : '#e5e7eb', backgroundColor: file ? '#f0f9ff' : '#fafafa' }}>
-                  <input
-                    type="file"
-                    accept=".docx"
-                    onChange={(e) => setFile(e.target.files?.[0] || null)}
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                  />
-                  <div className="text-center">
-                    <FileText className="w-10 h-10 mx-auto mb-3" style={{ color: file ? '#63bae9' : '#969696' }} />
-                    {file ? (
-                      <div>
-                        <p className="font-semibold mb-1" style={{ color: '#686363' }}>{file.name}</p>
-                        <p className="text-xs" style={{ color: '#969696' }}>
-                          {(file.size / 1024).toFixed(2)} KB
-                        </p>
-                      </div>
-                    ) : (
-                      <div>
-                        <p className="font-medium mb-1" style={{ color: '#686363' }}>
-                          Haz clic o arrastra un archivo aquí
-                        </p>
-                        <p className="text-xs" style={{ color: '#969696' }}>
-                          Solo archivos .docx
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
+              <select
+                value={tipo}
+                onChange={(e) => setTipo(e.target.value as 'ALQUILER_LOCACION' | 'COMPRA_VENTA' | '')}
+                className="w-full px-4 py-3 rounded-lg border-2 border-gray-300 focus:outline-none focus:border-opacity-100 transition-all"
+                style={{
+                  color: '#686363',
+                  borderColor: tipo ? '#63bae9' : '#e5e7eb'
+                }}
+              >
+                <option value="">Seleccione un tipo</option>
+                <option value="ALQUILER_LOCACION">Alquiler/Locación</option>
+                <option value="COMPRA_VENTA">Compra/Venta</option>
+              </select>
             </div>
+
+<div>
+  <label className="block text-sm font-semibold mb-2 flex items-center gap-2" style={{ color: '#686363' }}>
+    <span>Archivo .docx</span>
+    <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: '#fef9e7', color: '#fcc238' }}>Requerido</span>
+  </label>
+  <div className="relative">
+    <div 
+      className="border-2 border-dashed rounded-lg p-6 transition-all hover:border-opacity-100" 
+      style={{ 
+        borderColor: error?.includes('docx') ? '#ef4444' : (file ? '#63bae9' : '#e5e7eb'),
+        backgroundColor: error?.includes('docx') ? '#fef2f2' : (file ? '#f0f9ff' : '#fafafa')
+      }}
+    >
+      <input
+        type="file"
+        accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        onChange={(e) => {
+          const selectedFile = e.target.files?.[0] || null;
+
+          if (!selectedFile) {
+            setFile(null);
+            setError(null);
+            return;
+          }
+
+          // Validación de extensión
+          if (!selectedFile.name.toLowerCase().endsWith('.docx')) {
+            setError('Solo se permiten archivos con extensión .docx');
+            setFile(null);
+            e.target.value = '';
+            return;
+          }
+
+          // Validación de MIME type
+          const validMime = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+          if (selectedFile.type !== validMime) {
+            setError('El archivo no es un documento Word válido (.docx)');
+            setFile(null);
+            e.target.value = '';
+            return;
+          }
+
+          setError(null);
+          setFile(selectedFile);
+        }}
+        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+      />
+      <div className="text-center">
+        <FileText 
+          className="w-10 h-10 mx-auto mb-3" 
+          style={{ color: error?.includes('docx') ? '#ef4444' : (file ? '#63bae9' : '#969696') }} 
+        />
+        {file ? (
+          <div>
+            <p className="font-semibold mb-1" style={{ color: '#686363' }}>{file.name}</p>
+            <p className="text-xs" style={{ color: '#969696' }}>
+              {(file.size / 1024).toFixed(2)} KB
+            </p>
+          </div>
+        ) : (
+          <div>
+            <p className="font-medium mb-1" style={{ color: '#686363' }}>
+              Haz clic o arrastra un archivo aquí
+            </p>
+            <p className="text-xs" style={{ color: '#969696' }}>
+              Solo archivos .docx
+            </p>
+          </div>
+        )}
+        {error?.includes('docx') && (
+          <p className="text-xs mt-3 font-medium text-red-600">
+            {error}
+          </p>
+        )}
+      </div>
+    </div>
+  </div>
+</div>
 
             <button
               onClick={handleUpload}
-              disabled={loading || !nombre || !file}
+              disabled={loading || !nombre || !tipo || !file}
               className="w-full py-4 px-6 rounded-lg font-semibold text-white flex items-center justify-center gap-3 transition-all hover:shadow-lg hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
               style={{ backgroundColor: '#fcc238' }}
             >
@@ -283,34 +358,55 @@ function TemplatePage() {
         </div>
 
         {/* Detected Fields */}
-        {campos.length > 0 && (
-          <div className="mb-8 p-6 rounded-xl shadow-sm border-2" style={{ backgroundColor: '#e8f7fd', borderColor: '#63bae9' }}>
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#63bae9' }}>
-                <Tag className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold" style={{ color: '#686363' }}>
-                  Campos Variables Detectados
-                </h3>
-                <p className="text-sm" style={{ color: '#969696' }}>
-                  Estos campos podrán ser rellenados al crear contratos
-                </p>
-              </div>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {campos.map((campo, index) => (
-                <span
-                  key={index}
-                  className="px-4 py-2 rounded-full text-sm font-semibold shadow-sm"
-                  style={{ backgroundColor: '#63bae9', color: 'white' }}
-                >
-                  {campo}
-                </span>
-              ))}
-            </div>
-          </div>
+{successMessage && (
+  <div className="mb-8 p-6 rounded-xl shadow-sm border-2" 
+       style={{ 
+         backgroundColor: campos.length > 0 ? '#e8f7fd' : '#fef9e7',
+         borderColor: campos.length > 0 ? '#63bae9' : '#fcc238'
+       }}>
+    <div className="flex items-center gap-3 mb-4">
+      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+        campos.length > 0 ? 'bg-[#63bae9]' : 'bg-[#fcc238]'
+      }`}>
+        {campos.length > 0 ? (
+          <Tag className="w-5 h-5 text-white" />
+        ) : (
+          <AlertCircle className="w-5 h-5 text-white" />
         )}
+      </div>
+      <div>
+        <h3 className="text-lg font-semibold" style={{ color: '#686363' }}>
+          {campos.length > 0 
+            ? 'Campos Variables Detectados' 
+            : 'Advertencia: Sin Campos Variables'}
+        </h3>
+        <p className="text-sm" style={{ color: '#969696' }}>
+          {campos.length > 0 
+            ? 'Estos campos podrán ser rellenados al crear contratos'
+            : 'El documento no contiene campos con formato {nombre}. La plantilla se subió, pero no será muy útil para generar contratos automáticos.'}
+        </p>
+      </div>
+    </div>
+
+    {campos.length > 0 ? (
+      <div className="flex flex-wrap gap-2">
+        {campos.map((campo, index) => (
+          <span
+            key={index}
+            className="px-4 py-2 rounded-full text-sm font-semibold shadow-sm"
+            style={{ backgroundColor: '#63bae9', color: 'white' }}
+          >
+            {campo}
+          </span>
+        ))}
+      </div>
+    ) : (
+      <div className="text-sm font-medium" style={{ color: '#fcc238' }}>
+        Sugerencia: Usa llaves como {'{locador_nombre}'}, {'{monto}'}, {'{fecha_inicio}'} en tu Word.
+      </div>
+    )}
+  </div>
+)}
 
         {/* Filtros y búsqueda */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 mb-8 p-6">
@@ -333,6 +429,24 @@ function TemplatePage() {
                 />
                 <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5" style={{ color: '#969696' }} />
               </div>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold mb-2" style={{ color: '#686363' }}>
+                Tipo de Plantilla
+              </label>
+              <select
+                value={filterTipo}
+                onChange={(e) => setFilterTipo(e.target.value as 'ALQUILER_LOCACION' | 'COMPRA_VENTA' | '')}
+                className="w-full px-4 py-3 rounded-lg border-2 border-gray-300 focus:outline-none focus:border-opacity-100 transition-all"
+                style={{
+                  color: '#686363',
+                  borderColor: filterTipo ? '#63bae9' : '#e5e7eb'
+                }}
+              >
+                <option value="">Todos los tipos</option>
+                <option value="ALQUILER_LOCACION">Alquiler/Locación</option>
+                <option value="COMPRA_VENTA">Compra/Venta</option>
+              </select>
             </div>
             <div>
               <label className="block text-sm font-semibold mb-2" style={{ color: '#686363' }}>
@@ -369,7 +483,7 @@ function TemplatePage() {
         <div className="bg-white rounded-xl shadow-sm border border-gray-200">
           <div className="p-6 border-b border-gray-200">
             <h2 className="text-2xl font-semibold" style={{ color: '#686363' }}>
-              Templates Disponibles
+              Plantillas Disponibles
             </h2>
             <p className="text-sm mt-1" style={{ color: '#969696' }}>
               Plantillas cargadas en el sistema
@@ -380,7 +494,7 @@ function TemplatePage() {
             {loading && templates.length === 0 ? (
               <div className="text-center py-16">
                 <div className="inline-block w-12 h-12 border-4 border-gray-200 rounded-full animate-spin" style={{ borderTopColor: '#fcc238' }}></div>
-                <p className="mt-4 text-lg font-medium" style={{ color: '#969696' }}>Cargando templates...</p>
+                <p className="mt-4 text-lg font-medium" style={{ color: '#969696' }}>Cargando Plantillas...</p>
               </div>
             ) : templates.length === 0 ? (
               <div className="text-center py-16">
@@ -388,10 +502,10 @@ function TemplatePage() {
                   <FileText className="w-12 h-12" style={{ color: '#fcc238' }} />
                 </div>
                 <h3 className="text-xl font-semibold mb-2" style={{ color: '#686363' }}>
-                  No hay templates disponibles
+                  No hay Plantillas disponibles
                 </h3>
                 <p className="text-lg" style={{ color: '#969696' }}>
-                  Haz un ajuste en la búsqueda o sube un nuevo template para comenzar
+                  Haz un ajuste en la búsqueda o sube una nueva plantilla para comenzar
                 </p>
               </div>
             ) : (
@@ -419,6 +533,10 @@ function TemplatePage() {
                             <span className="w-2 h-2 rounded-full" style={{ backgroundColor: '#63bae9' }}></span>
                             {template.archivoPath}
                           </p>
+                          <p className="text-sm mb-3 flex items-center gap-2" style={{ color: '#969696' }}>
+                            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: '#63bae9' }}></span>
+                            Tipo: {template.tipo === 'ALQUILER_LOCACION' ? 'Alquiler/Locación' : 'Compra/Venta'}
+                          </p>
 
                           {template.camposVariables && template.camposVariables.length > 0 && (
                             <div>
@@ -439,15 +557,24 @@ function TemplatePage() {
                             </div>
                           )}
 
-                          <p className="text-xs mt-3" style={{ color: '#969696' }}>
-                            Creado: {new Date(template.createdAt).toLocaleDateString('es-ES', {
-                              day: '2-digit',
-                              month: 'long',
-                              year: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit'
-                            })}
-                          </p>
+                         <div className="flex items-center gap-4 mt-3 text-xs" style={{ color: '#969696' }}>
+  <div className="flex items-center gap-2">
+    <div className="w-6 h-6 rounded-full bg-gray-300 flex items-center justify-center text-[10px] font-bold text-white">
+      {template.createdBy.name.charAt(0).toUpperCase()}
+    </div>
+    <span>Por {template.createdBy.name}</span>
+  </div>
+  <span>•</span>
+  <span>
+    {new Date(template.createdAt).toLocaleDateString('es-ES', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    })}
+  </span>
+</div>
                         </div>
 
                         <div className="flex gap-2">
@@ -508,8 +635,8 @@ function TemplatePage() {
           isOpen={deleteModalOpen}
           onClose={closeModal}
           onConfirm={confirmDelete}
-          title="¿Eliminar template?"
-          message={itemToDelete ? `¿Estás seguro de que quieres eliminar el template "${itemToDelete.nombre}"? Esta acción no se puede deshacer.` : ''}
+          title="¿Eliminar Plantilla?"
+          message={itemToDelete ? `¿Estás seguro de que quieres eliminar la plantilla "${itemToDelete.nombre}"? Esta acción no se puede deshacer.` : ''}
           confirmText="Eliminar"
           cancelText="Cancelar"
           variant="danger"
