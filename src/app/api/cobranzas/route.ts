@@ -119,6 +119,38 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // --- Función robusta para parsear una fecha ---
+    const parseFecha = (f: any): Date => {
+      if (!f) return new Date();
+
+      // Si ya es Date válida → OK
+      if (f instanceof Date && !isNaN(f.getTime())) return f;
+
+      // Si llega como string
+      if (typeof f === "string") {
+        // Normalizo: YYYY-MM-DD
+        const normalizada = f.replace(/\//g, "-");
+
+        // Intento YYYY-MM-DD
+        const d1 = new Date(normalizada);
+        if (!isNaN(d1.getTime())) return d1;
+
+        // Intento DD-MM-YYYY
+        const m = normalizada.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+        if (m) {
+          const [_, dd, mm, yyyy] = m;
+          return new Date(`${yyyy}-${mm}-${dd}T00:00:00`);
+        }
+      }
+
+      // Último recurso
+      const fallback = new Date(f);
+      if (!isNaN(fallback.getTime())) return fallback;
+
+      // Si es totalmente inválida → hoy
+      return new Date();
+    };
+
     const created = await Promise.all(
       cobranzas.map(async (c: any) => {
         const contrato = await db.contrato.findUnique({
@@ -126,18 +158,19 @@ export async function POST(req: NextRequest) {
           include: { inmueble: { include: { ubicacion: true } } },
         });
 
+        const fecha = parseFecha(c.fecha_cobranza);
+
         return db.cobranza.create({
           data: {
             id_cliente: Number(id_cliente),
             id_contrato: Number(c.id_contrato),
             id_inmueble: contrato?.inmueble?.id_inmueble || null,
             monto: Number(c.monto),
-            fecha_cobranza: new Date(c.fecha_cobranza),
+            fecha_cobranza: fecha,
             medio_pago: c.medio_pago,
             concepto: c.concepto,
             observaciones: c.observaciones || null,
             activa: true,
-            // ⚠️ Una cobranza nueva SIEMPRE NO está rendida
             id_rendicion: null,
           },
           include: {

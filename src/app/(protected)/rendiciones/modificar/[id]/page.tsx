@@ -1,7 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+// rendiciones/modificar/[id]/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
+import { useParams } from "next/navigation";
 import toast from "react-hot-toast";
 import Header from "@/components/ui/Header";
 
@@ -16,12 +18,13 @@ interface Cobranza {
   concepto: string;
   cliente: { nombre: string };
   genera_recibo: boolean;
-  fecha_cobranza?: string;
-  mes_ipc?: number;
-  anio_ipc?: number;
+  fecha?: string;
 }
 
-export default function AltaRendicionPage() {
+export default function ModificarRendicionPage() {
+  const params = useParams();
+  const id_rendicion = params?.id;
+
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [loadedClientes, setLoadedClientes] = useState(false);
 
@@ -39,23 +42,22 @@ export default function AltaRendicionPage() {
   const currentYear = new Date().getFullYear();
   const years = Array.from({ length: currentYear - 2020 + 1 }, (_, i) => 2020 + i);
 
-  // ==========================================================
+  // ============================
   // CARGAR CLIENTES
-  // ==========================================================
+  // ============================
   const cargarClientes = async () => {
     try {
       const res = await fetch("/api/clientes");
       const data = await res.json();
-      const lista: Cliente[] = Array.isArray(data)
+      const lista = Array.isArray(data)
         ? data
         : Array.isArray(data?.clientes)
         ? data.clientes
         : [];
       setClientes(lista);
+      setLoadedClientes(true);
     } catch (e) {
-      console.error("❌ Error al cargar clientes:", e);
       toast.error("Error al cargar clientes");
-    } finally {
       setLoadedClientes(true);
     }
   };
@@ -64,48 +66,71 @@ export default function AltaRendicionPage() {
     cargarClientes();
   }, []);
 
-  // ==========================================================
+  // ============================
+  // CARGAR DATOS DE LA RENDICIÓN
+  // ============================
+  const cargarRendicion = async () => {
+    if (!id_rendicion) return;
+
+    try {
+      const res = await fetch(`/api/rendiciones/${id_rendicion}`);
+      const data = await res.json();
+
+      if (!data?.rendicion) {
+        toast.error("Rendición no encontrada");
+        return;
+      }
+
+      const r = data.rendicion;
+
+      setMesIPC(r.mes_ipc ? String(r.mes_ipc) : "");
+      setAnioIPC(r.anio_ipc ? String(r.anio_ipc) : "");
+
+      setSeleccionadas(
+        Array.isArray(r.cobranzas)
+          ? r.cobranzas.map((c: any) => c.id_cobranza)
+          : []
+      );
+
+      setCliente(r.id_cliente ? String(r.id_cliente) : "");
+      setAnio(r.anio ? String(r.anio) : "");
+      setMes(r.mes ? String(r.mes) : "");
+    } catch (e) {
+      toast.error("Error al cargar rendición");
+    }
+  };
+
+  useEffect(() => {
+    cargarRendicion();
+  }, [id_rendicion]);
+
+  // ============================
   // CARGAR COBRANZAS
-  // ==========================================================
+  // ============================
   const cargarCobranzas = async () => {
     if (!loadedClientes) return;
 
-    if (!cliente && !anio && !mes) {
-      setCobranzas([]);
-      setSeleccionadas([]);
-      setMesIPC("");
-      setAnioIPC("");
-      return;
-    }
-
     try {
       const params = new URLSearchParams();
-      params.append("sinRendir", "1");
+      params.append("page", "1");
+      params.append("pageSize", "1000");
       if (cliente) params.append("cliente", cliente);
       if (anio) params.append("anio", anio);
       if (mes) params.append("mes", mes);
-      params.append("page", "1");
-      params.append("pageSize", "1000");
+      params.append("incluirSeleccionadas", "1");
+      params.append("rendicionActual", String(id_rendicion));
 
-      const url = `/api/cobranzas?${params.toString()}`;
-      const res = await fetch(url);
+      const res = await fetch(`/api/cobranzas?${params.toString()}`);
       const data = await res.json();
 
       const lista: Cobranza[] = Array.isArray(data?.cobranzas)
         ? data.cobranzas.map((c: any) => ({
             ...c,
-            fecha_cobranza: c.fecha_cobranza,
+            fecha: c.fecha_cobranza,
           }))
         : [];
-
       setCobranzas(lista);
-      setSeleccionadas([]);
-      setMesIPC("");
-      setAnioIPC("");
-
-      if (lista.length === 0) toast("No hay cobranzas con esos filtros");
     } catch (e) {
-      console.error("❌ Error al cargar cobranzas:", e);
       toast.error("Error al cargar cobranzas");
     }
   };
@@ -114,99 +139,105 @@ export default function AltaRendicionPage() {
     cargarCobranzas();
   }, [cliente, anio, mes, loadedClientes]);
 
-  // ==========================================================
-  // TOGGLE COBRANZA + AUTO IPC
-  // ==========================================================
+  // ============================
+  // TOGGLE + IPC AUTO
+  // ============================
   const toggle = (id: number) => {
-    const next = seleccionadas.includes(id)
-      ? seleccionadas.filter((x) => x !== id)
-      : [...seleccionadas, id];
+    setSeleccionadas((prev) => {
+      const next = prev.includes(id)
+        ? prev.filter((x) => x !== id)
+        : [...prev, id];
 
-    setSeleccionadas(next);
+      const seleccionadasAhora = cobranzas.filter((c) =>
+        next.includes(c.id_cobranza)
+      );
 
-    const seleccionadasAhora = cobranzas.filter((c) => next.includes(c.id_cobranza));
+      if (seleccionadasAhora.length === 0) {
+        setMesIPC("");
+        setAnioIPC("");
+        return next;
+      }
 
-    if (seleccionadasAhora.length === 0) {
-      setMesIPC("");
-      setAnioIPC("");
-      return;
-    }
+      const fechasValidas = seleccionadasAhora
+        .map((c) => (c.fecha ? new Date(c.fecha) : null))
+        .filter(Boolean) as Date[];
 
-    const fechasValidas = seleccionadasAhora
-      .map((c) => (c.fecha_cobranza ? new Date(c.fecha_cobranza) : null))
-      .filter(Boolean) as Date[];
+      if (fechasValidas.length > 0) {
+        const masReciente = fechasValidas.reduce((a, b) => (a > b ? a : b));
+        setMesIPC(String(masReciente.getMonth() + 1));
+        setAnioIPC(String(masReciente.getFullYear()));
+      }
 
-    if (fechasValidas.length > 0) {
-      const masReciente = fechasValidas.reduce((a, b) => (a > b ? a : b));
-      setMesIPC(String(masReciente.getMonth() + 1));
-      setAnioIPC(String(masReciente.getFullYear()));
-    }
+      return next;
+    });
   };
 
-  // ==========================================================
-  // GUARDAR RENDICIÓN + DESCARGAR EXCEL DIRECTO
-  // ==========================================================
+  // ============================
+  // GUARDAR Y DESCARGAR EXCEL DIRECTO
+  // ============================
   const guardar = async () => {
-    if (seleccionadas.length === 0) return toast.error("Seleccioná al menos una cobranza");
+    if (seleccionadas.length === 0)
+      return toast.error("Seleccioná al menos una cobranza");
 
     setLoading(true);
 
     try {
       const payload = {
         cobranzas: seleccionadas,
-        fecha_rendicion: new Date(),
         mes_ipc: mesIPC ? Number(mesIPC) : undefined,
         anio_ipc: anioIPC ? Number(anioIPC) : undefined,
       };
 
-      // Crear la rendición y recibir el Excel directamente
-      const res = await fetch("/api/rendiciones", {
-        method: "POST",
+      const res = await fetch(`/api/rendiciones/${id_rendicion}`, {
+        method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
 
       if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.error || "Error desconocido");
+        const err = await res.json();
+        throw new Error(err.error || "Error actualizando");
       }
 
-      // Descargar Excel directamente
+      // Recibir directamente el Excel
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `Rendicion.xlsx`;
+      a.download = `Rendicion_${id_rendicion}.xlsx`;
       document.body.appendChild(a);
       a.click();
       a.remove();
       window.URL.revokeObjectURL(url);
 
-      toast.success("Rendición registrada y Excel descargado");
+      toast.success("Rendición modificada y Excel descargado");
 
       setTimeout(() => {
         window.location.href = "/rendiciones";
       }, 1000);
     } catch (e: any) {
-      console.error("❌ Error al guardar rendición:", e);
-      toast.error(e.message || "Error al guardar rendición");
+      toast.error(e.message || "Error guardando");
     } finally {
       setLoading(false);
     }
   };
 
-  // ==========================================================
+  // ============================
   // RENDER
-  // ==========================================================
+  // ============================
   return (
     <div className="min-h-screen bg-gray-50">
       <Header />
+
       <div className="max-w-4xl mx-auto px-6 py-10">
-        <h1 className="text-3xl font-bold mb-6 text-gray-700">Nueva Rendición</h1>
+        <h1 className="text-3xl font-bold mb-6 text-gray-700">
+          Modificar Rendición
+        </h1>
 
         <div className="bg-white p-6 rounded-xl shadow space-y-6">
           {/* FILTROS */}
           <h2 className="font-semibold text-lg">Filtrar Cobranzas</h2>
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="text-sm font-medium">Cliente</label>
@@ -258,7 +289,8 @@ export default function AltaRendicionPage() {
           </div>
 
           {/* IPC */}
-          <h2 className="font-semibold text-lg mt-6">Ajuste IPC (opcional)</h2>
+          <h2 className="font-semibold text-lg mt-6">Ajuste IPC</h2>
+
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-sm font-medium">Mes IPC</label>
@@ -295,6 +327,7 @@ export default function AltaRendicionPage() {
 
           {/* LISTA COBRANZAS */}
           <h2 className="font-semibold text-lg mt-6">Seleccionar Cobranzas</h2>
+
           <div className="space-y-3">
             {cobranzas.map((c) => (
               <label
@@ -306,13 +339,15 @@ export default function AltaRendicionPage() {
                   checked={seleccionadas.includes(c.id_cobranza)}
                   onChange={() => toggle(c.id_cobranza)}
                 />
+
                 <div>
                   <div className="font-semibold">{c.cliente.nombre}</div>
+
                   <div className="text-sm text-gray-500">
                     {c.concepto} — ${c.monto}
-                    {c.fecha_cobranza && (
+                    {c.fecha && (
                       <span className="ml-2 text-xs text-gray-400">
-                        ({new Date(c.fecha_cobranza).toLocaleDateString("es-AR")})
+                        ({new Date(c.fecha).toLocaleDateString("es-AR")})
                       </span>
                     )}
                   </div>
@@ -335,7 +370,7 @@ export default function AltaRendicionPage() {
               disabled={loading}
               className="w-1/2 px-6 py-3 rounded-lg text-white bg-[#63bae9] hover:opacity-90"
             >
-              {loading ? "Guardando..." : "Guardar Rendición"}
+              {loading ? "Guardando..." : "Guardar Cambios"}
             </button>
           </div>
         </div>
