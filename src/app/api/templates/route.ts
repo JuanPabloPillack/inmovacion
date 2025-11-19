@@ -5,6 +5,7 @@ import fs from 'fs/promises';
 import { parseOfficeAsync } from 'officeparser';
 import { db } from '@/lib/db';
 import { z } from 'zod';
+import { auth } from '../../../../auth';
 
 // Esquema de validación para POST
 const templateSchema = z.object({
@@ -18,42 +19,87 @@ export async function POST(req: NextRequest) {
     const file = formData.get('file') as File;
     const nombre = formData.get('nombre') as string;
     const tipo = formData.get('tipo') as string;
+    const session = await auth();
 
-    // Validar datos
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+    }
+
+    // Validar datos básicos
     const validatedData = templateSchema.parse({ nombre, tipo });
     if (!file) {
       return NextResponse.json({ error: 'Falta el archivo' }, { status: 400 });
+    }
+
+    // === VALIDACIÓN DE TIPO DE ARCHIVO (.docx) ===
+    const validExtension = '.docx';
+    const validMimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+    if (!file.name.toLowerCase().endsWith(validExtension)) {
+      return NextResponse.json(
+        { error: 'Solo se permiten archivos con extensión .docx' },
+        { status: 400 }
+      );
+    }
+
+    if (file.type !== validMimeType) {
+      return NextResponse.json(
+        { error: 'El archivo no es un documento Word válido (.docx)' },
+        { status: 400 }
+      );
     }
 
     // Guardar archivo
     const buffer = Buffer.from(await file.arrayBuffer());
     const filename = `${Date.now()}-${file.name}`;
     const filePath = path.join(process.cwd(), 'public/uploads/templates', filename);
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
     await fs.writeFile(filePath, buffer);
 
     // Extraer texto y campos variables
-    const text = (await parseOfficeAsync(filePath)) as string;
+    let text: string;
+    try {
+      text = (await parseOfficeAsync(filePath)) as string;
+    } catch (parseError) {
+      await fs.unlink(filePath).catch(() => {});
+      return NextResponse.json(
+        { error: 'No se pudo leer el archivo Word. Asegúrate de que sea un .docx válido.' },
+        { status: 400 }
+      );
+    }
+
     const regex = /\{([^}]+)\}/g;
     const matches = text.matchAll(regex);
     const campos = [...new Set([...matches].map((match) => match[1].trim()))];
 
-    console.log('Campos encontrados (sin llaves):', campos);
+    // === VALIDACIÓN: PLANTILLA DEBE TENER AL MENOS UN CAMPO VARIABLE ===
+    if (campos.length === 0) {
+      await fs.unlink(filePath).catch(() => {});
+      return NextResponse.json(
+        { 
+          error: 'La plantilla no contiene campos variables. Debe incluir al menos un campo con formato {nombre_campo} en el documento.' 
+        },
+        { status: 400 }
+      );
+    }
 
-    // Guardar en la base de datos
+    // Guardar en DB
     const template = await db.template.create({
       data: {
         nombre: validatedData.nombre,
         archivoPath: `/uploads/templates/${filename}`,
         camposVariables: campos,
         tipo: validatedData.tipo,
+        createdById: session.user.id,
       },
     });
 
     return NextResponse.json({ template, campos }, { status: 201 });
+
   } catch (error) {
     console.error('Error al subir template:', error);
     if (error instanceof z.ZodError) {
-return NextResponse.json({ error: error.issues }, { status: 400 });
+      return NextResponse.json({ error: error.issues }, { status: 400 });
     }
     return NextResponse.json({ error: 'Error al procesar el archivo' }, { status: 500 });
   }
@@ -85,14 +131,30 @@ export async function GET(req: NextRequest) {
     const [templates, total] = await Promise.all([
       db.template.findMany({
         where,
+        include: {
+      createdBy: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      },
+    },
         orderBy: { createdAt: 'asc' },
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
       db.template.count({ where }),
     ]);
+    const formattedTemplates = templates.map((t) => ({
+  ...t,
+  createdBy: {
+    id: t.createdBy.id,
+    name: t.createdBy.name || t.createdBy.email || 'Usuario desconocido',
+  },
+}));
 
-    return NextResponse.json({ templates, total, page, pageSize }, { status: 200 });
+    return NextResponse.json({ templates: formattedTemplates, total, page, pageSize }, { status: 200 });
   } catch (error) {
     console.error('Error al listar templates:', error);
     return NextResponse.json({ error: 'Error al obtener templates' }, { status: 500 });

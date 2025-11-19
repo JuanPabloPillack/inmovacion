@@ -4,6 +4,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { FileText, PlusCircle, AlertCircle, Download, Trash2, Calendar, DollarSign, User, Home, Search, ArrowLeft, Filter, X, Edit3, Eye, CheckCircle, XCircle, MoreVertical } from 'lucide-react';
 import Combobox from '@/components/ui/combobox';
+import Header from '@/components/ui/Header';
 
 interface Cliente { id_cliente: number; nombre: string; }
 interface Inmueble { id_inmueble: number; titulo: string; }
@@ -223,6 +224,7 @@ useEffect(() => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+      <Header />
       <header className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
@@ -536,11 +538,14 @@ useEffect(() => {
                   const { cliente1, cliente2 } = getClienteLabels(contrato.tipo_contrato);
 
                   return (
+                    
                     <div
                       key={contrato.id_contrato}
                       className="group border border-gray-200 rounded-xl overflow-hidden hover:shadow-xl transition-all duration-300 bg-white relative"
                     >
+                      
                       <div className="bg-gradient-to-r from-[#63bae9]/5 via-[#63bae9]/3 to-transparent p-6 border-b border-gray-100">
+                      
                         <div className="flex items-start justify-between gap-4">
                           <div className="flex items-start gap-4 flex-1 min-w-0">
                             <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-[#63bae9] to-[#63bae9]/80 flex items-center justify-center flex-shrink-0 shadow-sm">
@@ -725,8 +730,14 @@ useEffect(() => {
                               <Calendar className="w-3.5 h-3.5" />
                               <span className="font-medium">Creado:</span>
                               <span className="font-bold text-[#686363]">
-                                {new Date(contrato.createdAt).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}
-                              </span>
+  {new Date(contrato.createdAt).toLocaleDateString('es-ES', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  }).replace(',', ' •')}
+</span>
                             </div>
                             <div className="flex items-center gap-2 text-xs text-[#969696]">
                               <User className="w-3.5 h-3.5" />
@@ -737,8 +748,14 @@ useEffect(() => {
                               <Calendar className="w-3.5 h-3.5" />
                               <span className="font-medium">Actualizado:</span>
                               <span className="font-bold text-[#686363]">
-                                {new Date(contrato.updatedAt).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}
-                              </span>
+  {new Date(contrato.updatedAt).toLocaleDateString('es-ES', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  }).replace(',', ' •')}
+</span>
                             </div>
                           </div>
                           <div className="flex items-center gap-2">

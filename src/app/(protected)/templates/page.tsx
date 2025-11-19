@@ -12,6 +12,10 @@ interface Template {
   camposVariables: string[] | null;
   tipo: 'ALQUILER_LOCACION' | 'COMPRA_VENTA';
   createdAt: string;
+  createdBy: {
+    id: string;
+    name: string;
+  };
 }
 
 function TemplatePage() {
@@ -262,42 +266,84 @@ function TemplatePage() {
               </select>
             </div>
 
-            <div>
-              <label className="block text-sm font-semibold mb-2 flex items-center gap-2" style={{ color: '#686363' }}>
-                <span>Archivo .docx</span>
-                <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: '#fef9e7', color: '#fcc238' }}>Requerido</span>
-              </label>
-              <div className="relative">
-                <div className="border-2 border-dashed rounded-lg p-6 transition-all hover:border-opacity-100" style={{ borderColor: file ? '#63bae9' : '#e5e7eb', backgroundColor: file ? '#f0f9ff' : '#fafafa' }}>
-                  <input
-                    type="file"
-                    accept=".docx"
-                    onChange={(e) => setFile(e.target.files?.[0] || null)}
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                  />
-                  <div className="text-center">
-                    <FileText className="w-10 h-10 mx-auto mb-3" style={{ color: file ? '#63bae9' : '#969696' }} />
-                    {file ? (
-                      <div>
-                        <p className="font-semibold mb-1" style={{ color: '#686363' }}>{file.name}</p>
-                        <p className="text-xs" style={{ color: '#969696' }}>
-                          {(file.size / 1024).toFixed(2)} KB
-                        </p>
-                      </div>
-                    ) : (
-                      <div>
-                        <p className="font-medium mb-1" style={{ color: '#686363' }}>
-                          Haz clic o arrastra un archivo aquí
-                        </p>
-                        <p className="text-xs" style={{ color: '#969696' }}>
-                          Solo archivos .docx
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
+<div>
+  <label className="block text-sm font-semibold mb-2 flex items-center gap-2" style={{ color: '#686363' }}>
+    <span>Archivo .docx</span>
+    <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: '#fef9e7', color: '#fcc238' }}>Requerido</span>
+  </label>
+  <div className="relative">
+    <div 
+      className="border-2 border-dashed rounded-lg p-6 transition-all hover:border-opacity-100" 
+      style={{ 
+        borderColor: error?.includes('docx') ? '#ef4444' : (file ? '#63bae9' : '#e5e7eb'),
+        backgroundColor: error?.includes('docx') ? '#fef2f2' : (file ? '#f0f9ff' : '#fafafa')
+      }}
+    >
+      <input
+        type="file"
+        accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        onChange={(e) => {
+          const selectedFile = e.target.files?.[0] || null;
+
+          if (!selectedFile) {
+            setFile(null);
+            setError(null);
+            return;
+          }
+
+          // Validación de extensión
+          if (!selectedFile.name.toLowerCase().endsWith('.docx')) {
+            setError('Solo se permiten archivos con extensión .docx');
+            setFile(null);
+            e.target.value = '';
+            return;
+          }
+
+          // Validación de MIME type
+          const validMime = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+          if (selectedFile.type !== validMime) {
+            setError('El archivo no es un documento Word válido (.docx)');
+            setFile(null);
+            e.target.value = '';
+            return;
+          }
+
+          setError(null);
+          setFile(selectedFile);
+        }}
+        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+      />
+      <div className="text-center">
+        <FileText 
+          className="w-10 h-10 mx-auto mb-3" 
+          style={{ color: error?.includes('docx') ? '#ef4444' : (file ? '#63bae9' : '#969696') }} 
+        />
+        {file ? (
+          <div>
+            <p className="font-semibold mb-1" style={{ color: '#686363' }}>{file.name}</p>
+            <p className="text-xs" style={{ color: '#969696' }}>
+              {(file.size / 1024).toFixed(2)} KB
+            </p>
+          </div>
+        ) : (
+          <div>
+            <p className="font-medium mb-1" style={{ color: '#686363' }}>
+              Haz clic o arrastra un archivo aquí
+            </p>
+            <p className="text-xs" style={{ color: '#969696' }}>
+              Solo archivos .docx
+            </p>
+          </div>
+        )}
+        {error?.includes('docx') && (
+          <p className="text-xs mt-3 font-medium text-red-600">
+            {error}
+          </p>
+        )}
+      </div>
+    </div>
+  </div>
+</div>
 
             <button
               onClick={handleUpload}
@@ -312,34 +358,55 @@ function TemplatePage() {
         </div>
 
         {/* Detected Fields */}
-        {campos.length > 0 && (
-          <div className="mb-8 p-6 rounded-xl shadow-sm border-2" style={{ backgroundColor: '#e8f7fd', borderColor: '#63bae9' }}>
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#63bae9' }}>
-                <Tag className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold" style={{ color: '#686363' }}>
-                  Campos Variables Detectados
-                </h3>
-                <p className="text-sm" style={{ color: '#969696' }}>
-                  Estos campos podrán ser rellenados al crear contratos
-                </p>
-              </div>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {campos.map((campo, index) => (
-                <span
-                  key={index}
-                  className="px-4 py-2 rounded-full text-sm font-semibold shadow-sm"
-                  style={{ backgroundColor: '#63bae9', color: 'white' }}
-                >
-                  {campo}
-                </span>
-              ))}
-            </div>
-          </div>
+{successMessage && (
+  <div className="mb-8 p-6 rounded-xl shadow-sm border-2" 
+       style={{ 
+         backgroundColor: campos.length > 0 ? '#e8f7fd' : '#fef9e7',
+         borderColor: campos.length > 0 ? '#63bae9' : '#fcc238'
+       }}>
+    <div className="flex items-center gap-3 mb-4">
+      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+        campos.length > 0 ? 'bg-[#63bae9]' : 'bg-[#fcc238]'
+      }`}>
+        {campos.length > 0 ? (
+          <Tag className="w-5 h-5 text-white" />
+        ) : (
+          <AlertCircle className="w-5 h-5 text-white" />
         )}
+      </div>
+      <div>
+        <h3 className="text-lg font-semibold" style={{ color: '#686363' }}>
+          {campos.length > 0 
+            ? 'Campos Variables Detectados' 
+            : 'Advertencia: Sin Campos Variables'}
+        </h3>
+        <p className="text-sm" style={{ color: '#969696' }}>
+          {campos.length > 0 
+            ? 'Estos campos podrán ser rellenados al crear contratos'
+            : 'El documento no contiene campos con formato {nombre}. La plantilla se subió, pero no será muy útil para generar contratos automáticos.'}
+        </p>
+      </div>
+    </div>
+
+    {campos.length > 0 ? (
+      <div className="flex flex-wrap gap-2">
+        {campos.map((campo, index) => (
+          <span
+            key={index}
+            className="px-4 py-2 rounded-full text-sm font-semibold shadow-sm"
+            style={{ backgroundColor: '#63bae9', color: 'white' }}
+          >
+            {campo}
+          </span>
+        ))}
+      </div>
+    ) : (
+      <div className="text-sm font-medium" style={{ color: '#fcc238' }}>
+        Sugerencia: Usa llaves como {'{locador_nombre}'}, {'{monto}'}, {'{fecha_inicio}'} en tu Word.
+      </div>
+    )}
+  </div>
+)}
 
         {/* Filtros y búsqueda */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 mb-8 p-6">
@@ -490,15 +557,24 @@ function TemplatePage() {
                             </div>
                           )}
 
-                          <p className="text-xs mt-3" style={{ color: '#969696' }}>
-                            Creado: {new Date(template.createdAt).toLocaleDateString('es-ES', {
-                              day: '2-digit',
-                              month: 'long',
-                              year: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit'
-                            })}
-                          </p>
+                         <div className="flex items-center gap-4 mt-3 text-xs" style={{ color: '#969696' }}>
+  <div className="flex items-center gap-2">
+    <div className="w-6 h-6 rounded-full bg-gray-300 flex items-center justify-center text-[10px] font-bold text-white">
+      {template.createdBy.name.charAt(0).toUpperCase()}
+    </div>
+    <span>Por {template.createdBy.name}</span>
+  </div>
+  <span>•</span>
+  <span>
+    {new Date(template.createdAt).toLocaleDateString('es-ES', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    })}
+  </span>
+</div>
                         </div>
 
                         <div className="flex gap-2">

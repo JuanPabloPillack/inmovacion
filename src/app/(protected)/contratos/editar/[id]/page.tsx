@@ -68,6 +68,9 @@ interface Contrato {
   cliente_2: Cliente;
   inmueble: Inmueble;
   template: Template;
+  firmado: boolean;
+  activo: boolean;
+  archivoPath: string;
 }
 
 const contractSchema = z.object({
@@ -127,6 +130,7 @@ export default function EditContract() {
   const [selectedVendedor, setSelectedVendedor] = useState<Cliente | null>(null);
   const [selectedInmueble, setSelectedInmueble] = useState<Inmueble | null>(null);
   const [formErrors, setFormErrors] = useState<{ [key: string]: string }>({});
+  const [hasUserEditedMonto, setHasUserEditedMonto] = useState(false);
   const router = useRouter();
   const params = useParams();
   const id = params.id;
@@ -268,6 +272,11 @@ export default function EditContract() {
     };
     fetchInmueble();
   }, [id_inmueble]);
+useEffect(() => {
+  if (selectedInmueble?.precio && !hasUserEditedMonto) {
+    setMonto(selectedInmueble.precio.toString());
+  }
+}, [selectedInmueble, hasUserEditedMonto]);
 
   // Autocompletado de campos variables
   const autoCompleteField = useCallback(
@@ -532,6 +541,107 @@ export default function EditContract() {
       </div>
     );
   }
+
+  // CONTRATO FIRMADO O INACTIVO → pantalla bloqueada
+
+// CONTRATO FIRMADO O INACTIVO → pantalla bloqueada
+if (contrato && (contrato.firmado || !contrato.activo)) {
+  const esFirmado = contrato.firmado;
+  const motivo = esFirmado
+    ? 'Este contrato ya fue firmado y no puede modificarse.' 
+    : 'Este contrato está inactivo y no puede ser editado.';
+
+  return (
+    <div className="min-h-screen bg-white">
+      <Header />
+
+      <div className="max-w-5xl mx-auto px-6 py-16">
+        <div className="bg-gradient-to-br from-gray-50 to-white rounded-3xl shadow-xl border border-gray-100 overflow-hidden">
+          <div 
+            className="h-2"
+            style={{ 
+              background: esFirmado 
+                ? 'linear-gradient(90deg, #63bae9 0%, #fcc238 100%)' 
+                : 'linear-gradient(90deg, #969696 0%, #686363 100%)'
+            }}
+          />
+
+          <div className="px-8 py-16 sm:px-12 sm:py-20 text-center">
+            <div 
+              className="inline-flex p-6 rounded-2xl mb-8 shadow-lg"
+              style={{ 
+                backgroundColor: esFirmado ? '#e0f2fe' : '#f5f5f5',
+                border: `2px solid ${esFirmado ? '#63bae9' : '#969696'}`
+              }}
+            >
+              <Lock 
+                className="w-16 h-16" 
+                style={{ color: esFirmado ? '#63bae9' : '#686363' }} 
+                strokeWidth={2.5}
+              />
+            </div>
+
+            <h1 
+              className="text-4xl sm:text-5xl font-bold mb-4"
+              style={{ color: '#686363' }}
+            >
+              Edición Bloqueada
+            </h1>
+
+            <div className="max-w-2xl mx-auto space-y-8">
+              <p 
+                className="text-lg sm:text-xl leading-relaxed"
+                style={{ color: '#969696' }}
+              >
+                {motivo}
+              </p>
+
+              {esFirmado && contrato.archivoPath && (
+                <div className="pt-4">
+                  <a
+                    href={contrato.archivoPath}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-3 px-8 py-4 rounded-xl font-semibold text-white shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:scale-105"
+                    style={{ backgroundColor: '#63bae9' }}
+                  >
+                    <FileText className="w-5 h-5" />
+                    Descargar Contrato Firmado
+                  </a>
+                </div>
+              )}
+
+              <div className="pt-8 border-t" style={{ borderColor: '#e5e5e5' }}>
+                <button
+                  onClick={() => router.push('/contratos')}
+                  className="inline-flex items-center gap-2 px-10 py-4 rounded-xl font-semibold shadow-md hover:shadow-xl transition-all duration-300 transform hover:scale-105"
+                  style={{ 
+                    backgroundColor: '#fcc238',
+                    color: '#686363'
+                  }}
+                >
+                  Volver al Listado
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div 
+          className="mt-8 text-center text-sm"
+          style={{ color: '#969696' }}
+        >
+          {esFirmado && (
+            <p className="flex items-center justify-center gap-2">
+              <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: '#63bae9' }} />
+              Contrato procesado y archivado correctamente
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: '#f8f9fa' }}>
@@ -829,20 +939,23 @@ export default function EditContract() {
                       </label>
                       <div className="relative">
                         <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg font-bold" style={{ color: '#969696' }}>$</span>
-                        <input
-                          type="number"
-                          value={monto}
-                          onChange={(e) => setMonto(e.target.value)}
-                          placeholder="0.00"
-                          className="w-full pl-10 pr-4 py-3 rounded-lg border-2 transition-all duration-200 focus:outline-none"
-                          style={{
-                            borderColor: formErrors.monto ? '#ef4444' : (monto ? '#63bae9' : '#e5e7eb'),
-                            backgroundColor: formErrors.monto ? '#fef2f2' : (monto ? '#f0f9ff' : 'white'),
-                            color: '#686363'
-                          }}
-                          step="0.01"
-                          min="0"
-                        />
+<input
+  type="number"
+  value={monto}
+  onChange={(e) => {
+    setMonto(e.target.value);
+    setHasUserEditedMonto(true); // ← Marca que el usuario lo tocó
+  }}
+  placeholder="0.00"
+  className="w-full pl-10 pr-4 py-3 rounded-lg border-2 transition-all duration-200 focus:outline-none"
+  style={{
+    borderColor: formErrors.monto ? '#ef4444' : (monto ? '#63bae9' : '#e5e7eb'),
+    backgroundColor: formErrors.monto ? '#fef2f2' : (monto ? '#f0f9ff' : 'white'),
+    color: '#686363'
+  }}
+  step="0.01"
+  min="0"
+/>
                         {formErrors.monto && (
                           <p className="mt-1 text-xs" style={{ color: '#ef4444' }}>{formErrors.monto}</p>
                         )}

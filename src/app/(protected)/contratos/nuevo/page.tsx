@@ -123,6 +123,7 @@ export default function NewContract() {
   const [selectedInmueble, setSelectedInmueble] = useState<Inmueble | null>(null);
   const [formErrors, setFormErrors] = useState<{ [key: string]: string }>({});
   const router = useRouter();
+  const [hasUserEditedMonto, setHasUserEditedMonto] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -185,6 +186,12 @@ export default function NewContract() {
     };
     fetchInmueble();
   }, [id_inmueble]);
+
+useEffect(() => {
+  if (selectedInmueble?.precio && !hasUserEditedMonto) {
+    setMonto(selectedInmueble.precio.toString());
+  }
+}, [selectedInmueble, hasUserEditedMonto]);
 
   useEffect(() => {
     setIdTemplate(undefined);
@@ -754,20 +761,23 @@ useEffect(() => {
                       </label>
                       <div className="relative">
                         <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg font-bold" style={{ color: '#969696' }}>$</span>
-                        <input
-                          type="number"
-                          value={monto}
-                          onChange={(e) => setMonto(e.target.value)}
-                          placeholder="0.00"
-                          className="w-full pl-10 pr-4 py-3 rounded-lg border-2 transition-all duration-200 focus:outline-none"
-                          style={{
-                            borderColor: formErrors.monto ? '#ef4444' : (monto ? '#63bae9' : '#e5e7eb'),
-                            backgroundColor: formErrors.monto ? '#fef2f2' : (monto ? '#f0f9ff' : 'white'),
-                            color: '#686363'
-                          }}
-                          step="0.01"
-                          min="0"
-                        />
+                       <input
+  type="number"
+  value={monto}
+  onChange={(e) => {
+    setMonto(e.target.value);
+    setHasUserEditedMonto(true); // ← Marca que el usuario lo tocó
+  }}
+  placeholder="0.00"
+  className="w-full pl-10 pr-4 py-3 rounded-lg border-2 transition-all duration-200 focus:outline-none"
+  style={{
+    borderColor: formErrors.monto ? '#ef4444' : (monto ? '#63bae9' : '#e5e7eb'),
+    backgroundColor: formErrors.monto ? '#fef2f2' : (monto ? '#f0f9ff' : 'white'),
+    color: '#686363'
+  }}
+  step="0.01"
+  min="0"
+/>
                         {formErrors.monto && (
                           <p className="mt-1 text-xs" style={{ color: '#ef4444' }}>{formErrors.monto}</p>
                         )}

@@ -158,13 +158,13 @@ export async function POST(req: NextRequest) {
     const buffer = doc.getZip().generate({ type: 'nodebuffer' });
     await fs.writeFile(outputPath, buffer);
 
-    const id_cliente_1 = validatedData.tipo_contrato === 'ALQUILER_LOCACION' 
-      ? validatedData.id_locador! 
-      : validatedData.id_comprador!;
-    
-    const id_cliente_2 = validatedData.tipo_contrato === 'ALQUILER_LOCACION'
-      ? validatedData.id_locatario!
-      : validatedData.id_vendedor!;
+const id_cliente_1 = validatedData.tipo_contrato === 'ALQUILER_LOCACION' 
+  ? validatedData.id_locador! 
+  : validatedData.id_vendedor!;  
+
+const id_cliente_2 = validatedData.tipo_contrato === 'ALQUILER_LOCACION'
+  ? validatedData.id_locatario!
+  : validatedData.id_comprador!; 
 
     const contrato = await db.contrato.create({
       data: {

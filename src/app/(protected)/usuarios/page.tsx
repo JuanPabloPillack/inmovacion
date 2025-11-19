@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/Badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Search, Plus, MoreHorizontal, Eye, Edit, UserCheck, UserX, Trash2, Users, Filter, AlertTriangle, X } from "lucide-react"
+import { Search, Plus, MoreHorizontal, Eye, Edit, UserCheck, UserX, Trash2, Users, LayoutGrid, LayoutList } from "lucide-react"
 import { getUsers } from "@/actions/getUsers"
 import Header from "@/components/ui/Header"
 import { deactivateUser, deleteUser, activateUser } from "@/actions/user-actions"
@@ -141,90 +141,89 @@ export default function UsersPage() {
   }
 
   const TableView = () => (
-    <Card className="shadow-lg border-[#969696]/20">
-      <CardHeader className="pb-4 bg-gradient-to-r from-[#63bae9]/5 to-transparent">
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="px-8 py-6 border-b border-gray-100 bg-gradient-to-r from-[#63bae9]/5 to-transparent">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Users className="h-5 w-5 text-[#63bae9]" />
-            <CardTitle className="text-xl text-[#686363]">Lista de Usuarios</CardTitle>
-          </div>
-          <Badge variant="secondary" className="text-sm bg-[#969696]/10 text-[#686363] border-[#969696]/30">
+          <h2 className="text-lg font-semibold text-[#686363]">Lista de Usuarios</h2>
+          <span className="px-3 py-1 rounded-full bg-[#63bae9]/10 text-[#63bae9] text-sm font-medium">
             {filteredUsers.length} usuarios
-          </Badge>
+          </span>
         </div>
-      </CardHeader>
-      <CardContent>
-        <Table>
-          <TableHeader>
-            <TableRow className="border-[#969696]/20">
-              <TableHead className="text-[#686363] font-medium">Usuario</TableHead>
-              <TableHead className="text-[#686363] font-medium">Contacto</TableHead>
-              <TableHead className="text-[#686363] font-medium">Rol</TableHead>
-              <TableHead className="text-[#686363] font-medium">Estado</TableHead>
-              <TableHead className="text-[#686363] font-medium">Fecha Creación</TableHead>
-              <TableHead className="text-right text-[#686363] font-medium">Acciones</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-gray-100 bg-gray-50">
+              <th className="px-8 py-4 text-left text-sm font-semibold text-[#686363]">Usuario</th>
+              <th className="px-6 py-4 text-left text-sm font-semibold text-[#686363]">Contacto</th>
+              <th className="px-6 py-4 text-left text-sm font-semibold text-[#686363]">Rol</th>
+              <th className="px-6 py-4 text-left text-sm font-semibold text-[#686363]">Estado</th>
+              <th className="px-6 py-4 text-left text-sm font-semibold text-[#686363]">Creación</th>
+              <th className="px-6 py-4 text-right text-sm font-semibold text-[#686363]">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
             {filteredUsers.map((user) => (
-              <TableRow key={user.id} className="hover:bg-[#63bae9]/5 border-[#969696]/10">
-                <TableCell>
+              <tr
+                key={user.id}
+                className="border-b border-gray-100 hover:bg-[#63bae9]/3 transition-colors duration-200"
+              >
+                <td className="px-8 py-5">
                   <div className="flex flex-col">
-                    <span className="font-medium text-[#686363]">{user.name}</span>
-                    <span className="text-sm text-[#969696]">ID: {user.id}</span>
+                    <span className="font-semibold text-[#686363]">{user.name}</span>
+                    <span className="text-xs text-[#969696] mt-1">ID: {user.id}</span>
                   </div>
-                </TableCell>
-                <TableCell>
+                </td>
+                <td className="px-6 py-5">
                   <div className="flex flex-col">
                     <span className="text-sm text-[#686363]">{user.email}</span>
-                    <span className="text-sm text-[#969696]">{user.phone || "Sin teléfono"}</span>
+                    <span className="text-xs text-[#969696] mt-1">{user.phone || "Sin teléfono"}</span>
                   </div>
-                </TableCell>
-                <TableCell>
-                  <Badge
-                    variant={user.role === "admin" ? "default" : "secondary"}
-                    className={
+                </td>
+                <td className="px-6 py-5">
+                  <span
+                    className={`inline-flex px-3 py-1 rounded-full text-xs font-semibold ${
                       user.role === "admin"
-                        ? "bg-[#63bae9] text-white hover:bg-[#63bae9]/90"
-                        : "bg-[#969696]/20 text-[#686363] hover:bg-[#969696]/30"
-                    }
+                        ? "bg-[#63bae9]/15 text-[#63bae9]"
+                        : "bg-[#969696]/15 text-[#686363]"
+                    }`}
                   >
                     {user.role === "admin" ? "Administrador" : "Usuario"}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  <Badge
-                    variant={user.status === "active" ? "default" : "destructive"}
-                    className={
+                  </span>
+                </td>
+                <td className="px-6 py-5">
+                  <span
+                    className={`inline-flex px-3 py-1 rounded-full text-xs font-semibold ${
                       user.status === "active"
-                        ? "bg-[#fcc238] text-[#686363] hover:bg-[#fcc238]/90"
-                        : "bg-[#969696]/20 text-[#686363] hover:bg-[#969696]/30"
-                    }
+                        ? "bg-[#fcc238]/20 text-[#686363]"
+                        : "bg-[#969696]/15 text-[#686363]"
+                    }`}
                   >
                     {user.status === "active" ? "Activo" : "Inactivo"}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-sm text-[#969696]">
+                  </span>
+                </td>
+                <td className="px-6 py-5 text-sm text-[#969696]">
                   {new Date(user.createdAt).toLocaleDateString("es-ES")}
-                </TableCell>
-                <TableCell className="text-right">
+                </td>
+                <td className="px-6 py-5 text-right">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" className="h-8 w-8 p-0 hover:bg-[#63bae9]/10 text-[#686363]">
-                        <MoreHorizontal className="h-4 w-4" />
+                      <Button variant="ghost" className="h-9 w-9 p-0 hover:bg-[#63bae9]/10 text-[#686363] transition-colors duration-200">
+                        <MoreHorizontal className="h-5 w-5" />
                       </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="border-[#969696]/20">
+                    <DropdownMenuContent align="end" className="border border-gray-100 shadow-lg">
                       <DropdownMenuItem
                         onClick={() => router.push(`/usuarios/${user.id}`)}
-                        className="text-[#686363] hover:bg-[#63bae9]/10 hover:text-[#63bae9]"
+                        className="text-[#686363] hover:bg-[#63bae9]/10 hover:text-[#63bae9] cursor-pointer"
                       >
                         <Eye className="mr-2 h-4 w-4" />
                         Ver detalles
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         onClick={() => router.push(`/usuarios/editar?id=${user.id}`)}
-                        className="text-[#686363] hover:bg-[#63bae9]/10 hover:text-[#63bae9]"
+                        className="text-[#686363] hover:bg-[#63bae9]/10 hover:text-[#63bae9] cursor-pointer"
                       >
                         <Edit className="mr-2 h-4 w-4" />
                         Editar
@@ -240,7 +239,7 @@ export default function UsersPage() {
                         ) : (
                           <DropdownMenuItem
                             onClick={() => handleDeactivate(user.id)}
-                            className="text-[#fcc238] hover:bg-[#fcc238]/10"
+                            className="text-[#fcc238] hover:bg-[#fcc238]/10 cursor-pointer"
                           >
                             <UserX className="mr-2 h-4 w-4" />
                             Desactivar
@@ -250,14 +249,14 @@ export default function UsersPage() {
                         <>
                           <DropdownMenuItem
                             onClick={() => handleActivate(user.id)}
-                            className="text-[#63bae9] hover:bg-[#63bae9]/10"
+                            className="text-[#63bae9] hover:bg-[#63bae9]/10 cursor-pointer"
                           >
                             <UserCheck className="mr-2 h-4 w-4" />
                             Activar
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             onClick={() => handleDelete(user.id)}
-                            className="text-[#fcc238] hover:bg-[#fcc238]/10 focus:text-[#fcc238]"
+                            className="text-[#fcc238] hover:bg-[#fcc238]/10 cursor-pointer"
                           >
                             <Trash2 className="mr-2 h-4 w-4" />
                             Eliminar
@@ -266,222 +265,232 @@ export default function UsersPage() {
                       )}
                     </DropdownMenuContent>
                   </DropdownMenu>
-                </TableCell>
-              </TableRow>
+                </td>
+              </tr>
             ))}
-          </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
+          </tbody>
+        </table>
+      </div>
+    </div>
   )
 
   const CardsView = () => (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       {filteredUsers.map((user) => (
-        <Card
+        <div
           key={user.id}
-          className="hover:shadow-lg transition-shadow duration-200 border-[#969696]/20 hover:border-[#63bae9]/30"
+          className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md hover:border-[#63bae9]/20 transition-all duration-300 p-6"
         >
-          <CardHeader className="pb-3">
-            <div className="flex items-start justify-between">
-              <div>
-                <CardTitle className="text-lg text-[#686363]">{user.name}</CardTitle>
-                <p className="text-sm text-[#969696]">{user.email}</p>
-              </div>
-              <Badge
-                variant={user.status === "active" ? "default" : "destructive"}
-                className={user.status === "active" ? "bg-[#fcc238] text-[#686363]" : "bg-[#969696]/20 text-[#686363]"}
-              >
-                {user.status === "active" ? "Activo" : "Inactivo"}
-              </Badge>
+          <div className="flex items-start justify-between mb-5 pb-5 border-b border-gray-100">
+            <div className="flex-1">
+              <h3 className="font-semibold text-[#686363] text-lg">{user.name}</h3>
+              <p className="text-sm text-[#969696] mt-1">{user.email}</p>
             </div>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex justify-between text-sm">
-              <span className="text-[#969696]">Rol:</span>
-              <Badge
-                variant={user.role === "admin" ? "default" : "secondary"}
-                className={user.role === "admin" ? "bg-[#63bae9] text-white" : "bg-[#969696]/20 text-[#686363]"}
-              >
-                {user.role === "admin" ? "Admin" : "Usuario"}
-              </Badge>
+            <span
+              className={`inline-flex px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ml-2 ${
+                user.status === "active"
+                  ? "bg-[#fcc238]/20 text-[#686363]"
+                  : "bg-[#969696]/15 text-[#686363]"
+              }`}
+            >
+              {user.status === "active" ? "Activo" : "Inactivo"}
+            </span>
+          </div>
+
+          <div className="space-y-3 mb-6">
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-[#969696]">Rol</span>
+              <span className={user.role === "admin" ? "text-[#63bae9] font-semibold" : "text-[#686363]"}>
+                {user.role === "admin" ? "Administrador" : "Usuario"}
+              </span>
             </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-[#969696]">Teléfono:</span>
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-[#969696]">Teléfono</span>
               <span className="text-[#686363]">{user.phone || "No registrado"}</span>
             </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-[#969696]">Creado:</span>
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-[#969696]">Creado</span>
               <span className="text-[#686363]">{new Date(user.createdAt).toLocaleDateString("es-ES")}</span>
             </div>
-            <div className="flex gap-2 pt-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => router.push(`/usuarios/${user.id}`)}
-                className="flex-1 border-[#63bae9] text-[#63bae9] hover:bg-[#63bae9] hover:text-white"
-              >
-                <Eye className="mr-1 h-3 w-3" />
-                Ver
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => router.push(`/usuarios/editar?id=${user.id}`)}
-                className="flex-1 border-[#63bae9] text-[#63bae9] hover:bg-[#63bae9] hover:text-white"
-              >
-                <Edit className="mr-1 h-3 w-3" />
-                Editar
-              </Button>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="border-[#969696]/50 text-[#686363] hover:bg-[#969696]/10 bg-transparent"
-                  >
-                    <MoreHorizontal className="h-3 w-3" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent className="border-[#969696]/20">
-                  {user.status === "active" ? (
-                    user.email === loggedInUserEmail ? (
-                      <DropdownMenuItem
-                        className="text-[#969696] cursor-not-allowed"
-                      >
-                        <UserX className="mr-2 h-4 w-4" />
-                        No puedes desactivarte
-                      </DropdownMenuItem>
-                    ) : (
-                      <DropdownMenuItem
-                        onClick={() => handleDeactivate(user.id)}
-                        className="text-[#fcc238] hover:bg-[#fcc238]/10"
-                      >
-                        <UserX className="mr-2 h-4 w-4" />
-                        Desactivar
-                      </DropdownMenuItem>
-                    )
+          </div>
+
+          <div className="flex gap-2 pt-5 border-t border-gray-100">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => router.push(`/usuarios/${user.id}`)}
+              className="flex-1 border-[#63bae9] text-[#63bae9] hover:bg-[#63bae9] hover:text-white font-medium transition-all duration-200"
+            >
+              <Eye className="mr-2 h-4 w-4" />
+              Ver
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => router.push(`/usuarios/editar?id=${user.id}`)}
+              className="flex-1 border-[#63bae9] text-[#63bae9] hover:bg-[#63bae9] hover:text-white font-medium transition-all duration-200"
+            >
+              <Edit className="mr-2 h-4 w-4" />
+              Editar
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-gray-200 text-[#686363] hover:bg-gray-50 bg-transparent transition-colors duration-200"
+                >
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="border border-gray-100 shadow-lg">
+                {user.status === "active" ? (
+                  user.email === loggedInUserEmail ? (
+                    <DropdownMenuItem
+                      className="text-[#969696] cursor-not-allowed"
+                    >
+                      <UserX className="mr-2 h-4 w-4" />
+                      No puedes desactivarte
+                    </DropdownMenuItem>
                   ) : (
-                    <>
-                      <DropdownMenuItem
-                        onClick={() => handleActivate(user.id)}
-                        className="text-[#63bae9] hover:bg-[#63bae9]/10"
-                      >
-                        <UserCheck className="mr-2 h-4 w-4" />
-                        Activar
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => handleDelete(user.id)}
-                        className="text-[#fcc238] hover:bg-[#fcc238]/10"
-                      >
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        Eliminar
-                      </DropdownMenuItem>
-                    </>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          </CardContent>
-        </Card>
+                    <DropdownMenuItem
+                      onClick={() => handleDeactivate(user.id)}
+                      className="text-[#fcc238] hover:bg-[#fcc238]/10 cursor-pointer"
+                    >
+                      <UserX className="mr-2 h-4 w-4" />
+                      Desactivar
+                    </DropdownMenuItem>
+                  )
+                ) : (
+                  <>
+                    <DropdownMenuItem
+                      onClick={() => handleActivate(user.id)}
+                      className="text-[#63bae9] hover:bg-[#63bae9]/10 cursor-pointer"
+                    >
+                      <UserCheck className="mr-2 h-4 w-4" />
+                      Activar
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => handleDelete(user.id)}
+                      className="text-[#fcc238] hover:bg-[#fcc238]/10 cursor-pointer"
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Eliminar
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
       ))}
     </div>
   )
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-gradient-to-b from-white to-gray-50">
       <Header />
-      <div className="container mx-auto px-4 py-8">
-        <div className="mb-8">
-          <div className="flex items-center gap-3 mb-2">
-            <Users className="h-8 w-8 text-[#63bae9]" />
-            <h1 className="text-3xl font-bold text-balance text-[#686363]">Gestión de Usuarios</h1>
+      <div className="container mx-auto px-4 py-8 max-w-7xl">
+        <div className="mb-10">
+          <div className="flex items-start justify-between gap-4 mb-3">
+            <div className="flex items-center gap-3">
+              <div className="p-3 rounded-xl bg-gradient-to-br from-[#63bae9]/10 to-[#63bae9]/5">
+                <Users className="h-7 w-7 text-[#63bae9]" />
+              </div>
+              <div>
+                <h1 className="text-4xl font-bold text-[#686363]">Gestión de Usuarios</h1>
+                <p className="text-[#969696] mt-1">Administra los usuarios del sistema</p>
+              </div>
+            </div>
+            <Button
+              onClick={() => router.push("/usuarios/nuevo")}
+              className="gap-2 bg-[#fcc238] text-[#686363] hover:bg-[#fcc238]/90 font-semibold shadow-lg hover:shadow-xl transition-all duration-300 px-6 py-6"
+            >
+              <Plus className="h-5 w-5" />
+              Crear Usuario
+            </Button>
           </div>
-          <p className="text-[#969696]">Administra los usuarios del sistema inmobiliario</p>
+          <div className="h-1 w-16 bg-gradient-to-r from-[#63bae9] to-[#fcc238] rounded-full" />
         </div>
 
-        <Card className="mb-6 border-[#969696]/20">
-          <CardContent className="p-6">
-            <div className="flex flex-col sm:flex-row gap-4 items-center">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#969696] h-4 w-4" />
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mb-8">
+          <div className="flex flex-col lg:flex-row gap-4 items-end">
+            <div className="flex-1">
+              <label className="block text-sm font-semibold text-[#686363] mb-2">Buscar usuario</label>
+              <div className="relative">
+                <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-[#969696] h-5 w-5" />
                 <Input
-                  placeholder="Buscar por nombre o correo..."
+                  placeholder="Nombre, correo o teléfono..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 border-[#969696]/30 focus:border-[#63bae9] text-[#686363]"
+                  className="pl-12 py-3 border-[#969696]/20 focus:border-[#63bae9] focus:ring-2 focus:ring-[#63bae9]/20 text-[#686363] placeholder:text-[#969696]"
                 />
               </div>
-              <div className="flex items-center gap-2">
-                <Filter className="h-4 w-4 text-[#969696]" />
-                <select
-                  value={filterStatus}
-                  onChange={(e) => setFilterStatus(e.target.value)}
-                  className="h-10 px-3 rounded-md border border-[#969696]/30 bg-background text-sm text-[#686363] focus:border-[#63bae9]"
-                >
-                  <option value="all">Todos los estados</option>
-                  <option value="active">Activos</option>
-                  <option value="inactive">Inactivos</option>
-                </select>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant={viewMode === "table" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setViewMode("table")}
-                  className={
-                    viewMode === "table"
-                      ? "bg-[#63bae9] text-white hover:bg-[#63bae9]/90"
-                      : "border-[#63bae9] text-[#63bae9] hover:bg-[#63bae9] hover:text-white"
-                  }
-                >
-                  Tabla
-                </Button>
-                <Button
-                  variant={viewMode === "cards" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setViewMode("cards")}
-                  className={
-                    viewMode === "cards"
-                      ? "bg-[#63bae9] text-white hover:bg-[#63bae9]/90"
-                      : "border-[#63bae9] text-[#63bae9] hover:bg-[#63bae9] hover:text-white"
-                  }
-                >
-                  Tarjetas
-                </Button>
-              </div>
-              <Button
-                onClick={() => router.push("/usuarios/nuevo")}
-                className="gap-2 bg-[#fcc238] text-[#686363] hover:bg-[#fcc238]/90 font-medium"
-              >
-                <Plus className="h-4 w-4" />
-                Crear Usuario
-              </Button>
             </div>
-          </CardContent>
-        </Card>
+
+            <div className="w-full lg:w-48">
+              <label className="block text-sm font-semibold text-[#686363] mb-2">Estado</label>
+              <select
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+                className="w-full px-4 py-3 rounded-lg border border-[#969696]/20 bg-white text-[#686363] focus:border-[#63bae9] focus:ring-2 focus:ring-[#63bae9]/20 font-medium"
+              >
+                <option value="all">Todos los estados</option>
+                <option value="active">Activos</option>
+                <option value="inactive">Inactivos</option>
+              </select>
+            </div>
+
+            <div className="flex gap-2 p-1 bg-gray-100 rounded-lg border border-[#969696]/10">
+              <button
+                onClick={() => setViewMode("table")}
+                className={`px-4 py-2 rounded-md font-medium transition-all duration-200 flex items-center gap-2 ${
+                  viewMode === "table"
+                    ? "bg-white text-[#63bae9] shadow-sm"
+                    : "text-[#969696] hover:text-[#686363]"
+                }`}
+              >
+                <LayoutGrid className="h-4 w-4" />
+                Tabla
+              </button>
+              <button
+                onClick={() => setViewMode("cards")}
+                className={`px-4 py-2 rounded-md font-medium transition-all duration-200 flex items-center gap-2 ${
+                  viewMode === "cards"
+                    ? "bg-white text-[#63bae9] shadow-sm"
+                    : "text-[#969696] hover:text-[#686363]"
+                }`}
+              >
+                <LayoutList className="h-4 w-4" />
+                Tarjetas
+              </button>
+            </div>
+          </div>
+        </div>
 
         {filteredUsers.length === 0 ? (
-          <Card className="border-[#969696]/20">
-            <CardContent className="flex flex-col items-center justify-center py-12">
-              <Users className="h-12 w-12 text-[#969696] mb-4" />
-              <h3 className="text-lg font-semibold mb-2 text-[#686363]">No se encontraron usuarios</h3>
-              <p className="text-[#969696] text-center">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-12">
+            <div className="flex flex-col items-center justify-center text-center">
+              <div className="p-4 rounded-2xl bg-gradient-to-br from-[#63bae9]/10 to-[#969696]/5 mb-4">
+                <Users className="h-12 w-12 text-[#969696]" />
+              </div>
+              <h3 className="text-xl font-semibold text-[#686363] mb-2">No se encontraron usuarios</h3>
+              <p className="text-[#969696] mb-6 max-w-md">
                 {searchTerm || filterStatus !== "all"
                   ? "Intenta ajustar los filtros de búsqueda"
-                  : "Comienza creando tu primer usuario"}
+                  : "Comienza creando tu primer usuario para gestionar el sistema"}
               </p>
               {!searchTerm && filterStatus === "all" && (
                 <Button
                   onClick={() => router.push("/usuarios/nuevo")}
-                  className="mt-4 gap-2 bg-[#fcc238] text-[#686363] hover:bg-[#fcc238]/90"
+                  className="gap-2 bg-[#fcc238] text-[#686363] hover:bg-[#fcc238]/90 font-semibold"
                 >
                   <Plus className="h-4 w-4" />
                   Crear Primer Usuario
                 </Button>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         ) : viewMode === "table" ? (
           <TableView />
         ) : (
@@ -497,16 +506,16 @@ export default function UsersPage() {
           }}
           onConfirm={handleConfirmAction}
           title={
-            actionType === 'delete' ? "¿Estás seguro de eliminar este usuario?" :
-            actionType === 'deactivate' ? "¿Estás seguro de desactivar este usuario?" :
-            actionType === 'activate' ? "¿Estás seguro de activar este usuario?" :
-            "¿Estás seguro?"
+            actionType === 'delete' ? "¿Eliminar este usuario?" :
+            actionType === 'deactivate' ? "¿Desactivar este usuario?" :
+            actionType === 'activate' ? "¿Activar este usuario?" :
+            "Confirmación"
           }
           message={
-            actionType === 'delete' ? "Esta acción eliminará permanentemente el usuario y no se podrá deshacer." :
+            actionType === 'delete' ? "Se eliminará permanentemente el usuario. Esta acción no se puede deshacer." :
             actionType === 'deactivate' ? "El usuario no podrá acceder al sistema hasta que se reactive." :
             actionType === 'activate' ? "El usuario podrá acceder nuevamente al sistema." :
-            "Esta acción no se puede deshacer."
+            "Por favor confirma esta acción."
           }
           confirmText={
             actionType === 'delete' ? "Eliminar" :

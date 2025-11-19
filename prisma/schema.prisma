@@ -22,30 +22,31 @@ enum ContractType {
   COMPRA_VENTA
 }
 
-// ========== MODELOS DE AUTENTICACIÓN ==========
-
 enum Role {
   user
   admin
 }
 
+// ========== MODELOS DE AUTENTICACIÓN ==========
+
 model User {
-  id            String    @id @default(cuid())
-  name          String?
-  username      String?   @unique
-  password      String?
-  email         String    @unique
-  emailVerified DateTime?
-  image         String?
-  role          Role      @default(admin)
-  phone         String?
-  status        String?   @default("active")
-  accounts      Account[]
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  // Nuevas relaciones con Contrato para rastrear creación y actualización (aplicar una lógica similar en otros modelos si es necesario)
+  id               String     @id @default(cuid())
+  name             String?
+  username         String?    @unique
+  password         String?
+  email            String     @unique
+  emailVerified    DateTime?
+  image            String?
+  role             Role       @default(admin)
+  phone            String?
+  status           String?    @default("active")
+  accounts         Account[]
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
   createdContracts Contrato[] @relation("CreatedContracts")
   updatedContracts Contrato[] @relation("UpdatedContracts")
+  // NUEVA RELACIÓN
+  createdTemplates Template[] @relation("CreatedTemplates")
 }
 
 model Account {
@@ -83,7 +84,7 @@ model VerificationToken {
 
 model TipoCliente {
   id_tipo_cliente Int       @id @default(autoincrement())
-  nombre          String    @db.VarChar(50) // Ej: Propietario, Comprador, Arrendatario
+  nombre          String    @db.VarChar(50)
   clientes        Cliente[]
 }
 
@@ -99,8 +100,8 @@ model Cliente {
   descripcion     String?      @db.Text
   activo          Boolean      @default(true)
   inmuebles       Inmueble[]
-  contratos_1     Contrato[]   @relation("Cliente1") // Relación para id_cliente_1
-  contratos_2     Contrato[]   @relation("Cliente2") // Relación para id_cliente_2
+  contratos_1     Contrato[]   @relation("Cliente1")
+  contratos_2     Contrato[]   @relation("Cliente2")
   cobranzas       Cobranza[]
   pagos           Pago[]
   historial       Historial[]  @relation("HistorialCliente")
@@ -175,7 +176,7 @@ model Inmueble {
   archivado            Boolean          @default(false)
   contratos            Contrato[]
   cobranzas            Cobranza[]
-  rendiciones          Rendicion[]
+  rendiciones          Rendicion[]      @relation("InmuebleRendiciones")
   pagos                Pago[]
   historial            Historial[]      @relation("HistorialInmueble")
   imagenes             InmuebleImagen[]
@@ -193,12 +194,15 @@ model InmuebleImagen {
 
 model Template {
   id              Int          @id @default(autoincrement())
-  nombre          String       @db.VarChar(100) // Nombre del template, ej: "Contrato Alquiler"
-  archivoPath     String       @db.VarChar(255) // Ruta donde se guarda el .docx
-  camposVariables Json?        // Lista de campos variables
-  tipo            TemplateType // Nuevo campo obligatorio
+  nombre          String       @db.VarChar(100)
+  archivoPath     String       @db.VarChar(255)
+  camposVariables Json?
+  tipo            TemplateType
   createdAt       DateTime     @default(now())
   contratos       Contrato[]
+  // NUEVOS CAMPOS
+  createdById     String
+  createdBy       User         @relation("CreatedTemplates", fields: [createdById], references: [id], onDelete: Restrict)
 }
 
 model Contrato {
@@ -218,33 +222,67 @@ model Contrato {
   fecha_fin     DateTime
   monto         Decimal      @db.Decimal(10, 2)
   tipo_contrato ContractType
-  activo        Boolean      @default(true) // Nuevo campo
-  firmado       Boolean      @default(false) // Nuevo campo
+  activo        Boolean      @default(true)
+  firmado       Boolean      @default(false)
   createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt // Nuevo campo
-  // Nuevos campos para rastrear usuarios
+  updatedAt     DateTime     @updatedAt
   createdById   String
   createdBy     User         @relation("CreatedContracts", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Cascade)
   updatedById   String
   updatedBy     User         @relation("UpdatedContracts", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Cascade)
 }
 
-model Cobranza {
-  id_cobranza Int      @id @default(autoincrement())
-  id_inmueble Int
-  inmueble    Inmueble @relation(fields: [id_inmueble], references: [id_inmueble], onDelete: Restrict, onUpdate: Cascade)
-  id_cliente  Int
-  cliente     Cliente  @relation(fields: [id_cliente], references: [id_cliente], onDelete: Restrict, onUpdate: Cascade)
-  monto       Decimal  @db.Decimal(10, 2)
-  fecha       DateTime
-}
+// ===================== RENDICIONES =====================
 
 model Rendicion {
-  id_rendicion Int      @id @default(autoincrement())
+  id_rendicion Int        @id @default(autoincrement())
   id_inmueble  Int
-  inmueble     Inmueble @relation(fields: [id_inmueble], references: [id_inmueble], onDelete: Restrict, onUpdate: Cascade)
+  inmueble     Inmueble   @relation("InmuebleRendiciones", fields: [id_inmueble], references: [id_inmueble])
   fecha        DateTime
-  monto_total  Decimal  @db.Decimal(10, 2)
+  monto_total  Decimal    @db.Decimal(10, 2)
+  cobranzas    Cobranza[] @relation("RendicionCobranza")
+  mes_ipc      Int?
+  anio_ipc     Int?
+}
+
+// ===================== COBRANZAS =====================
+
+model Cobranza {
+  id_cobranza     Int        @id @default(autoincrement())
+  id_inmueble     Int?
+  inmueble        Inmueble?  @relation(fields: [id_inmueble], references: [id_inmueble], onDelete: SetNull, onUpdate: Cascade)
+  id_cliente      Int
+  cliente         Cliente    @relation(fields: [id_cliente], references: [id_cliente], onDelete: Restrict, onUpdate: Cascade)
+  id_contrato     Int?
+  monto           Decimal    @db.Decimal(10, 2)
+  fecha_cobranza  DateTime   @default(now())
+  medio_pago      String     @db.VarChar(50)
+  concepto        String     @db.VarChar(150)
+  numero_recibo   String?    @db.VarChar(50)
+  observaciones   String?    @db.VarChar(255)
+  genera_recibo   Boolean    @default(false)
+  activa          Boolean    @default(true)
+  pagado          Boolean    @default(false)
+  id_rendicion    Int?
+  rendicion       Rendicion? @relation("RendicionCobranza", fields: [id_rendicion], references: [id_rendicion], onDelete: SetNull, onUpdate: Cascade)
+  recibo          Recibo?
+  creadoPor       String?    @db.VarChar(100)
+  modificadoPor   String?    @db.VarChar(100)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @default(now()) @updatedAt
+
+  @@index([id_inmueble])
+  @@index([id_cliente])
+  @@index([id_rendicion])
+}
+
+model Recibo {
+  id_recibo     Int       @id @default(autoincrement())
+  id_cobranza   Int?      @unique
+  cobranza      Cobranza? @relation(fields: [id_cobranza], references: [id_cobranza], onDelete: SetNull, onUpdate: Cascade)
+  total         Decimal   @db.Decimal(10, 2)
+  descripcion   String?
+  fecha_emision DateTime  @default(now())
 }
 
 model Pago {
@@ -265,4 +303,15 @@ model Historial {
   inmueble     Inmueble? @relation("HistorialInmueble", fields: [id_inmueble], references: [id_inmueble], onDelete: SetNull, onUpdate: Cascade)
   id_cliente   Int?
   cliente      Cliente?  @relation("HistorialCliente", fields: [id_cliente], references: [id_cliente], onDelete: SetNull, onUpdate: Cascade)
+}
+
+model Ipc {
+  id            Int      @id @default(autoincrement())
+  mes           Int
+  anio          Int
+  valor         Decimal  @db.Decimal(10, 2)
+  fuente        String
+  fechaConsulta DateTime @default(now())
+
+  @@unique([mes, anio], name: "mes_anio")
 }
