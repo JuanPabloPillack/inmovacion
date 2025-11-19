@@ -259,6 +259,88 @@ model Pago {
 }
 
 model Historial {
+  id_historial Int       @id @default(autoincrement())
+  descripcion  String    @db.VarChar(255)
+  fecha        DateTime
+  id_inmueble  Int?
+  inmueble     Inmueble? @relation("HistorialInmueble", fields: [id_inmueble], references: [id_inmueble], onDelete: SetNull, onUpdate: Cascade)
+  id_cliente   Int?
+  cliente      Cliente?  @relation("HistorialCliente", fields: [id_cliente], references: [id_cliente], onDelete: SetNull, onUpdate: Cascade)
+}
+
+// ========== MODELO TIPO DE SERVICIO ==========
+
+model TipoServicio {
+  id_tipo_servicio Int         @id @default(autoincrement())
+  nombre           String      @db.VarChar(100) @unique
+  proveedores      Proveedor[]
+}
+
+
+// ========== MODELO PROVEEDOR ==========
+
+model Proveedor {
+  id_proveedor        Int           @id @default(autoincrement())
+  nombre_razon_social String        @db.VarChar(150)
+  cuit_cuil           String        @db.VarChar(20) @unique
+  correo_contacto     String?       @db.VarChar(100)
+  telefono_contacto   String?       @db.VarChar(50)
+  direccion           String?       @db.VarChar(200)
+
+  // Relación con TipoServicio
+  tipoServicioId      Int
+  tipoServicio        TipoServicio  @relation(fields: [tipoServicioId], references: [id_tipo_servicio], onDelete: Restrict, onUpdate: Cascade)
+
+  datos_bancarios     String?       @db.Text
+  estado              Boolean       @default(true)  // ← CAMBIO IMPORTANTE
+  observaciones       String?       @db.VarChar(255)
+  fecha_alta          DateTime      @default(now())
+
+  pagos               PagoProveedor[]
+}
+
+// ===============================
+// MODELO ESTADO DE PAGO
+// ===============================
+model EstadoPago {
+  id_estado_pago  Int              @id @default(autoincrement())
+  nombre          String           @unique @db.VarChar(100)
+  pagos           PagoProveedor[]
+}
+
+// ===============================
+// MODELO MEDIO DE PAGO
+// ===============================
+model MedioPago {
+  id_medio_pago  Int              @id @default(autoincrement())
+  nombre         String           @unique @db.VarChar(100)
+  pagos          PagoProveedor[]
+}
+
+// ===============================
+// MODELO PAGO A PROVEEDOR
+// ===============================
+model PagoProveedor {
+  id_pago              Int            @id @default(autoincrement())
+  fecha_pago           DateTime
+  proveedorId          Int
+  proveedor            Proveedor       @relation(fields: [proveedorId], references: [id_proveedor], onDelete: Restrict)
+  concepto             String          @db.VarChar(255)
+  importe              Decimal         @db.Decimal(10,2)
+
+  // Medio de pago (relación)
+  medioPagoId          Int
+  medioPago            MedioPago       @relation(fields: [medioPagoId], references: [id_medio_pago], onDelete: Restrict)
+
+  comprobante          String?         @db.VarChar(255)
+  responsable          String          @db.VarChar(150)
+
+  // Estado del pago (relación)
+  estadoPagoId         Int
+  estadoPago           EstadoPago      @relation(fields: [estadoPagoId], references: [id_estado_pago], onDelete: Restrict)
+
+  fecha                DateTime        @default(now())
+  fecha_modificacion   DateTime        @updatedAt
   id_historial Int @id @default(autoincrement())
   descripcion String @db.VarChar(255)
   fecha DateTime

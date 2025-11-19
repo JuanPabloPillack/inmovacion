@@ -53,11 +53,20 @@ CREATE TABLE `VerificationToken` (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
+CREATE TABLE `TipoCliente` (
+    `id_tipo_cliente` INTEGER NOT NULL AUTO_INCREMENT,
+    `nombre` VARCHAR(50) NOT NULL,
+
+    PRIMARY KEY (`id_tipo_cliente`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
 CREATE TABLE `Cliente` (
     `id_cliente` INTEGER NOT NULL AUTO_INCREMENT,
     `nombre` VARCHAR(100) NOT NULL,
     `email` VARCHAR(100) NULL,
     `telefono` VARCHAR(50) NULL,
+    `tipoClienteId` INTEGER NULL,
 
     PRIMARY KEY (`id_cliente`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -126,6 +135,10 @@ CREATE TABLE `Inmueble` (
     `superficie_total` DECIMAL(10, 2) NOT NULL,
     `superficie_cubierta` DECIMAL(10, 2) NULL,
     `cantidad_ambientes` INTEGER NULL,
+    `cantidad_banos` INTEGER NULL,
+    `cantidad_dormitorios` INTEGER NULL,
+    `cantidad_cocheras` INTEGER NULL,
+    `cantidad_pisos` INTEGER NULL,
     `antiguedad` INTEGER NULL,
     `precio` DECIMAL(10, 2) NULL,
     `foto` VARCHAR(200) NULL,
@@ -147,13 +160,29 @@ CREATE TABLE `InmuebleImagen` (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
+CREATE TABLE `Template` (
+    `id` INTEGER NOT NULL AUTO_INCREMENT,
+    `nombre` VARCHAR(100) NOT NULL,
+    `archivoPath` VARCHAR(255) NOT NULL,
+    `camposVariables` JSON NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
 CREATE TABLE `Contrato` (
     `id_contrato` INTEGER NOT NULL AUTO_INCREMENT,
     `id_inmueble` INTEGER NOT NULL,
     `id_cliente` INTEGER NOT NULL,
+    `id_template` INTEGER NULL,
+    `nombre` VARCHAR(100) NULL,
+    `valores` JSON NULL,
+    `archivoPath` VARCHAR(255) NULL,
     `fecha_inicio` DATETIME(3) NOT NULL,
     `fecha_fin` DATETIME(3) NOT NULL,
     `monto` DECIMAL(10, 2) NOT NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
 
     PRIMARY KEY (`id_contrato`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -201,8 +230,38 @@ CREATE TABLE `Historial` (
     PRIMARY KEY (`id_historial`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
+-- CreateTable
+CREATE TABLE `TipoServicio` (
+    `id_tipo_servicio` INTEGER NOT NULL AUTO_INCREMENT,
+    `nombre` VARCHAR(100) NOT NULL,
+
+    UNIQUE INDEX `TipoServicio_nombre_key`(`nombre`),
+    PRIMARY KEY (`id_tipo_servicio`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `Proveedor` (
+    `id_proveedor` INTEGER NOT NULL AUTO_INCREMENT,
+    `nombre_razon_social` VARCHAR(150) NOT NULL,
+    `cuit_cuil` VARCHAR(20) NOT NULL,
+    `correo_contacto` VARCHAR(100) NULL,
+    `telefono_contacto` VARCHAR(50) NULL,
+    `direccion` VARCHAR(200) NULL,
+    `tipoServicioId` INTEGER NOT NULL,
+    `datos_bancarios` TEXT NULL,
+    `estado` BOOLEAN NOT NULL DEFAULT true,
+    `observaciones` VARCHAR(255) NULL,
+    `fecha_alta` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+
+    UNIQUE INDEX `Proveedor_cuit_cuil_key`(`cuit_cuil`),
+    PRIMARY KEY (`id_proveedor`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
 -- AddForeignKey
 ALTER TABLE `Account` ADD CONSTRAINT `Account_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `User`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `Cliente` ADD CONSTRAINT `Cliente_tipoClienteId_fkey` FOREIGN KEY (`tipoClienteId`) REFERENCES `TipoCliente`(`id_tipo_cliente`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `Barrio` ADD CONSTRAINT `Barrio_id_localidad_fkey` FOREIGN KEY (`id_localidad`) REFERENCES `Localidad`(`id_localidad`) ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -235,6 +294,9 @@ ALTER TABLE `Contrato` ADD CONSTRAINT `Contrato_id_inmueble_fkey` FOREIGN KEY (`
 ALTER TABLE `Contrato` ADD CONSTRAINT `Contrato_id_cliente_fkey` FOREIGN KEY (`id_cliente`) REFERENCES `Cliente`(`id_cliente`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE `Contrato` ADD CONSTRAINT `Contrato_id_template_fkey` FOREIGN KEY (`id_template`) REFERENCES `Template`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE `Cobranza` ADD CONSTRAINT `Cobranza_id_inmueble_fkey` FOREIGN KEY (`id_inmueble`) REFERENCES `Inmueble`(`id_inmueble`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -254,3 +316,6 @@ ALTER TABLE `Historial` ADD CONSTRAINT `Historial_id_inmueble_fkey` FOREIGN KEY 
 
 -- AddForeignKey
 ALTER TABLE `Historial` ADD CONSTRAINT `Historial_id_cliente_fkey` FOREIGN KEY (`id_cliente`) REFERENCES `Cliente`(`id_cliente`) ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `Proveedor` ADD CONSTRAINT `Proveedor_tipoServicioId_fkey` FOREIGN KEY (`tipoServicioId`) REFERENCES `TipoServicio`(`id_tipo_servicio`) ON DELETE RESTRICT ON UPDATE CASCADE;
