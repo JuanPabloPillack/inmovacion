@@ -1,20 +1,15 @@
 // src/app/api/inmuebles/route.ts
-
-
-
-
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { Prisma } from "@/generated/prisma";
 
-// 🧩 Helpers
 const toNumberOrUndefined = (v: any): number | undefined =>
   v !== undefined && v !== null && v !== "" ? Number(v) : undefined;
+
 const toDecimalOrUndefined = (v: any): Prisma.Decimal | undefined =>
   v !== undefined && v !== null && v !== "" ? new Prisma.Decimal(Number(v)) : undefined;
 
-// ✅ GET → listar inmuebles con filtros opcionales
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
@@ -50,27 +45,33 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// 🟢 POST → crear inmueble
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     console.log("📦 Payload recibido:", body);
 
-    // ✅ crear ubicación (si corresponde)
-    let ubicacionId: number | undefined;
-    if (body.direccion || body.ciudad || body.provincia || body.id_barrio) {
-      const nuevaUbicacion = await db.ubicacion.create({
-        data: {
-          direccion: body.direccion ?? null,
-          ciudad: body.ciudad ?? null,
-          provincia: body.provincia ?? null,
-          id_barrio: toNumberOrUndefined(body.id_barrio),
-        },
-      });
-      ubicacionId = nuevaUbicacion.id_ubicacion;
+    if (!body.id_cliente) {
+      return NextResponse.json({ error: "Debe seleccionar un propietario" }, { status: 400 });
     }
 
-    // ✅ crear inmueble
+    if (!body.barrio) {
+      return NextResponse.json({ error: "Debe escribir un barrio" }, { status: 400 });
+    }
+
+    // Buscar o crear barrio
+    let barrioDb = await db.barrio.findFirst({ where: { nombre: body.barrio } });
+    if (!barrioDb) {
+      const localidadId =
+        body.localidadId || (await db.localidad.findFirst())?.id_localidad;
+      if (!localidadId)
+        return NextResponse.json({ error: "No se pudo determinar la localidad para el barrio" }, { status: 400 });
+
+      barrioDb = await db.barrio.create({
+        data: { nombre: body.barrio, id_localidad: Number(localidadId) },
+      });
+    }
+
+    // Crear inmueble con ubicación conectada
     const inmueble = await db.inmueble.create({
       data: {
         titulo: body.titulo,
@@ -85,26 +86,29 @@ export async function POST(req: NextRequest) {
         precio: toDecimalOrUndefined(body.precio),
         detalles: body.detalles ?? null,
         archivado: false,
-
         tipo_inmueble: body.id_tipo_inmueble
           ? { connect: { id_tipo_inmueble: Number(body.id_tipo_inmueble) } }
           : undefined,
         estado: body.id_estado
           ? { connect: { id_estado: Number(body.id_estado) } }
           : undefined,
-        cliente: body.id_cliente
-          ? { connect: { id_cliente: Number(body.id_cliente) } }
-          : undefined,
+        cliente: { connect: { id_cliente: Number(body.id_cliente) } },
         operacion: body.id_operacion
           ? { connect: { id_operacion: Number(body.id_operacion) } }
           : undefined,
-
-        ...(ubicacionId ? { id_ubicacion: ubicacionId } : {}),
+        ubicacion: {
+          create: {
+            direccion: body.direccion ?? null,
+            ciudad: body.ciudad ?? null,
+            provincia: body.provincia ?? null,
+            id_barrio: barrioDb.id_barrio,
+          },
+        },
         foto: body.imagenes?.find((i: any) => i.principal)?.url ?? "/placeholder.jpg",
       },
     });
 
-    // ✅ guardar imágenes
+    // Guardar imágenes
     if (Array.isArray(body.imagenes) && body.imagenes.length > 0) {
       await db.inmuebleImagen.createMany({
         data: body.imagenes.map((img: any) => ({
@@ -115,6 +119,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // Retornar inmueble creado con relaciones
     const creado = await db.inmueble.findUnique({
       where: { id_inmueble: inmueble.id_inmueble },
       include: {
@@ -130,6 +135,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(creado, { status: 201 });
   } catch (error: any) {
     console.error("❌ Error POST /api/inmuebles:", error);
-    return NextResponse.json({ error: error.message || "Error al crear inmueble" }, { status: 500 });
-  }
+    return NextResponse.json({ error: error.message || "Error al crear inmueble" }, { status: 500 });
+  }
 }
