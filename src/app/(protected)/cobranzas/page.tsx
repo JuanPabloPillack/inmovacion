@@ -115,10 +115,6 @@ export default function CobranzasPage() {
   };
 
   const handleDelete = (cobranza: Cobranza) => {
-    if (cobranza.activa) {
-      toast.error("Solo puedes eliminar cobranzas inactivas");
-      return;
-    }
     setItemToDelete(cobranza);
     setDeleteModalOpen(true);
   };
@@ -286,14 +282,12 @@ export default function CobranzasPage() {
                           ✏️ Modificar
                         </button>
 
-                        {!c.activa && (
-                          <button
-                            onClick={() => handleDelete(c)}
-                            className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-red-100 text-red-700 hover:bg-red-200 transition"
-                          >
-                            <Trash2 className="w-4 h-4" /> Eliminar
-                          </button>
-                        )}
+                        <button
+                          onClick={() => handleDelete(c)}
+                          className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-red-100 text-red-700 hover:bg-red-200 transition"
+                        >
+                          <Trash2 className="w-4 h-4" /> Eliminar
+                        </button>
                       </div>
                     </div>
                   ))}
@@ -330,7 +324,7 @@ export default function CobranzasPage() {
         onClose={() => setDeleteModalOpen(false)}
         onConfirm={confirmDelete}
         title="Eliminar Cobranza"
-        message="¿Deseas eliminar esta cobranza? Solo puede eliminarse si está inactiva."
+        message="¿Estás seguro de que deseas eliminar esta cobranza? Esta acción no se puede deshacer."
       />
     </div>
   );

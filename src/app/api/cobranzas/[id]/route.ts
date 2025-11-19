@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+//cobranzas/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 
@@ -66,18 +67,6 @@ export async function DELETE(req: NextRequest, { params }: any) {
         { status: 404 }
       );
 
-    if (cobranza.id_rendicion)
-      return NextResponse.json(
-        { error: "No se puede eliminar una cobranza rendida." },
-        { status: 400 }
-      );
-
-    if (cobranza.activa)
-      return NextResponse.json(
-        { error: "Solo se pueden eliminar cobranzas inactivas." },
-        { status: 403 }
-      );
-
     await db.cobranza.delete({ where: { id_cobranza } });
 
     return NextResponse.json({ message: "Eliminada correctamente." });
@@ -107,12 +96,6 @@ export async function PUT(req: NextRequest, { params }: any) {
       return NextResponse.json(
         { error: "Cobranza no encontrada." },
         { status: 404 }
-      );
-
-    if (existente.id_rendicion)
-      return NextResponse.json(
-        { error: "No se puede modificar una cobranza rendida." },
-        { status: 400 }
       );
 
     const body = await req.json();
@@ -175,4 +158,3 @@ export async function PUT(req: NextRequest, { params }: any) {
     );
   }
 }
-

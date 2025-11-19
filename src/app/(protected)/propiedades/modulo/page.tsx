@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { Home, PlusCircle, AlertCircle } from 'lucide-react';
+import { Home, PlusCircle, AlertCircle, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Header from '@/components/ui/Header';
 import InmuebleCard from '@/components/InmuebleCard';
@@ -63,6 +63,22 @@ export default function PropiedadesPage() {
     } catch {
       setError('No se pudo actualizar el inmueble');
       toast.error('Error al actualizar el inmueble');
+    }
+  };
+
+  // ✅ Eliminar solo si está archivado
+  const handleEliminar = async (id: number) => {
+    if (!confirm('¿Estás seguro de que quieres eliminar esta propiedad? Esta acción no se puede deshacer.')) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/inmuebles/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Error al eliminar');
+      setInmuebles((prev) => prev.filter((i) => i.id_inmueble !== id));
+      toast.success('Propiedad eliminada correctamente');
+    } catch {
+      toast.error('Error al eliminar la propiedad');
     }
   };
 
@@ -296,6 +312,14 @@ export default function PropiedadesPage() {
                         className="px-4 py-2 text-sm rounded-md font-medium bg-blue-100 text-blue-700 hover:bg-blue-200 transition"
                       >
                         Modificar
+                      </button>
+                      {/* ✅ Botón eliminar solo para archivados */}
+                      <button
+                        onClick={() => handleEliminar(i.id_inmueble)}
+                        className="px-4 py-2 text-sm rounded-md font-medium bg-red-100 text-red-700 hover:bg-red-200 transition"
+                      >
+                        <Trash2 className="w-4 h-4 inline mr-1" />
+                        Eliminar
                       </button>
                     </div>
                   </div>

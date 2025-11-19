@@ -26,13 +26,31 @@ export default function EditarInmueblePage() {
         const res = await fetch(`/api/inmuebles/${id}`);
         if (!res.ok) throw new Error("Error al obtener inmueble");
         const data = await res.json();
-        setInmueble(data.inmueble ?? data);
+
+        // Mapeo del barrio para que sea solo id (top-level)
+        const inmuebleData: InmuebleEdit = {
+          ...data.inmueble ?? data,
+          id_barrio: data.inmueble?.ubicacion?.barrio?.id_barrio ?? data.ubicacion?.id_barrio ?? undefined
+        };
+
+        // ✅ Para el input de texto en el formulario: usar solo el nombre del barrio
+        if (inmuebleData.ubicacion && data.ubicacion?.barrio?.nombre) {
+          inmuebleData.ubicacion.barrio = data.ubicacion.barrio.nombre;
+        }
+
+        // ✅ Eliminar la propiedad completa 'barrio' del objeto ubicacion para evitar [object Object]
+        if (inmuebleData.ubicacion?.barrio && typeof inmuebleData.ubicacion.barrio === 'object') {
+          delete inmuebleData.ubicacion.barrio;
+        }
+
+        setInmueble(inmuebleData);
       } catch {
         alert("No se pudo cargar el inmueble");
       } finally {
         setLoading(false);
       }
     };
+
     if (id) fetchInmueble();
   }, [id]);
 
@@ -63,6 +81,7 @@ export default function EditarInmueblePage() {
         id_estado: Number(body.id_estado),
         id_cliente: Number(body.id_cliente),
         id_operacion: body.id_operacion ? Number(body.id_operacion) : undefined,
+        // ✅ Ahora body.id_barrio viene del hidden input en el formulario
         id_barrio: body.id_barrio ? Number(body.id_barrio) : undefined,
         precio: body.precio ? Number(body.precio) : undefined,
         superficie_total: body.superficie_total ? Number(body.superficie_total) : undefined,
@@ -92,6 +111,10 @@ export default function EditarInmueblePage() {
     }
   };
 
+  const handleCancel = () => {
+    router.push("/propiedades/modulo");
+  };
+
   if (loading)
     return <div className="p-8 text-gray-600">Cargando inmueble...</div>;
   if (!inmueble)
@@ -99,20 +122,11 @@ export default function EditarInmueblePage() {
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: "#f8f9fa" }}>
-      {/* 🔹 Header superior general */}
       <Header />
-
-      {/* 🔹 Subencabezado con ícono y título */}
-      <header
-        className="bg-white shadow-sm border-b"
-        style={{ borderColor: "#e5e7eb" }}
-      >
+      <header className="bg-white shadow-sm border-b" style={{ borderColor: "#e5e7eb" }}>
         <div className="max-w-5xl mx-auto px-8 py-8">
           <div className="flex items-center gap-4">
-            <div
-              className="p-3 rounded-xl"
-              style={{ backgroundColor: "#e8f6fc" }}
-            >
+            <div className="p-3 rounded-xl" style={{ backgroundColor: "#e8f6fc" }}>
               <Home className="w-7 h-7" style={{ color: "#63bae9" }} />
             </div>
             <div>
@@ -126,17 +140,13 @@ export default function EditarInmueblePage() {
           </div>
         </div>
       </header>
-
-      {/* 🔹 Contenido principal */}
       <main className="max-w-5xl mx-auto px-8 py-10">
-        <div
-          className="bg-white rounded-2xl shadow-sm border p-8"
-          style={{ borderColor: "#e5e7eb" }}
-        >
+        <div className="bg-white rounded-2xl shadow-sm border p-8" style={{ borderColor: "#e5e7eb" }}>
           <FormularioInmueble
             initialData={inmueble}
             submitHandler={handleUpdate}
             submitLabel="Actualizar Inmueble"
+            onCancel={handleCancel} // ✅ Prop para cancelar
           />
         </div>
       </main>
