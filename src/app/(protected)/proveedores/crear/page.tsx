@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // ===============================================
 // Archivo: src/app/(protected)/proveedores/crear/page.tsx
 // Descripción: Crear nuevo proveedor
@@ -19,7 +20,7 @@ import { CheckCircle, ArrowLeft, FileText, AlertCircle } from "lucide-react";
 // IMPORTA SOLO EL FORM
 import PagoProveedorForm, {
   PagoProveedorFormValues,
-} from "@/components/ui/PagoProveedorForm";
+} from "@/components/PagoProveedorForm";
 
 export default function CrearPagoProveedorPage() {
   const { data: session, status } = useSession();

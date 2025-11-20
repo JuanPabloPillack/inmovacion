@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // ===============================================
 // Archivo: src/app/(protected)/pagos/page.tsx
 // Descripción: Gestión de Pagos a Proveedores
@@ -40,12 +41,12 @@ import {
   Eye,
   Edit,
   FileText,
-  Trash2
+  Trash2,
 } from "lucide-react";
 
 // Actions
-import { getPagos, deletePago } from "@/actions/pagos/pagos-actions"; 
- 
+import { getPagos, deletePago } from "@/actions/pagos/pagos-actions";
+
 // Components
 import Header from "@/components/ui/Header";
 import Loading from "@/components/ui/Loading";
@@ -116,13 +117,19 @@ export default function PagosProveedoresPage() {
     return pagos.filter((p) => {
       switch (filterField) {
         case "proveedor":
-          return p.proveedor?.nombre_razon_social.toLowerCase().includes(term);
+          return p.proveedor?.nombre_razon_social
+            ?.toLowerCase()
+            .includes(term);
+
         case "concepto":
-          return p.concepto.toLowerCase().includes(term);
+          return p.concepto?.toLowerCase().includes(term);
+
         case "medioPago":
-          return p.medioPago?.nombre.toLowerCase().includes(term);
+          return p.medioPago?.nombre?.toLowerCase().includes(term);
+
         case "estadoPago":
-          return p.estadoPago?.nombre.toLowerCase().includes(term);
+          return p.estadoPago?.nombre?.toLowerCase().includes(term);
+
         default:
           return true;
       }
@@ -157,13 +164,21 @@ export default function PagosProveedoresPage() {
         <Table>
           <TableHeader>
             <TableRow className="border-[#969696]/20">
-              <TableHead className="text-[#686363] font-medium">Proveedor</TableHead>
-              <TableHead className="text-[#686363] font-medium">Concepto</TableHead>
-              <TableHead className="text-[#686363] font-medium">Importe</TableHead>
+              <TableHead className="text-[#686363] font-medium">
+                Proveedor
+              </TableHead>
+              <TableHead className="text-[#686363] font-medium">
+                Concepto
+              </TableHead>
+              <TableHead className="text-[#686363] font-medium">
+                Importe
+              </TableHead>
               <TableHead className="text-[#686363] font-medium">Medio</TableHead>
               <TableHead className="text-[#686363] font-medium">Estado</TableHead>
               <TableHead className="text-[#686363] font-medium">Fecha</TableHead>
-              <TableHead className="text-right text-[#686363] font-medium">Acciones</TableHead>
+              <TableHead className="text-right text-[#686363] font-medium">
+                Acciones
+              </TableHead>
             </TableRow>
           </TableHeader>
 
@@ -211,14 +226,16 @@ export default function PagosProveedoresPage() {
                       className="border-[#969696]/20"
                     >
                       <DropdownMenuItem
-                        onClick={() => router.push(/pagos/${p.id_pago})}
+                        onClick={() => router.push(`/pagos/${p.id_pago}`)}
                         className="text-[#686363] hover:bg-[#63bae9]/10 hover:text-[#63bae9]">
                         <Eye className="mr-2 h-4 w-4" />
                         Ver detalles
                       </DropdownMenuItem>
 
                       <DropdownMenuItem
-                        onClick={() => router.push(/pagos/editar?id=${p.id_pago})}
+                        onClick={() =>
+                          router.push(`/pagos/editar?id=${p.id_pago}`)
+                        }
                         className="text-[#686363] hover:bg-[#63bae9]/10 hover:text-[#63bae9]">
                         <Edit className="mr-2 h-4 w-4" />
                         Editar
@@ -256,14 +273,15 @@ export default function PagosProveedoresPage() {
               Pagos a Proveedores
             </h1>
           </div>
-          <p className="text-[#969696]">Administra todos los pagos realizados</p>
+          <p className="text-[#969696]">
+            Administra todos los pagos realizados
+          </p>
         </div>
 
         {/* Buscador + Filtros + Crear */}
         <Card className="mb-6 border-[#969696]/20">
           <CardContent className="p-6">
             <div className="flex flex-col sm:flex-row gap-4 items-center">
-
               {/* Filtro */}
               <select
                 value={filterField}

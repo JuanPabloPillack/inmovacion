@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // ===============================================
 // Archivo: src/actions/proveedores/proveedor-actions.ts
 // Descripción: Acciones CRUD para proveedores usando db

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // ===============================================
 // Archivo: src/app/(protected)/proveedores/editar/page.tsx
 // Descripción: Editar proveedor existente
@@ -20,7 +21,7 @@ import { Textarea } from "@/components/ui/textarea";
 
 // Actions
 import { getProveedorById, updateProveedor } from "@/actions/proveedores/proveedor-actions";
-import { getTiposServicio } from "@/actions/servicios/getTiposServicio"; // si ya tenés esto
+import { getTiposServicio } from "@/actions/servicios/getTiposServicios"; // si ya tenés esto
 
 // Components
 import Header from "@/components/ui/Header";

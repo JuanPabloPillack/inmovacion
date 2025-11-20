@@ -1,6 +1,5 @@
 // prisma/schema.prisma
 
-
 generator client {
   provider = "prisma-client-js"
   output   = "../src/generated/prisma"
@@ -11,7 +10,9 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+//
 // ========== ENUMS ==========
+//
 enum TemplateType {
   ALQUILER_LOCACION
   COMPRA_VENTA
@@ -27,43 +28,45 @@ enum Role {
   admin
 }
 
+//
 // ========== MODELOS DE AUTENTICACIÓN ==========
+//
 model User {
-  id              String    @id @default(cuid())
-  name            String?
-  username        String?   @unique
-  password        String?
-  email           String    @unique
-  emailVerified   DateTime?
-  image           String?
-  role            Role      @default(admin)
-  phone           String?
-  status          String?   @default("active")
-  accounts        Account[]
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  createdContracts Contrato[] @relation("CreatedContracts")
-  updatedContracts Contrato[] @relation("UpdatedContracts")
-  createdTemplates Template[] @relation("CreatedTemplates")
+  id               String      @id @default(cuid())
+  name             String?
+  username         String?     @unique
+  password         String?
+  email            String      @unique
+  emailVerified    DateTime?
+  image            String?
+  role             Role        @default(admin)
+  phone            String?
+  status           String?     @default("active")
+  accounts         Account[]
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  createdContracts Contrato[]  @relation("CreatedContracts")
+  updatedContracts Contrato[]  @relation("UpdatedContracts")
+  createdTemplates Template[]  @relation("CreatedTemplates")
 }
 
 model Account {
-  id                     String  @id @default(cuid())
-  userId                 String  @unique
-  type                   String
-  provider               String
-  providerAccountId      String
-  refresh_token          String? @db.Text
-  access_token           String? @db.Text
-  expires_at             Int?
-  token_type             String?
-  scope                  String?
-  id_token               String? @db.Text
-  session_state          String?
-  refresh_token_expires_in Int?
-  user                   User?   @relation(fields: [userId], references: [id])
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
+  id                        String   @id @default(cuid())
+  userId                    String   @unique
+  type                      String
+  provider                  String
+  providerAccountId         String
+  refresh_token             String?  @db.Text
+  access_token              String?  @db.Text
+  expires_at                Int?
+  token_type                String?
+  scope                     String?
+  id_token                  String?  @db.Text
+  session_state             String?
+  refresh_token_expires_in  Int?
+  user                      User?    @relation(fields: [userId], references: [id])
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
 
   @@unique([provider, providerAccountId])
   @@index([userId])
@@ -78,10 +81,12 @@ model VerificationToken {
   @@unique([identifier])
 }
 
-// ========== MODELOS DEL SISTEMA INMOBILIARIO ==========
+//
+// ========== SISTEMA INMOBILIARIO ==========
+//
 model TipoCliente {
-  id_tipo_cliente Int         @id @default(autoincrement())
-  nombre          String      @db.VarChar(50)
+  id_tipo_cliente Int        @id @default(autoincrement())
+  nombre          String     @db.VarChar(50)
   clientes        Cliente[]
 }
 
@@ -111,26 +116,26 @@ model Tipo_inmueble {
 }
 
 model Localidad {
-  id_localidad Int       @id @default(autoincrement())
-  nombre       String    @db.VarChar(100)
+  id_localidad Int      @id @default(autoincrement())
+  nombre       String   @db.VarChar(100)
   barrios      Barrio[]
 }
 
 model Barrio {
-  id_barrio     Int        @id @default(autoincrement())
-  nombre        String     @db.VarChar(100)
-  id_localidad  Int
-  localidad     Localidad  @relation(fields: [id_localidad], references: [id_localidad], onDelete: Restrict, onUpdate: Cascade)
-  ubicaciones   Ubicacion[]
+  id_barrio    Int        @id @default(autoincrement())
+  nombre       String     @db.VarChar(100)
+  id_localidad Int
+  localidad    Localidad  @relation(fields: [id_localidad], references: [id_localidad], onDelete: Restrict, onUpdate: Cascade)
+  ubicaciones  Ubicacion[]
 }
 
 model Ubicacion {
-  id_ubicacion Int       @id @default(autoincrement())
-  direccion    String    @db.VarChar(200)
-  ciudad       String?   @db.VarChar(100)
-  provincia    String?   @db.VarChar(100)
+  id_ubicacion Int        @id @default(autoincrement())
+  direccion    String     @db.VarChar(200)
+  ciudad       String?    @db.VarChar(100)
+  provincia    String?    @db.VarChar(100)
   id_barrio    Int?
-  barrio       Barrio?   @relation(fields: [id_barrio], references: [id_barrio], onDelete: Restrict, onUpdate: Cascade)
+  barrio       Barrio?    @relation(fields: [id_barrio], references: [id_barrio], onDelete: Restrict, onUpdate: Cascade)
   inmuebles    Inmueble[]
 }
 
@@ -190,15 +195,15 @@ model InmuebleImagen {
 }
 
 model Template {
-  id           Int      @id @default(autoincrement())
-  nombre       String   @db.VarChar(100)
-  archivoPath  String   @db.VarChar(255)
+  id           Int       @id @default(autoincrement())
+  nombre       String    @db.VarChar(100)
+  archivoPath  String    @db.VarChar(255)
   camposVariables Json?
   tipo         TemplateType
-  createdAt    DateTime @default(now())
+  createdAt    DateTime  @default(now())
   contratos    Contrato[]
   createdById  String
-  createdBy    User     @relation("CreatedTemplates", fields: [createdById], references: [id], onDelete: Restrict)
+  createdBy    User      @relation("CreatedTemplates", fields: [createdById], references: [id], onDelete: Restrict)
 }
 
 model Contrato {
@@ -228,42 +233,46 @@ model Contrato {
   updatedBy     User          @relation("UpdatedContracts", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Cascade)
 }
 
+//
 // ===================== RENDICIONES =====================
+//
 model Rendicion {
-  id_rendicion Int      @id @default(autoincrement())
+  id_rendicion Int        @id @default(autoincrement())
   id_inmueble  Int
-  inmueble     Inmueble @relation("InmuebleRendiciones", fields: [id_inmueble], references: [id_inmueble])
+  inmueble     Inmueble   @relation("InmuebleRendiciones", fields: [id_inmueble], references: [id_inmueble])
   fecha        DateTime
-  monto_total  Decimal  @db.Decimal(10, 2)
+  monto_total  Decimal    @db.Decimal(10, 2)
   cobranzas    Cobranza[] @relation("RendicionCobranza")
   mes_ipc      Int?
   anio_ipc     Int?
 }
 
+//
 // ===================== COBRANZAS =====================
+//
 model Cobranza {
-  id_cobranza     Int      @id @default(autoincrement())
+  id_cobranza     Int         @id @default(autoincrement())
   id_inmueble     Int?
-  inmueble        Inmueble? @relation(fields: [id_inmueble], references: [id_inmueble], onDelete: SetNull, onUpdate: Cascade)
+  inmueble        Inmueble?   @relation(fields: [id_inmueble], references: [id_inmueble], onDelete: SetNull, onUpdate: Cascade)
   id_cliente      Int
-  cliente         Cliente  @relation(fields: [id_cliente], references: [id_cliente], onDelete: Restrict, onUpdate: Cascade)
+  cliente         Cliente     @relation(fields: [id_cliente], references: [id_cliente], onDelete: Restrict, onUpdate: Cascade)
   id_contrato     Int?
-  monto           Decimal  @db.Decimal(10, 2)
-  fecha_cobranza  DateTime @default(now())
-  medio_pago      String   @db.VarChar(50)
-  concepto        String   @db.VarChar(150)
-  numero_recibo   String?  @db.VarChar(50)
-  observaciones   String?  @db.VarChar(255)
-  genera_recibo   Boolean  @default(false)
-  activa          Boolean  @default(true)
-  pagado          Boolean  @default(false)
+  monto           Decimal     @db.Decimal(10, 2)
+  fecha_cobranza  DateTime    @default(now())
+  medio_pago      String      @db.VarChar(50)
+  concepto        String      @db.VarChar(150)
+  numero_recibo   String?     @db.VarChar(50)
+  observaciones   String?     @db.VarChar(255)
+  genera_recibo   Boolean     @default(false)
+  activa          Boolean     @default(true)
+  pagado          Boolean     @default(false)
   id_rendicion    Int?
-  rendicion       Rendicion? @relation("RendicionCobranza", fields: [id_rendicion], references: [id_rendicion], onDelete: SetNull, onUpdate: Cascade)
+  rendicion       Rendicion?  @relation("RendicionCobranza", fields: [id_rendicion], references: [id_rendicion], onDelete: SetNull, onUpdate: Cascade)
   recibo          Recibo?
-  creadoPor       String?  @db.VarChar(100)
-  modificadoPor   String?  @db.VarChar(100)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @default(now()) @updatedAt
+  creadoPor       String?     @db.VarChar(100)
+  modificadoPor   String?     @db.VarChar(100)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @default(now()) @updatedAt
 
   @@index([id_inmueble])
   @@index([id_cliente])
@@ -271,62 +280,53 @@ model Cobranza {
 }
 
 model Recibo {
-  id_recibo     Int      @id @default(autoincrement())
-  id_cobranza   Int?     @unique
-  cobranza      Cobranza? @relation(fields: [id_cobranza], references: [id_cobranza], onDelete: SetNull, onUpdate: Cascade)
-  total         Decimal  @db.Decimal(10, 2)
+  id_recibo     Int        @id @default(autoincrement())
+  id_cobranza   Int?       @unique
+  cobranza      Cobranza?   @relation(fields: [id_cobranza], references: [id_cobranza], onDelete: SetNull, onUpdate: Cascade)
+  total         Decimal     @db.Decimal(10, 2)
   descripcion   String?
-  fecha_emision DateTime @default(now())
+  fecha_emision DateTime    @default(now())
 }
 
-// ===================== PAGOS A PROVEEDORES (EXTENDIDO PARA COINCIDIR CON LA PÁGINA) =====================
-model MedioPago {
-  id_medio_pago Int    @id @default(autoincrement())
-  nombre        String @db.VarChar(100)
-  pagos         Pago[]
-}
 
-model EstadoPago {
-  id_estado_pago Int    @id @default(autoincrement())
-  nombre         String @db.VarChar(100)
-  pagos          Pago[]
-}
 
 model Pago {
-  id_pago        Int        @id @default(autoincrement())
-  id_inmueble    Int
-  inmueble       Inmueble   @relation(fields: [id_inmueble], references: [id_inmueble], onDelete: Restrict, onUpdate: Cascade)
-  id_proveedor   Int
-  proveedor      Cliente    @relation(fields: [id_proveedor], references: [id_cliente], onDelete: Restrict, onUpdate: Cascade)
-  concepto       String     @db.VarChar(255)
-  importe        Decimal    @db.Decimal(10, 2)
-  fecha_pago     DateTime
-  id_medio_pago  Int?
-  medioPago      MedioPago? @relation(fields: [id_medio_pago], references: [id_medio_pago], onDelete: SetNull, onUpdate: Cascade)
-  id_estado_pago Int?
-  estadoPago     EstadoPago? @relation(fields: [id_estado_pago], references: [id_estado_pago], onDelete: SetNull, onUpdate: Cascade)
+  id_pago Int @id @default(autoincrement())
+  id_inmueble Int
+  inmueble Inmueble @relation(fields: [id_inmueble], references: [id_inmueble], onDelete: Restrict, onUpdate: Cascade)
+  id_cliente Int
+  cliente Cliente @relation(fields: [id_cliente], references: [id_cliente], onDelete: Restrict, onUpdate: Cascade)
+  monto Decimal @db.Decimal(10, 2)
+  fecha DateTime
 }
 
+//
+// ===================== HISTORIAL =====================
+//
 model Historial {
-  id_historial Int      @id @default(autoincrement())
-  descripcion  String   @db.VarChar(255)
+  id_historial Int        @id @default(autoincrement())
+  descripcion  String     @db.VarChar(255)
   fecha        DateTime
   id_inmueble  Int?
-  inmueble     Inmueble? @relation("HistorialInmueble", fields: [id_inmueble], references: [id_inmueble], onDelete: SetNull, onUpdate: Cascade)
+  inmueble     Inmueble?  @relation("HistorialInmueble", fields: [id_inmueble], references: [id_inmueble], onDelete: SetNull, onUpdate: Cascade)
   id_cliente   Int?
-  cliente      Cliente? @relation("HistorialCliente", fields: [id_cliente], references: [id_cliente], onDelete: SetNull, onUpdate: Cascade)
+  cliente      Cliente?   @relation("HistorialCliente", fields: [id_cliente], references: [id_cliente], onDelete: SetNull, onUpdate: Cascade)
 }
 
+//
+// ===================== IPC =====================
+//
 model Ipc {
   id            Int      @id @default(autoincrement())
   mes           Int
   anio          Int
-  valor         Decimal  @db.Decimal(10, 2)
+  valor         Decimal   @db.Decimal(10, 2)
   fuente        String
-  fechaConsulta DateTime @default(now())
+  fechaConsulta DateTime  @default(now())
 
   @@unique([mes, anio], name: "mes_anio")
 }
+
 
 // ========== MODELO TIPO DE SERVICIO ==========
 
@@ -335,7 +335,6 @@ model TipoServicio {
   nombre           String      @db.VarChar(100) @unique
   proveedores      Proveedor[]
 }
-
 
 // ========== MODELO PROVEEDOR ==========
 
@@ -377,6 +376,7 @@ model MedioPago {
   pagos          PagoProveedor[]
 }
 
+
 // ===============================
 // MODELO PAGO A PROVEEDOR
 // ===============================
@@ -400,5 +400,5 @@ model PagoProveedor {
   estadoPago           EstadoPago      @relation(fields: [estadoPagoId], references: [id_estado_pago], onDelete: Restrict)
 
   fecha                DateTime        @default(now())
-  fecha_modificacion   DateTime        @updatedAt
+  fecha_modificacion   DateTime        @updatedAt
 }

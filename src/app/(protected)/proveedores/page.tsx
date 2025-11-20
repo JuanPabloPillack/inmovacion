@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // ===============================================
 // Archivo: src/app/(protected)/proveedores/page.tsx
 // Descripción: Gestión de Proveedores (solo activos, con eliminar soft + filtros)
@@ -203,22 +204,30 @@ export default function ProveedoresPage() {
                     </DropdownMenuTrigger>
 
                     <DropdownMenuContent align="end" className="border-[#969696]/20">
+
+                      {/* VER DETALLES */}
                       <DropdownMenuItem
-                        onClick={() => router.push(/proveedores/${p.id_proveedor})}
+                        onClick={() =>
+                          router.push(`/proveedores/${p.id_proveedor}`)
+                        }
                         className="text-[#686363] hover:bg-[#63bae9]/10 hover:text-[#63bae9]"
                       >
                         <Eye className="mr-2 h-4 w-4" />
                         Ver detalles
                       </DropdownMenuItem>
 
+                      {/* EDITAR */}
                       <DropdownMenuItem
-                        onClick={() => router.push(/proveedores/editar?id=${p.id_proveedor})}
+                        onClick={() =>
+                          router.push(`/proveedores/editar?id=${p.id_proveedor}`)
+                        }
                         className="text-[#686363] hover:bg-[#63bae9]/10 hover:text-[#63bae9]"
                       >
                         <Edit className="mr-2 h-4 w-4" />
                         Editar
                       </DropdownMenuItem>
 
+                      {/* ELIMINAR */}
                       <DropdownMenuItem
                         onClick={() => {
                           setProveedorId(p.id_proveedor);
@@ -229,9 +238,11 @@ export default function ProveedoresPage() {
                         <Trash2 className="mr-2 h-4 w-4" />
                         Eliminar
                       </DropdownMenuItem>
+
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </TableCell>
+
               </TableRow>
             ))}
           </TableBody>

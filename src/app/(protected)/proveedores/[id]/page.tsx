@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // ===============================================
 // Archivo: src/app/(protected)/proveedores/[id]/page.tsx
 // Descripción: Vista detallada de un proveedor (leer + editar + eliminar soft)
@@ -59,7 +60,7 @@ export default function ProveedorDetallePage() {
     }
 
     loadProveedor().finally(() => setLoading(false));
-  }, [session]);
+  }, [session, status]);
 
   if (loading || !proveedor) return <Loading message="Cargando proveedor..." />;
 
@@ -146,7 +147,7 @@ export default function ProveedorDetallePage() {
           <Button
             className="bg-[#fcc238] text-[#686363] hover:bg-[#fcc238]/80"
             onClick={() =>
-              router.push(/proveedores/editar?id=${proveedor.id_proveedor})
+              router.push(`/proveedores/editar?id=${proveedor.id_proveedor}`)
             }
           >
             <Edit className="h-4 w-4 mr-2" />

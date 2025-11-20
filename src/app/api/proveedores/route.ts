@@ -1,8 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // ===============================================
-// API: Crear Proveedor
+// API: Crear y listar Proveedores
 // Ruta: /api/proveedores
-// Runtime Node.js (evita Edge Runtime)
+// Runtime Node.js
 // ===============================================
 
 import { NextRequest, NextResponse } from "next/server";
@@ -11,11 +11,20 @@ import { db } from "@/lib/db";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+// =========================
+// POST — Crear proveedor
+// =========================
 export async function POST(req: NextRequest) {
   try {
-    const data = await req.json();
+    const data = await req.json().catch(() => null);
 
-    // Validación de tipoServicioId
+    if (!data) {
+      return NextResponse.json(
+        { success: false, message: "Body inválido" },
+        { status: 400 }
+      );
+    }
+
     const tipoServicioId = Number(data.tipoServicioId);
     if (isNaN(tipoServicioId)) {
       return NextResponse.json(
@@ -35,7 +44,7 @@ export async function POST(req: NextRequest) {
         tipoServicioId,
         datos_bancarios: data.datos_bancarios || null,
         observaciones: data.observaciones || null,
-        estado: true, // <── AHORA BOOLEAN
+        estado: true,
       },
     });
 
@@ -44,13 +53,10 @@ export async function POST(req: NextRequest) {
       { status: 201 }
     );
   } catch (error: any) {
-    console.error(" Error creando proveedor:", error);
+    console.error("Error creando proveedor:", error);
 
     return NextResponse.json(
-      {
-        success: false,
-        message: error?.message || "Error interno al crear proveedor",
-      },
+      { success: false, message: "Error interno al crear proveedor" },
       { status: 500 }
     );
   }
@@ -68,9 +74,11 @@ export async function GET() {
       },
     });
 
+    // 🔥 IMPORTANTE: debe devolver SIEMPRE un array
     return NextResponse.json(proveedores);
   } catch (error) {
     console.error("Error obteniendo proveedores:", error);
+
     return NextResponse.json(
       { success: false, message: "Error al obtener proveedores" },
       { status: 500 }
