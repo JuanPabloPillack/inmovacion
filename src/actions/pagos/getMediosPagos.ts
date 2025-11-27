@@ -1,3 +1,4 @@
+// src/actions/pagos/getMediosPagos.ts
 "use server";
 
 import { db } from "@/lib/db";

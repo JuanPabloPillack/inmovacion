@@ -427,6 +427,7 @@ model PagoProveedor {
   estadoPagoId         Int
   estadoPago           EstadoPago      @relation(fields: [estadoPagoId], references: [id_estado_pago], onDelete: Restrict)
 
+  estado              Boolean @default(true)
   fecha                DateTime        @default(now())
   fecha_modificacion   DateTime        @updatedAt
 }

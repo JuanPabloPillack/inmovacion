@@ -68,3 +68,40 @@ export const inmuebleSchema = object({
 });
 
 export type InmuebleFormValues = z.infer<typeof inmuebleSchema>;
+// =============================================================
+// PROVEEDORES — ESQUEMA FINAL COMPATIBLE CON REACT HOOK FORM
+// =============================================================
+
+export const proveedorSchema = z.object({
+  nombre_razon_social: z
+    .string()
+    .trim()
+    .min(3, "Debe tener mínimo 3 caracteres")
+    .max(150),
+
+  cuit_cuil: z
+    .string()
+    .transform(v => v.replace(/[^0-9]/g, ""))   // Limpia guiones
+    .refine(v => /^[0-9]{11}$/.test(v), {
+      message: "El CUIT/CUIL debe tener exactamente 11 dígitos",
+    }),
+
+  // ❗ IMPORTANTE: YA NO DEVUELVE null  
+  // SOLO "" o string
+  correo_contacto: z.string().optional().or(z.literal("")),
+
+  telefono_contacto: z.string().optional().or(z.literal("")),
+
+  direccion: z.string().optional().or(z.literal("")),
+
+  // RHF usa string, Prisma usa number → se convierte en la API
+  tipoServicioId: z
+    .string()
+    .min(1, "Seleccione un tipo de servicio"),
+
+  datos_bancarios: z.string().optional().or(z.literal("")),
+
+  observaciones: z.string().optional().or(z.literal("")),
+});
+
+export type ProveedorFormValues = z.infer<typeof proveedorSchema>;

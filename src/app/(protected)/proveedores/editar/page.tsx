@@ -1,253 +1,203 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // ===============================================
-// Archivo: src/app/(protected)/proveedores/editar/page.tsx
-// Descripción: Editar proveedor existente
-// Proyecto: inmovacion (GBS y Asociados)
+// Archivo: src/app/(protected)/pagos/editar/[id]/page.tsx
+// Descripción: Editar un pago a proveedor
 // ===============================================
 
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 
-// UI
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
-
-// Actions
-import { getProveedorById, updateProveedor } from "@/actions/proveedores/proveedor-actions";
-import { getTiposServicio } from "@/actions/servicios/getTiposServicios"; // si ya tenés esto
-
-// Components
 import Header from "@/components/ui/Header";
-import Loading from "@/components/ui/Loading";
+import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
-export default function EditarProveedorPage() {
+import { ArrowLeft, FileText, CheckCircle, AlertCircle } from "lucide-react";
+
+import PagoProveedorForm from "@/components/PagoProveedorForm";
+
+export default function EditarPagoProveedorPage() {
   const router = useRouter();
-  const params = useSearchParams();
-  const id = Number(params.get("id"));
+  const params = useParams();
 
   const { data: session, status } = useSession();
 
+  // ==========================
+  // ID seguro
+  // ==========================
+  const rawId = Array.isArray(params.id) ? params.id[0] : params.id;
+  const id = Number(rawId);
+
+  if (isNaN(id)) {
+    return (
+      <div className="text-center py-12 px-4 text-red-500 text-xl">
+        Error: ID inválido
+      </div>
+    );
+  }
+
+  const [initialData, setInitialData] = useState<any>(null);
+  const [proveedores, setProveedores] = useState([]);
+  const [mediosPago, setMediosPago] = useState([]);
+  const [estadosPago, setEstadosPago] = useState([]);
+
   const [loading, setLoading] = useState(true);
-  const [guardando, setGuardando] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isDirty, setIsDirty] = useState(false);
 
-  const [tipoServicios, setTipoServicios] = useState<any[]>([]);
-  const [form, setForm] = useState({
-    nombre_razon_social: "",
-    cuit_cuil: "",
-    correo_contacto: "",
-    telefono_contacto: "",
-    direccion: "",
-    tipoServicioId: "",
-    datos_bancarios: "",
-    observaciones: "",
-  });
-
-  // ===============================
-  // Cargar datos iniciales
-  // ===============================
+  // ==========================
+  // Validar sesión
+  // ==========================
   useEffect(() => {
     if (status === "loading") return;
     if (!session) {
       router.push("/");
       return;
     }
+  }, [session, status, router]);
 
-    const fetchData = async () => {
+  // ==========================
+  // Cargar datos del pago y catálogos
+  // ==========================
+  useEffect(() => {
+    async function load() {
       try {
-        const servicios = await getTiposServicio();
-        setTipoServicios(servicios);
+        const [pago, prov, med, est] = await Promise.all([
+          fetch(`/api/pagos/${id}`).then((r) => r.json()),
+          fetch("/api/proveedores").then((r) => r.json()),
+          fetch("/api/medio-pago").then((r) => r.json()),
+          fetch("/api/estado-pago").then((r) => r.json()),
+        ]);
 
-        const proveedor = await getProveedorById(id);
-
-        if (!proveedor) {
-          router.push("/proveedores");
-          return;
+        if (!pago || pago.error) {
+          throw new Error("Pago no encontrado");
         }
 
-        setForm({
-          nombre_razon_social: proveedor.nombre_razon_social,
-          cuit_cuil: proveedor.cuit_cuil,
-          correo_contacto: proveedor.correo_contacto ?? "",
-          telefono_contacto: proveedor.telefono_contacto ?? "",
-          direccion: proveedor.direccion ?? "",
-          tipoServicioId: proveedor.tipoServicioId.toString(),
-          datos_bancarios: proveedor.datos_bancarios ?? "",
-          observaciones: proveedor.observaciones ?? "",
+        setInitialData({
+          proveedorId: String(pago.proveedorId),
+          medioPagoId: String(pago.medioPagoId),
+          estadoPagoId: String(pago.estadoPagoId),
+          concepto: pago.concepto,
+          importe: String(pago.importe),
+          comprobante: pago.comprobante || "",
+          responsable: pago.responsable,
+          fecha_pago: pago.fecha_pago?.slice(0, 10),
         });
+
+        setProveedores(prov);
+        setMediosPago(med);
+        setEstadosPago(est);
+      } catch (err) {
+        console.error("Error cargando datos:", err);
+        setErrorMessage("Error cargando datos del pago.");
       } finally {
         setLoading(false);
       }
-    };
+    }
 
-    fetchData();
-  }, [session, status]);
+    load();
+  }, [id]);
 
-  if (loading) return <Loading message="Cargando proveedor..." />;
+  // ==========================
+  // CANCELAR
+  // ==========================
+  const handleCancel = () => {
+    if (isDirty) {
+      if (!window.confirm("Hay cambios sin guardar. ¿Desea salir igual?"))
+        return;
+    }
+    router.push("/pagos");
+  };
 
-  // ===============================
-  // Guardar cambios
-  // ===============================
-  const handleSubmit = async (e: any) => {
-    e.preventDefault();
-    setGuardando(true);
-
+  // ==========================
+  // SUBMIT (PUT)
+  // ==========================
+  const handleSubmit = async (data: any) => {
     try {
-      await updateProveedor(id, {
-        ...form,
-        tipoServicioId: Number(form.tipoServicioId),
+      const res = await fetch(`/api/pagos/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          proveedorId: Number(data.proveedorId),
+          medioPagoId: Number(data.medioPagoId),
+          estadoPagoId: Number(data.estadoPagoId),
+          concepto: data.concepto,
+          importe: Number(data.importe),
+          fecha_pago: data.fecha_pago,
+          comprobante: data.comprobante || null,
+          responsable: data.responsable,
+        }),
       });
 
-      router.push("/proveedores");
-    } catch (error) {
-      console.error("Error al actualizar proveedor:", error);
-    } finally {
-      setGuardando(false);
+      const result = await res.json();
+      if (!res.ok || !result.success) {
+        throw new Error(result.message || "Error al actualizar pago.");
+      }
+
+      setShowSuccess(true);
+      setTimeout(() => router.push("/pagos"), 1500);
+    } catch (e: any) {
+      console.error(e);
+      setErrorMessage(e.message);
     }
   };
 
+  if (loading) return <p className="p-6">Cargando datos...</p>;
+
   return (
-    <div className="min-h-screen bg-background">
-      <Header />
+    <div className="flex flex-col min-h-screen bg-white font-sans">
+      <div className="bg-white border-b border-[#969696]/50 w-full">
+        <Header />
+      </div>
 
-      <div className="container mx-auto px-4 py-8 max-w-2xl">
-        <Card className="border-[#969696]/20 shadow-md">
-          <CardHeader>
-            <CardTitle className="text-[#686363] text-2xl">Editar Proveedor</CardTitle>
-          </CardHeader>
+      <div className="container mx-auto p-4 max-w-5xl">
 
-          <CardContent>
-            <form className="space-y-4" onSubmit={handleSubmit}>
-              {/* Nombre */}
-              <div>
-                <Label>Nombre / Razón Social</Label>
-                <Input
-                  value={form.nombre_razon_social}
-                  onChange={(e) =>
-                    setForm({ ...form, nombre_razon_social: e.target.value })
-                  }
-                  required
-                />
-              </div>
+        {/* HEADER */}
+        <div className="flex items-center gap-3 mb-6">
+          <Button
+            variant="outline"
+            size="sm"
+            className="border-[#63bae9] text-[#63bae9]"
+            onClick={handleCancel}
+          >
+            <ArrowLeft className="h-4 w-4 mr-2" /> Volver
+          </Button>
 
-              {/* CUIT */}
-              <div>
-                <Label>CUIT / CUIL</Label>
-                <Input
-                  value={form.cuit_cuil}
-                  onChange={(e) =>
-                    setForm({ ...form, cuit_cuil: e.target.value })
-                  }
-                  required
-                />
-              </div>
+          <FileText className="h-6 w-6 text-[#63bae9]" />
+          <h1 className="text-2xl font-bold text-[#686363]">Editar Pago</h1>
+        </div>
 
-              {/* Correo */}
-              <div>
-                <Label>Correo de contacto</Label>
-                <Input
-                  value={form.correo_contacto}
-                  onChange={(e) =>
-                    setForm({ ...form, correo_contacto: e.target.value })
-                  }
-                />
-              </div>
+        {/* OK */}
+        {showSuccess && (
+          <Alert className="mb-6 bg-[#63bae9]/10">
+            <CheckCircle className="h-4 w-4 text-[#63bae9]" />
+            <AlertDescription>Pago actualizado correctamente.</AlertDescription>
+          </Alert>
+        )}
 
-              {/* Teléfono */}
-              <div>
-                <Label>Teléfono</Label>
-                <Input
-                  value={form.telefono_contacto}
-                  onChange={(e) =>
-                    setForm({ ...form, telefono_contacto: e.target.value })
-                  }
-                />
-              </div>
+        {/* ERROR */}
+        {errorMessage && (
+          <Alert variant="destructive" className="mb-6">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{errorMessage}</AlertDescription>
+          </Alert>
+        )}
 
-              {/* Dirección */}
-              <div>
-                <Label>Dirección</Label>
-                <Input
-                  value={form.direccion}
-                  onChange={(e) =>
-                    setForm({ ...form, direccion: e.target.value })
-                  }
-                />
-              </div>
-
-              {/* Tipo Servicio */}
-              <div>
-                <Label>Tipo de Servicio</Label>
-
-                <Select
-                  value={form.tipoServicioId}
-                  onValueChange={(v) =>
-                    setForm({ ...form, tipoServicioId: v })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccione un servicio" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {tipoServicios.map((t) => (
-                      <SelectItem key={t.id_tipo_servicio} value={t.id_tipo_servicio.toString()}>
-                        {t.nombre}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Datos bancarios */}
-              <div>
-                <Label>Datos Bancarios</Label>
-                <Textarea
-                  value={form.datos_bancarios}
-                  onChange={(e) =>
-                    setForm({ ...form, datos_bancarios: e.target.value })
-                  }
-                />
-              </div>
-
-              {/* Observaciones */}
-              <div>
-                <Label>Observaciones</Label>
-                <Textarea
-                  value={form.observaciones}
-                  onChange={(e) =>
-                    setForm({ ...form, observaciones: e.target.value })
-                  }
-                />
-              </div>
-
-              {/* Acciones */}
-              <div className="flex justify-between gap-3 pt-4">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="text-[#686363]"
-                  onClick={() => router.push("/proveedores")}
-                >
-                  Cancelar
-                </Button>
-
-                <Button
-                  type="submit"
-                  className="bg-[#fcc238] text-[#686363] hover:bg-[#fcc238]/90"
-                  disabled={guardando}
-                >
-                  {guardando ? "Guardando..." : "Guardar Cambios"}
-                </Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
+        {/* FORMULARIO */}
+        {!showSuccess && (
+          <PagoProveedorForm
+            proveedores={proveedores}
+            mediosPago={mediosPago}
+            estadosPago={estadosPago}
+            initialData={initialData}
+            modo="editar"
+            onSubmit={handleSubmit}
+            onFormDirtyChange={setIsDirty}
+          />
+        )}
       </div>
     </div>
   );

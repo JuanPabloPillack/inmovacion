@@ -37,7 +37,6 @@ const pagoSchema = z.object({
   importe: z.string().min(1, "Ingrese un monto"),
   responsable: z.string().min(3, "Ingrese el nombre del responsable"),
   comprobante: z.string().optional().or(z.literal("")),
-  fecha_pago: z.string().optional(),
 });
 
 export type PagoProveedorFormValues = z.infer<typeof pagoSchema>;
@@ -71,11 +70,9 @@ export default function PagoProveedorForm({
       importe: initialData?.importe || "",
       responsable: initialData?.responsable || "",
       comprobante: initialData?.comprobante || "",
-      fecha_pago: initialData?.fecha_pago || "",
     },
   });
 
-  // Detectar cambios
   useEffect(() => {
     onFormDirtyChange?.(form.formState.isDirty);
   }, [form.formState.isDirty, onFormDirtyChange]);
@@ -97,7 +94,7 @@ export default function PagoProveedorForm({
                     <SelectValue placeholder="Seleccione un proveedor" />
                   </SelectTrigger>
                   <SelectContent>
-                    {(proveedores || []).map((p) => (
+                    {proveedores.map((p) => (
                       <SelectItem
                         key={p.id_proveedor}
                         value={String(p.id_proveedor)}
@@ -143,21 +140,24 @@ export default function PagoProveedorForm({
           )}
         />
 
-        {/* MEDIO DE PAGO */}
+        {/* MEDIO PAGO */}
         <FormField
           control={form.control}
           name="medioPagoId"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Medio de pago</FormLabel>
+              <FormLabel>Medio de Pago</FormLabel>
               <FormControl>
                 <Select onValueChange={field.onChange} value={field.value}>
                   <SelectTrigger>
                     <SelectValue placeholder="Seleccione un medio" />
                   </SelectTrigger>
                   <SelectContent>
-                    {(mediosPago || []).map((m) => (
-                      <SelectItem key={m.id_medio_pago} value={String(m.id_medio_pago)}>
+                    {mediosPago.map((m) => (
+                      <SelectItem
+                        key={m.id_medio_pago}
+                        value={String(m.id_medio_pago)}
+                      >
                         {m.nombre}
                       </SelectItem>
                     ))}
@@ -175,15 +175,18 @@ export default function PagoProveedorForm({
           name="estadoPagoId"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Estado</FormLabel>
+              <FormLabel>Estado del Pago</FormLabel>
               <FormControl>
                 <Select onValueChange={field.onChange} value={field.value}>
                   <SelectTrigger>
                     <SelectValue placeholder="Seleccione estado" />
                   </SelectTrigger>
                   <SelectContent>
-                    {(estadosPago || []).map((e) => (
-                      <SelectItem key={e.id_estado_pago} value={String(e.id_estado_pago)}>
+                    {estadosPago.map((e) => (
+                      <SelectItem
+                        key={e.id_estado_pago}
+                        value={String(e.id_estado_pago)}
+                      >
                         {e.nombre}
                       </SelectItem>
                     ))}
