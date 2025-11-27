@@ -1,4 +1,4 @@
-//app/api/inmuebles/[id]/route.ts
+// app/api/inmuebles/[id]/route.ts
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
@@ -29,6 +29,8 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
         cliente: true,
         ubicacion: { include: { barrio: { include: { localidad: true } } } },
         imagenes: true,
+        createdBy: { select: { id: true, name: true, email: true } },
+        updatedBy: { select: { id: true, name: true, email: true } },
       },
     });
 
@@ -44,13 +46,28 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
 
     const dto: InmuebleDTO = {
       ...inmueble,
-      precio: Number(inmueble.precio),
+      precio: inmueble.precio != null ? Number(inmueble.precio) : null,
       superficie_total: Number(inmueble.superficie_total),
-      superficie_cubierta: inmueble.superficie_cubierta ? Number(inmueble.superficie_cubierta) : null,
+      superficie_cubierta: inmueble.superficie_cubierta != null ? Number(inmueble.superficie_cubierta) : null,
       fotoPrincipal: imagenes.find((i) => i.principal)?.url || inmueble.foto || "/placeholder.jpg",
       archivado: Boolean(inmueble.archivado),
       imagenes,
-      estadoNombre: inmueble.estado.nombre.toLowerCase() as "venta" | "alquiler",
+      estadoNombre: inmueble.estado?.nombre.toLowerCase() as "venta" | "alquiler",
+      createdAt: inmueble.createdAt?.toISOString() || undefined,
+      updatedAt: inmueble.updatedAt?.toISOString() || undefined,
+      createdBy: inmueble.createdBy
+        ? {
+            id_usuario: String(inmueble.createdBy.id),
+            nombre: inmueble.createdBy.name || inmueble.createdBy.email || "Usuario desconocido",
+          }
+        : undefined,
+      updatedBy: inmueble.updatedBy
+        ? {
+            id_usuario: String(inmueble.updatedBy.id),
+            nombre: inmueble.updatedBy.name || inmueble.updatedBy.email || "Usuario desconocido",
+          }
+        : undefined,
+      detalles: inmueble.detalles ?? undefined,
     };
 
     return NextResponse.json(dto);
@@ -71,12 +88,10 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
   try {
     payload = await req.json();
   } catch (e) {
-    // Si no llega JSON, dejamos payload vacío
     payload = {};
   }
 
   try {
-    // Solo actualizar campos que vengan
     const data: Prisma.InmuebleUpdateInput = {
       titulo: payload.titulo ?? undefined,
       superficie_total: toDecimalOrUndefined(payload.superficie_total),
@@ -97,7 +112,6 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
       operacion: payload.id_operacion ? { connect: { id_operacion: Number(payload.id_operacion) } } : undefined,
     };
 
-    // Actualizar ubicación si viene
     if (payload.id_barrio !== undefined || payload.direccion || payload.ciudad || payload.provincia) {
       data.ubicacion = {
         update: {
@@ -109,7 +123,6 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
       };
     }
 
-    // Actualizar imágenes si vienen
     if (Array.isArray(payload.imagenes)) {
       await db.inmuebleImagen.deleteMany({ where: { inmuebleId: id } });
       await db.inmuebleImagen.createMany({
@@ -131,6 +144,8 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
         operacion: true,
         ubicacion: true,
         imagenes: true,
+        createdBy: { select: { id: true, name: true, email: true } },
+        updatedBy: { select: { id: true, name: true, email: true } },
       },
     });
 

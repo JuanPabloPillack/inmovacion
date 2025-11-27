@@ -53,8 +53,8 @@ export interface InmuebleDTO {
   createdAt?: string;
   updatedAt?: string;
 
-    createdBy?: { id_usuario: number; nombre: string } | null;
-  updatedBy?: { id_usuario: number; nombre: string } | null;
+  createdBy?: { id_usuario: string; nombre: string } | null;
+  updatedBy?: { id_usuario: string; nombre: string } | null;
 }
 
 

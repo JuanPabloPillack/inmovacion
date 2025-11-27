@@ -7,7 +7,7 @@ import { useParams, useRouter } from "next/navigation";
 import { Home } from "lucide-react";
 import Header from "@/components/ui/Header";
 import FormularioInmueble from "@/components/FormularioInmueble";
-import type { InmuebleEdit } from "@/types/inmuebles";
+import type { InmuebleEdit } from "@/types/inmuebles";  // Asegúrate de que InmuebleEdit incluya createdBy/updatedBy como { id, name }?
 
 interface ImagenData {
   url: string;
@@ -28,7 +28,9 @@ export default function EditarInmueblePage() {
         if (!res.ok) throw new Error("Error al obtener inmueble");
 
         const data = await res.json();
-        const src = data.inmueble ?? data;
+        console.log('🔍 Frontend - Inmueble cargado:', data);  // ← AGREGADO: Log para debug (ver createdBy/updatedBy)
+
+        const src = data.inmueble ?? data;  // Maneja si response es { inmueble: ... } o directo
 
         const inmuebleData: InmuebleEdit = {
           ...src,
@@ -37,11 +39,15 @@ export default function EditarInmueblePage() {
             ...src.ubicacion,
             barrio: src.ubicacion?.barrio?.nombre ?? "",
           },
+          // ← AGREGADO: Si InmuebleEdit necesita usuarios, mapea aquí (usa .name)
+          createdBy: src.createdBy ? { id: src.createdBy.id, name: src.createdBy.name } : null,
+          updatedBy: src.updatedBy ? { id: src.updatedBy.id, name: src.updatedBy.name } : null,
         };
 
         setInmueble(inmuebleData);
-      } catch {
-        alert("No se pudo cargar el inmueble");
+      } catch (err: any) {
+        console.error('❌ Error fetch inmueble:', err);  // ← MEJORADO: Log error
+        alert(err.message || "No se pudo cargar el inmueble");
       } finally {
         setLoading(false);
       }
@@ -56,11 +62,12 @@ export default function EditarInmueblePage() {
     try {
       const uploadedImages: { url: string; principal: boolean }[] = [];
 
+      // Subir nuevas imágenes
       for (const img of imagenes) {
         if (img.file) {
-          const form = new FormData();
-          form.append("file", img.file);
-          const res = await fetch("/api/upload", { method: "POST", body: form });
+          const uploadForm = new FormData();
+          uploadForm.append("file", img.file);
+          const res = await fetch("/api/upload", { method: "POST", body: uploadForm });
           if (!res.ok) throw new Error("Error al subir imagen");
           const data = await res.json();
           uploadedImages.push({ url: data.url, principal: img.principal });
@@ -69,6 +76,7 @@ export default function EditarInmueblePage() {
         }
       }
 
+      // Preparar payload JSON
       const raw = Object.fromEntries(formData.entries());
 
       const payload = {
@@ -90,18 +98,26 @@ export default function EditarInmueblePage() {
         imagenes: uploadedImages,
       };
 
+      console.log('🔄 Frontend - Payload PUT:', payload);  // ← AGREGADO: Log para debug
+
       const res = await fetch(`/api/inmuebles/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
 
-      if (!res.ok) throw new Error("Error al actualizar inmueble");
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || "Error al actualizar inmueble");
+      }
+
+      const updatedData = await res.json();
+      console.log('🔄 Frontend - Response PUT:', updatedData);  // ← AGREGADO: Log response (ver updatedBy)
 
       alert("✅ Inmueble actualizado correctamente");
       router.push("/propiedades");
     } catch (err: any) {
-      console.error(err);
+      console.error('❌ Error handleUpdate:', err);  // ← MEJORADO: Log error
       alert(err.message || "Error al actualizar inmueble");
     }
   };
@@ -109,10 +125,26 @@ export default function EditarInmueblePage() {
   const handleCancel = () => router.push("/propiedades");
 
   if (loading)
-    return <div className="p-8 text-gray-600">Cargando inmueble...</div>;
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#63bae9] mx-auto mb-4"></div>
+          <p className="text-gray-600">Cargando inmueble...</p>
+        </div>
+      </div>
+    );
 
   if (!inmueble)
-    return <div className="p-8 text-red-500">Inmueble no encontrado.</div>;
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <p className="text-red-500">Inmueble no encontrado.</p>
+          <button onClick={handleCancel} className="mt-4 px-4 py-2 bg-gray-500 text-white rounded">
+            Volver
+          </button>
+        </div>
+      </div>
+    );
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: "#f8f9fa" }}>

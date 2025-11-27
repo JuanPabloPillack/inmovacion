@@ -33,13 +33,19 @@ export default function PropiedadesPage() {
 
       const data: InmuebleDTO[] = await res.json();
 
+      // ← AGREGADO: Log para debug (revisa consola del browser)
+      console.log('🔍 Datos crudos de API /inmuebles:', data);
+      console.log('🔍 Primer inmueble - createdBy:', data[0]?.createdBy);
+      console.log('🔍 Primer inmueble - updatedBy:', data[0]?.updatedBy);
+
       setInmuebles(
         data.map((i) => ({
           ...i,
           archivadoLocal: i.archivado ?? false,
         }))
       );
-    } catch {
+    } catch (err) {
+      console.error('❌ Error en fetchInmuebles:', err);  // ← AGREGADO: Log del error
       setError('No se pudieron cargar los inmuebles');
     } finally {
       setLoading(false);

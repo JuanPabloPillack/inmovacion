@@ -1,9 +1,9 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 // src/app/api/inmuebles/route.ts
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { Prisma } from "@/generated/prisma";
-import { auth } from '../../../../auth';
+import { auth } from "../../../../auth";
 
 const toNumberOrUndefined = (v: any): number | undefined =>
   v !== undefined && v !== null && v !== "" ? Number(v) : undefined;
@@ -12,8 +12,6 @@ const toDecimalOrUndefined = (v: any): Prisma.Decimal | undefined =>
   v !== undefined && v !== null && v !== "" ? new Prisma.Decimal(Number(v)) : undefined;
 
 export async function GET(req: NextRequest) {
-  console.log("🔍 GET /api/inmuebles iniciado");
-
   try {
     const { searchParams } = new URL(req.url);
     const where: any = {};
@@ -24,8 +22,6 @@ export async function GET(req: NextRequest) {
     const precioMin = searchParams.get("precioMin");
     const precioMax = searchParams.get("precioMax");
 
-    console.log("🔎 Parámetros:", { tipo, estado, operacion, precioMin, precioMax });
-
     if (tipo) where.id_tipo_inmueble = Number(tipo);
     if (estado) where.id_estado = Number(estado);
     if (operacion) where.id_operacion = Number(operacion);
@@ -35,8 +31,6 @@ export async function GET(req: NextRequest) {
       if (precioMin) where.precio.gte = toDecimalOrUndefined(precioMin);
       if (precioMax) where.precio.lte = toDecimalOrUndefined(precioMax);
     }
-
-    console.log("🧩 WHERE generado:", where);
 
     const inmuebles = await db.inmueble.findMany({
       where,
@@ -53,35 +47,28 @@ export async function GET(req: NextRequest) {
       orderBy: { id_inmueble: "desc" },
     });
 
-    // DEBUG: Log para verificar relaciones (remover en prod)
-    if (inmuebles.length > 0) {
-      console.log("🔍 Ejemplo createdBy:", inmuebles[0].createdBy);
-      console.log("🔍 Ejemplo updatedBy:", inmuebles[0].updatedBy);
-    }
-
     const formattedInmuebles = inmuebles.map((inmueble) => ({
       ...inmueble,
+      superficie_total: Number(inmueble.superficie_total),
+      superficie_cubierta: inmueble.superficie_cubierta != null ? Number(inmueble.superficie_cubierta) : null,
+      precio: inmueble.precio != null ? Number(inmueble.precio) : null,
       createdBy: inmueble.createdBy
-        ? {
-            id_usuario: inmueble.createdBy.id,
-            nombre: inmueble.createdBy.name || inmueble.createdBy.email || 'Usuario desconocido',
-          }
+        ? { id: inmueble.createdBy.id, name: inmueble.createdBy.name || inmueble.createdBy.email || "Usuario desconocido" }
         : null,
       updatedBy: inmueble.updatedBy
-        ? {
-            id_usuario: inmueble.updatedBy.id,
-            nombre: inmueble.updatedBy.name || inmueble.updatedBy.email || 'Usuario desconocido',
-          }
+        ? { id: inmueble.updatedBy.id, name: inmueble.updatedBy.name || inmueble.updatedBy.email || "Usuario desconocido" }
         : null,
+      createdAt: inmueble.createdAt?.toISOString(),
+      updatedAt: inmueble.updatedAt?.toISOString(),
     }));
 
-    console.log("✅ Inmuebles encontrados:", formattedInmuebles.length);
+    // ← AGREGADO: Log para debug (revisa terminal del servidor)
+    console.log('🔍 Backend - Primer inmueble createdBy:', formattedInmuebles[0]?.createdBy);
+    console.log('🔍 Backend - Primer inmueble updatedBy:', formattedInmuebles[0]?.updatedBy);
 
     return NextResponse.json(formattedInmuebles);
   } catch (error: any) {
     console.error("❌ Error GET /api/inmuebles:", error);
-    console.error("➡️ Código Prisma:", error.code);
-    console.error("➡️ Meta Prisma:", error.meta);
     return NextResponse.json({ error: "Error al obtener inmuebles" }, { status: 500 });
   }
 }
@@ -89,36 +76,30 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) {
-    return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+    return NextResponse.json({ error: "No autenticado" }, { status: 401 });
   }
 
-  // FIX: Convertir ID a número
-  const userId = Number(session.user.id);
-  if (isNaN(userId)) {
-    return NextResponse.json({ error: 'ID de usuario inválido' }, { status: 400 });
-  }
+  const userId = session.user.id;
 
-  console.log("📥 POST /api/inmuebles llamado por usuario ID:", userId);
+  // ← AGREGADO: Log para debug
+  console.log('🆕 Backend POST - Session userId:', userId);
+  if (!userId) {
+    console.error('❌ No userId en session');
+    return NextResponse.json({ error: "User ID no disponible en sesión" }, { status: 401 });
+  }
 
   try {
     const body = await req.json();
-    console.log("📦 Payload recibido:", body);
 
-    // -------------------------
-    // VALIDACIÓN CLIENTE
-    // -------------------------
     const clienteId =
       body.id_cliente || (body.cliente && typeof body.cliente === "object" ? body.cliente.id : null);
 
-    if (!clienteId) {
-      return NextResponse.json({ error: "Debe seleccionar un propietario" }, { status: 400 });
-    }
+    if (!clienteId) return NextResponse.json({ error: "Debe seleccionar un propietario" }, { status: 400 });
+    if (!body.id_tipo_inmueble) return NextResponse.json({ error: "Debe seleccionar un tipo de inmueble" }, { status: 400 });
+    if (!body.id_estado) return NextResponse.json({ error: "Debe seleccionar un estado" }, { status: 400 });
 
-    // -------------------------
-    // MANEJO DE BARRIO
-    // -------------------------
+    // === Crear o recuperar Barrio ===
     let idBarrio: number;
-
     if (body.id_barrio) {
       idBarrio = Number(body.id_barrio);
     } else if (body.barrio) {
@@ -126,79 +107,63 @@ export async function POST(req: NextRequest) {
 
       if (!barrioDb) {
         let localidadId = body.localidadId;
-
         if (!localidadId) {
           const defaultLocalidad = await db.localidad.findFirst();
-
           if (!defaultLocalidad) {
-            const createdLocalidad = await db.localidad.create({
-              data: { nombre: "Localidad por defecto" },
-            });
-
+            const createdLocalidad = await db.localidad.create({ data: { nombre: "Localidad por defecto" } });
             localidadId = createdLocalidad.id_localidad;
           } else {
             localidadId = defaultLocalidad.id_localidad;
           }
         }
-
-        barrioDb = await db.barrio.create({
-          data: {
-            nombre: body.barrio,
-            id_localidad: Number(localidadId),
-          },
-        });
+        barrioDb = await db.barrio.create({ data: { nombre: body.barrio, id_localidad: Number(localidadId) } });
       }
-
       idBarrio = barrioDb.id_barrio;
     } else {
-      return NextResponse.json(
-        { error: "Debe seleccionar o escribir un barrio" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Debe seleccionar o escribir un barrio" }, { status: 400 });
     }
 
-    // -------------------------
-    // CREACIÓN DEL INMUEBLE
-    // -------------------------
+    // === Crear Ubicacion ===
+    const ubicacion = await db.ubicacion.create({
+      data: {
+        direccion: body.direccion ?? null,
+        ciudad: body.ciudad ?? null,
+        provincia: body.provincia ?? null,
+        id_barrio: idBarrio,
+      },
+    });
+
+    // === Crear Inmueble ===
     const inmueble = await db.inmueble.create({
       data: {
         titulo: body.titulo,
-        superficie_total: toDecimalOrUndefined(body.superficie_total),
-        superficie_cubierta: toDecimalOrUndefined(body.superficie_cubierta),
+        superficie_total: new Prisma.Decimal(body.superficie_total),
+        superficie_cubierta: body.superficie_cubierta != null ? new Prisma.Decimal(body.superficie_cubierta) : null,
         cantidad_ambientes: toNumberOrUndefined(body.cantidad_ambientes),
         cantidad_banos: toNumberOrUndefined(body.cantidad_banos),
         cantidad_dormitorios: toNumberOrUndefined(body.cantidad_dormitorios),
         cantidad_cocheras: toNumberOrUndefined(body.cantidad_cocheras),
         cantidad_pisos: toNumberOrUndefined(body.cantidad_pisos),
         antiguedad: toNumberOrUndefined(body.antiguedad),
-        precio: toDecimalOrUndefined(body.precio),
+        precio: body.precio != null ? new Prisma.Decimal(body.precio) : null,
         detalles: body.detalles ?? null,
         archivado: false,
-        createdById: userId,  // FIX: Usar número
-        updatedById: userId,  // FIX: Usar número
-        tipo_inmueble: body.id_tipo_inmueble
-          ? { connect: { id_tipo_inmueble: Number(body.id_tipo_inmueble) } }
-          : undefined,
-        estado: body.id_estado ? { connect: { id_estado: Number(body.id_estado) } } : undefined,
-        cliente: { connect: { id_cliente: Number(clienteId) } },
-        operacion: body.id_operacion
-          ? { connect: { id_operacion: Number(body.id_operacion) } }
-          : undefined,
-        ubicacion: {
-          create: {
-            direccion: body.direccion ?? null,
-            ciudad: body.ciudad ?? null,
-            provincia: body.provincia ?? null,
-            id_barrio: idBarrio,
-          },
-        },
+        createdById: userId,
+        updatedById: userId,
+        id_tipo_inmueble: Number(body.id_tipo_inmueble),
+        id_estado: Number(body.id_estado),
+        id_cliente: Number(clienteId),
+        id_operacion: body.id_operacion ? Number(body.id_operacion) : null,
+        id_ubicacion: ubicacion.id_ubicacion,
         foto: body.imagenes?.find((i: any) => i.principal)?.url ?? "/placeholder.jpg",
       },
     });
 
-    // -------------------------
-    // IMÁGENES
-    // -------------------------
+    // ← AGREGADO: Log después de create para verificar IDs en DB
+    console.log('🆕 Backend POST - Inmueble creado ID:', inmueble.id_inmueble);
+    console.log('🆕 Backend POST - createdById guardado:', inmueble.createdById);
+    console.log('🆕 Backend POST - updatedById guardado:', inmueble.updatedById);
+
     if (Array.isArray(body.imagenes) && body.imagenes.length > 0) {
       await db.inmuebleImagen.createMany({
         data: body.imagenes.map((img: any) => ({
@@ -209,9 +174,6 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // -------------------------
-    // RETORNAR INMUEBLE COMPLETO
-    // -------------------------
     const creado = await db.inmueble.findUnique({
       where: { id_inmueble: inmueble.id_inmueble },
       include: {
@@ -228,19 +190,22 @@ export async function POST(req: NextRequest) {
 
     const formattedCreado = {
       ...creado,
+      superficie_total: Number(creado?.superficie_total),
+      superficie_cubierta: creado?.superficie_cubierta != null ? Number(creado.superficie_cubierta) : null,
+      precio: creado?.precio != null ? Number(creado.precio) : null,
       createdBy: creado?.createdBy
-        ? {
-            id_usuario: creado.createdBy.id,
-            nombre: creado.createdBy.name || creado.createdBy.email || 'Usuario desconocido',
-          }
+        ? { id: creado.createdBy.id, name: creado.createdBy.name || creado.createdBy.email || "Usuario desconocido" }
         : null,
       updatedBy: creado?.updatedBy
-        ? {
-            id_usuario: creado.updatedBy.id,
-            nombre: creado.updatedBy.name || creado.updatedBy.email || 'Usuario desconocido',
-          }
+        ? { id: creado.updatedBy.id, name: creado.updatedBy.name || creado.updatedBy.email || "Usuario desconocido" }
         : null,
+      createdAt: creado?.createdAt?.toISOString(),
+      updatedAt: creado?.updatedAt?.toISOString(),
     };
+
+    // ← AGREGADO: Log para debug
+    console.log('🆕 Backend POST - formatted createdBy:', formattedCreado.createdBy);
+    console.log('🆕 Backend POST - formatted updatedBy:', formattedCreado.updatedBy);
 
     return NextResponse.json(formattedCreado, { status: 201 });
   } catch (error: any) {
