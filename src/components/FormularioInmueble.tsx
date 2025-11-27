@@ -1,3 +1,4 @@
+//  src/components/FormularioInmueble.tsx
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 import { useState, useEffect, useRef } from "react";
@@ -15,7 +16,8 @@ import {
 } from "lucide-react";
 import type { InmuebleEdit } from "@/types/inmuebles";
 
-interface Cliente { id_cliente: number; nombre: string; }
+// ------------------ TIPOS ------------------
+interface Cliente { id_cliente: number; nombre: string; apellido: string; }
 interface TipoInmueble { id_tipo_inmueble: number; nombre: string; }
 interface Estado { id_estado: number; nombre: string; }
 interface Operacion { id_operacion: number; nombre: string; }
@@ -26,9 +28,12 @@ interface FormularioInmuebleProps {
   initialData?: InmuebleEdit;
   submitLabel?: string;
   submitHandler?: (formData: FormData, imagenes: ImagenData[]) => Promise<void>;
-  onCancel?: () => void; // ✅ Nueva prop para cancelar (solo en modo edición)
+  onCancel?: () => void;
 }
 
+// =====================================================
+//            COMPONENTE PRINCIPAL
+// =====================================================
 export default function FormularioInmueble({
   onSuccess,
   initialData,
@@ -39,6 +44,7 @@ export default function FormularioInmueble({
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
 
+  // ------------------ ESTADOS ------------------
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [tipos, setTipos] = useState<TipoInmueble[]>([]);
   const [estados, setEstados] = useState<Estado[]>([]);
@@ -46,74 +52,81 @@ export default function FormularioInmueble({
   const [loading, setLoading] = useState(false);
   const [imagenes, setImagenes] = useState<ImagenData[]>([]);
 
-  // -- Selects controlados
-  const [selectedCliente, setSelectedCliente] = useState<number | "">(
-    initialData?.id_cliente ?? ""
-  );
-  const [selectedTipo, setSelectedTipo] = useState<number | "">(
-    initialData?.id_tipo_inmueble ?? ""
-  );
-  const [selectedOperacion, setSelectedOperacion] = useState<number | "">(
-    initialData?.id_operacion ?? ""
-  );
-  const [selectedEstado, setSelectedEstado] = useState<number | "">(
-    initialData?.id_estado ?? ""
-  );
+  // selects
+  const [selectedCliente, setSelectedCliente] = useState<number | "">(initialData?.id_cliente ?? "");
+  const [selectedTipo, setSelectedTipo] = useState<number | "">(initialData?.id_tipo_inmueble ?? "");
+  const [selectedOperacion, setSelectedOperacion] = useState<number | "">(initialData?.id_operacion ?? "");
+  const [selectedEstado, setSelectedEstado] = useState<number | "">(initialData?.id_estado ?? "");
 
-  // -- Input de texto libre para barrio
+  // barrio
   const [barrioText, setBarrioText] = useState(initialData?.ubicacion?.barrio ?? "");
 
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        const [c, t, e, o] = await Promise.all([
-          fetch("/api/clientes").then((r) => r.json()),
-          fetch("/api/tipos_inmueble").then((r) => r.json()),
-          fetch("/api/estados").then((r) => r.json()),
-          fetch("/api/operaciones").then((r) => r.json()),
-        ]);
-        setClientes(c);
-        setTipos(t);
-        setEstados(e);
-        setOperaciones(o);
-      } catch (err) {
-        console.error("Error cargando datos:", err);
-      }
-    };
-    loadData();
+useEffect(() => {
+  const loadData = async () => {
+    try {
+      const [propRaw, tRaw, eRaw, oRaw] = await Promise.all([
+        fetch("/api/clientes/propietarios").then((r) => r.json()),
+        fetch("/api/tipos_inmueble").then((r) => r.json()),
+        fetch("/api/estados").then((r) => r.json()),
+        fetch("/api/operaciones").then((r) => r.json()),
+      ]);
 
-    if (initialData?.imagenes?.length) {
-      const imgs = initialData.imagenes.map((img) => ({
+      console.log("DEBUG propietarios desde API:", propRaw);
+
+      // Asignar directamente (ya vienen filtrados)
+      setClientes(Array.isArray(propRaw) ? propRaw : []);
+
+      setTipos(Array.isArray(tRaw) ? tRaw : tRaw.data || []);
+      setEstados(Array.isArray(eRaw) ? eRaw : eRaw.data || []);
+      setOperaciones(Array.isArray(oRaw) ? oRaw : oRaw.data || []);
+    } catch (err) {
+      console.error("Error cargando datos:", err);
+    }
+  };
+
+  loadData();
+
+  // cargar imágenes si hay data para editar
+  if (initialData?.imagenes?.length) {
+    setImagenes(
+      initialData.imagenes.map((img) => ({
         url: img.url,
         principal: img.principal,
-      }));
-      setImagenes(imgs);
-    }
+      }))
+    );
+  }
+}, [initialData]);
 
-    if (initialData?.ubicacion) {
-      setBarrioText(initialData.ubicacion.barrio ?? "");
-    }
-  }, [initialData]);
 
-  // 📸 Manejo de imágenes
+
+  // =====================================================
+  //   MANEJO DE IMÁGENES
+  // =====================================================
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = Array.from(e.target.files || []);
     if (!selectedFiles.length) return;
+
     const nuevas = selectedFiles.map((file) => ({
       url: URL.createObjectURL(file),
       file,
       principal: false,
     }));
+
     setImagenes((prev) => {
-      const noTienePrincipal = !prev.some((i) => i.principal);
-      if (noTienePrincipal && nuevas.length > 0) nuevas[0].principal = true;
+      const sinPrincipal = !prev.some((i) => i.principal);
+      if (sinPrincipal && nuevas.length > 0) nuevas[0].principal = true;
       return [...prev, ...nuevas];
     });
   };
 
   const handleRemoveFile = (index: number) => {
     const actualizadas = imagenes.filter((_, i) => i !== index);
-    if (imagenes[index].principal && actualizadas.length > 0) actualizadas[0].principal = true;
+
+    // si se elimina la principal, asignar otra
+    if (imagenes[index].principal && actualizadas.length > 0) {
+      actualizadas[0].principal = true;
+    }
+
     setImagenes(actualizadas);
   };
 
@@ -123,18 +136,64 @@ export default function FormularioInmueble({
     );
   };
 
-  // 📤 Submit
+  // =====================================================
+  //     VALIDACIONES
+  // =====================================================
+  const validarFormulario = (fields: any) => {
+    // propietario
+    if (!selectedCliente) return "Debe seleccionar un propietario.";
+
+    // tipo
+    if (!selectedTipo) return "Debe seleccionar un tipo de propiedad.";
+
+    // estado
+    if (!selectedEstado) return "Debe seleccionar un estado.";
+
+    // barrio
+    if (!barrioText.trim()) return "El barrio es obligatorio.";
+
+    // dirección
+    if (!fields.direccion || fields.direccion.toString().trim() === "")
+      return "La dirección es obligatoria.";
+
+    // superficie total
+    const supTotal = Number(fields.superficie_total);
+    if (!supTotal || supTotal <= 0) return "Superficie total debe ser mayor a 0.";
+
+    // superficie cubierta
+    const supCub = Number(fields.superficie_cubierta);
+    if (supCub && supCub > supTotal)
+      return "La superficie cubierta no puede ser mayor a la superficie total.";
+
+    // precio
+    const precio = Number(fields.precio);
+    if (!precio || precio <= 0) return "El precio debe ser mayor a 0.";
+
+    // imágenes
+    if (imagenes.length === 0) return "Debe subir al menos una imagen.";
+    if (!imagenes.some((i) => i.principal)) return "Debe seleccionar una imagen principal.";
+
+    return null; // todo OK
+  };
+
+  // =====================================================
+  //    SUBMIT
+  // =====================================================
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formRef.current) return;
+
     const formData = new FormData(formRef.current);
     const fields = Object.fromEntries(formData.entries());
 
-    if (!selectedCliente || !barrioText.trim()) {
-      alert("Debe seleccionar un propietario y escribir un barrio");
+    // Validaciones
+    const error = validarFormulario(fields);
+    if (error) {
+      alert(error);
       return;
     }
 
+    // ---- Si viene un submitHandler personalizado (modo edición externo)
     if (submitHandler) {
       try {
         await submitHandler(formData, imagenes);
@@ -146,15 +205,19 @@ export default function FormularioInmueble({
       return;
     }
 
+    // ---- Modo normal (crear / editar)
     setLoading(true);
     try {
+      // subir imágenes
       const uploadedImages: { url: string; principal: boolean }[] = [];
       for (const img of imagenes) {
         if (img.file) {
-          const form = new FormData();
-          form.append("file", img.file);
-          const res = await fetch("/api/upload", { method: "POST", body: form });
+          const f = new FormData();
+          f.append("file", img.file);
+
+          const res = await fetch("/api/upload", { method: "POST", body: f });
           if (!res.ok) throw new Error("Error al subir imagen");
+
           const data = await res.json();
           uploadedImages.push({ url: data.url, principal: img.principal });
         } else {
@@ -162,22 +225,23 @@ export default function FormularioInmueble({
         }
       }
 
+      // payload final
       const payload = {
         ...fields,
         id_cliente: Number(selectedCliente),
         barrio: barrioText.trim(),
-        id_tipo_inmueble: Number(fields.id_tipo_inmueble),
-        id_estado: Number(fields.id_estado),
-        id_operacion: fields.id_operacion ? Number(fields.id_operacion) : undefined,
-        superficie_total: fields.superficie_total ? Number(fields.superficie_total) : undefined,
-        superficie_cubierta: fields.superficie_cubierta ? Number(fields.superficie_cubierta) : undefined,
-        cantidad_ambientes: fields.cantidad_ambientes ? Number(fields.cantidad_ambientes) : undefined,
-        cantidad_banos: fields.cantidad_banos ? Number(fields.cantidad_banos) : undefined,
-        cantidad_dormitorios: fields.cantidad_dormitorios ? Number(fields.cantidad_dormitorios) : undefined,
-        cantidad_cocheras: fields.cantidad_cocheras ? Number(fields.cantidad_cocheras) : undefined,
-        cantidad_pisos: fields.cantidad_pisos ? Number(fields.cantidad_pisos) : undefined,
-        antiguedad: fields.antiguedad ? Number(fields.antiguedad) : undefined,
-        precio: fields.precio ? parseFloat(fields.precio.toString()) : undefined,
+        id_tipo_inmueble: Number(selectedTipo),
+        id_estado: Number(selectedEstado),
+        id_operacion: selectedOperacion ? Number(selectedOperacion) : null,
+        superficie_total: Number(fields.superficie_total),
+        superficie_cubierta: fields.superficie_cubierta ? Number(fields.superficie_cubierta) : null,
+        cantidad_ambientes: Number(fields.cantidad_ambientes),
+        cantidad_banos: Number(fields.cantidad_banos),
+        cantidad_dormitorios: Number(fields.cantidad_dormitorios),
+        cantidad_cocheras: Number(fields.cantidad_cocheras),
+        cantidad_pisos: Number(fields.cantidad_pisos),
+        antiguedad: fields.antiguedad ? Number(fields.antiguedad) : null,
+        precio: Number(fields.precio),
         imagenes: uploadedImages,
       };
 
@@ -193,6 +257,7 @@ export default function FormularioInmueble({
       });
 
       if (!res.ok) throw new Error("Error al guardar inmueble");
+
       alert("✅ Inmueble guardado con éxito");
       router.push("/propiedades");
     } catch (error: any) {
@@ -203,9 +268,13 @@ export default function FormularioInmueble({
     }
   };
 
+  // =====================================================
+  //     RENDER
+  // =====================================================
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4">
       <div className="max-w-7xl mx-auto">
+        {/* ENCABEZADO */}
         <div className="mb-8 flex items-center gap-3">
           <div className="w-12 h-12 bg-blue-400 rounded-xl flex items-center justify-center">
             <Building2 className="w-6 h-6 text-white" />
@@ -221,9 +290,12 @@ export default function FormularioInmueble({
             </p>
           </div>
         </div>
-        {/* Formulario */}
+
+        {/* FORMULARIO */}
         <form ref={formRef} onSubmit={handleSubmit} className="space-y-6">
-          {/* Información Básica */}
+          {/* -------------------------------------- */}
+          {/* INFORMACIÓN BÁSICA */}
+          {/* -------------------------------------- */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -231,31 +303,35 @@ export default function FormularioInmueble({
               </div>
               <h2 className="text-lg font-semibold text-gray-800">Información Básica</h2>
             </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Título */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Título</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Título
+                </label>
                 <input
                   type="text"
                   name="titulo"
                   defaultValue={initialData?.titulo ?? ""}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg"
                   required
                 />
               </div>
-              {/* Tipo de propiedad */}
+
+              {/* Tipo */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Tipo de propiedad</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Tipo de propiedad
+                </label>
                 <select
                   name="id_tipo_inmueble"
-                  value={selectedTipo ?? ""}
+                  value={selectedTipo}
                   onChange={(e) => setSelectedTipo(Number(e.target.value))}
-                  className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
-                    selectedTipo === "" ? "border-red-300" : "border-gray-300"
-                  }`}
+                  className="w-full px-4 py-2.5 border rounded-lg"
                   required
                 >
-                  <option value="" disabled hidden>Seleccione un tipo</option>
+                  <option value="">Seleccione un tipo</option>
                   {tipos.map((t) => (
                     <option key={t.id_tipo_inmueble} value={t.id_tipo_inmueble}>
                       {t.nombre}
@@ -263,18 +339,19 @@ export default function FormularioInmueble({
                   ))}
                 </select>
               </div>
+
               {/* Operación */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Operación</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Operación
+                </label>
                 <select
                   name="id_operacion"
-                  value={selectedOperacion ?? ""}
+                  value={selectedOperacion}
                   onChange={(e) => setSelectedOperacion(Number(e.target.value))}
-                  className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
-                    selectedOperacion === "" ? "border-red-300" : "border-gray-300"
-                  }`}
+                  className="w-full px-4 py-2.5 border rounded-lg"
                 >
-                  <option value="" disabled hidden>Seleccione una operación</option>
+                  <option value="">Seleccione una operación</option>
                   {operaciones.map((o) => (
                     <option key={o.id_operacion} value={o.id_operacion}>
                       {o.nombre}
@@ -282,19 +359,20 @@ export default function FormularioInmueble({
                   ))}
                 </select>
               </div>
+
               {/* Estado */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Estado</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Estado
+                </label>
                 <select
                   name="id_estado"
-                  value={selectedEstado ?? ""}
+                  value={selectedEstado}
                   onChange={(e) => setSelectedEstado(Number(e.target.value))}
-                  className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
-                    selectedEstado === "" ? "border-red-300" : "border-gray-300"
-                  }`}
+                  className="w-full px-4 py-2.5 border rounded-lg"
                   required
                 >
-                  <option value="" disabled hidden>Seleccione un estado</option>
+                  <option value="">Seleccione un estado</option>
                   {estados.map((e) => (
                     <option key={e.id_estado} value={e.id_estado}>
                       {e.nombre}
@@ -302,31 +380,33 @@ export default function FormularioInmueble({
                   ))}
                 </select>
               </div>
+
               {/* Propietario */}
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
-                  <User className="w-4 h-4 text-gray-400" /> Propietario
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Propietario
                 </label>
                 <select
                   name="id_cliente"
                   value={selectedCliente}
                   onChange={(e) => setSelectedCliente(Number(e.target.value))}
-                  className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
-                    selectedCliente === "" ? "border-red-300" : "border-gray-300"
-                  }`}
+                  className="w-full px-4 py-2.5 border rounded-lg"
                   required
                 >
                   <option value="">Seleccione un propietario</option>
                   {clientes.map((c) => (
                     <option key={c.id_cliente} value={c.id_cliente}>
-                      {c.nombre}
+                      {c.nombre} {c.apellido}
                     </option>
                   ))}
                 </select>
               </div>
             </div>
           </div>
-          {/* Ubicación */}
+
+          {/* -------------------------------------- */}
+          {/* UBICACIÓN */}
+          {/* -------------------------------------- */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -334,44 +414,53 @@ export default function FormularioInmueble({
               </div>
               <h2 className="text-lg font-semibold text-gray-800">Ubicación</h2>
             </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Dirección */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Dirección</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Dirección
+                </label>
                 <input
                   type="text"
                   name="direccion"
                   defaultValue={initialData?.ubicacion?.direccion ?? ""}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                  className="w-full px-4 py-2.5 border rounded-lg"
                   required
                 />
               </div>
+
               {/* Ciudad */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Ciudad</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Ciudad
+                </label>
                 <input
                   type="text"
                   name="ciudad"
                   defaultValue={initialData?.ubicacion?.ciudad ?? ""}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                  className="w-full px-4 py-2.5 border rounded-lg"
                 />
               </div>
+
               {/* Provincia */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Provincia</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Provincia
+                </label>
                 <input
                   type="text"
                   name="provincia"
                   defaultValue={initialData?.ubicacion?.provincia ?? ""}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                  className="w-full px-4 py-2.5 border rounded-lg"
                 />
               </div>
+
               {/* Barrio */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
-                  <MapPin className="w-4 h-4 text-gray-400" /> Barrio
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Barrio
                 </label>
-                {/* ✅ Hidden input para enviar el ID del barrio al actualizar (mantiene la relación en BD) */}
                 <input
                   type="hidden"
                   name="id_barrio"
@@ -380,15 +469,18 @@ export default function FormularioInmueble({
                 <input
                   type="text"
                   name="barrio"
-                  value={barrioText} // <-- Ya controlado, ahora recibe string (nombre)
+                  value={barrioText}
                   onChange={(e) => setBarrioText(e.target.value)}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                  className="w-full px-4 py-2.5 border rounded-lg"
                   required
                 />
               </div>
             </div>
           </div>
-          {/* Características */}
+
+          {/* -------------------------------------- */}
+          {/* CARACTERÍSTICAS */}
+          {/* -------------------------------------- */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -396,36 +488,39 @@ export default function FormularioInmueble({
               </div>
               <h2 className="text-lg font-semibold text-gray-800">Características</h2>
             </div>
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {[
-                { label: "Superficie total (m²)", name: "superficie_total", type: "number" as const, required: true, value: initialData?.superficie_total },
-                { label: "Superficie cubierta (m²)", name: "superficie_cubierta", type: "number" as const, value: initialData?.superficie_cubierta },
-                { label: "Ambientes", name: "cantidad_ambientes", type: "number" as const, value: initialData?.cantidad_ambientes },
-                { label: "Baños", name: "cantidad_banos", type: "number" as const, value: initialData?.cantidad_banos },
-                { label: "Dormitorios", name: "cantidad_dormitorios", type: "number" as const, value: initialData?.cantidad_dormitorios },
-                { label: "Cocheras", name: "cantidad_cocheras", type: "number" as const, value: initialData?.cantidad_cocheras },
-                { label: "Pisos", name: "cantidad_pisos", type: "number" as const, value: initialData?.cantidad_pisos },
-                { label: "Antigüedad (años)", name: "antiguedad", type: "number" as const, value: initialData?.antiguedad },
-                { label: "Precio", name: "precio", type: "number" as const, value: initialData?.precio },
+                { label: "Superficie total (m²)", name: "superficie_total", type: "number", required: true, value: initialData?.superficie_total },
+                { label: "Superficie cubierta (m²)", name: "superficie_cubierta", type: "number", value: initialData?.superficie_cubierta },
+                { label: "Ambientes", name: "cantidad_ambientes", type: "number", value: initialData?.cantidad_ambientes },
+                { label: "Baños", name: "cantidad_banos", type: "number", value: initialData?.cantidad_banos },
+                { label: "Dormitorios", name: "cantidad_dormitorios", type: "number", value: initialData?.cantidad_dormitorios },
+                { label: "Cocheras", name: "cantidad_cocheras", type: "number", value: initialData?.cantidad_cocheras },
+                { label: "Pisos", name: "cantidad_pisos", type: "number", value: initialData?.cantidad_pisos },
+                { label: "Antigüedad (años)", name: "antiguedad", type: "number", value: initialData?.antiguedad },
+                { label: "Precio", name: "precio", type: "number", value: initialData?.precio },
               ].map((field) => (
                 <div key={field.name}>
-                  <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
-                    {field.name === "precio" && <DollarSign className="w-4 h-4 text-gray-400" />}
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
                     {field.label}
                   </label>
                   <input
                     type={field.type}
                     name={field.name}
-                    defaultValue={field.value?.toString() ?? ""}
-                    step={field.name === "precio" ? "0.01" : undefined} // <- permite decimales solo para precio
-                    className={`w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition ${field.name === "precio" ? "pl-10" : ""}`}
+                    defaultValue={field.value ?? ""}
+                    step={field.name === "precio" ? "0.01" : undefined}
+                    className="w-full px-4 py-2.5 border rounded-lg"
                     required={field.required}
                   />
                 </div>
               ))}
             </div>
           </div>
-          {/* Detalles adicionales */}
+
+          {/* -------------------------------------- */}
+          {/* DETALLES ADICIONALES */}
+          {/* -------------------------------------- */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -433,100 +528,115 @@ export default function FormularioInmueble({
               </div>
               <h2 className="text-lg font-semibold text-gray-800">Detalles adicionales</h2>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="md:col-span-3">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Descripción</label>
-                <textarea
-                  name="detalles"
-                  defaultValue={initialData?.detalles ?? ""}
-                  rows={4}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
-                />
-              </div>
-            </div>
-          </div>
-          {/* 📷 Imágenes */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
-            <h2 className="text-lg font-semibold text-gray-800 mb-6 flex items-center gap-3">
-              <Upload className="w-5 h-5 text-blue-600" /> Imágenes
-            </h2>
-            <div
-              className="border-2 border-dashed border-gray-300 rounded-xl p-8 cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all duration-200"
-              onClick={() => document.getElementById("fileInput")?.click()}
-            >
-              <div className="flex flex-wrap gap-4 justify-center">
-                {imagenes.map((img, i) => (
-                  <div key={i} className="relative w-32 h-32 group">
-                    <img
-                      src={img.file ? URL.createObjectURL(img.file) : img.url}
-                      alt="preview"
-                      className="w-full h-full object-cover rounded-lg border-2 border-gray-200"
-                    />
-                    {/* Botón eliminar */}
-                    <button
-                      type="button"
-                      onClick={(ev) => { ev.stopPropagation(); handleRemoveFile(i); }}
-                      className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                    {/* Botón marcar como principal */}
-                    <button
-                      type="button"
-                      onClick={(ev) => {
-                        ev.stopPropagation();
-                        setImagenes((prev) =>
-                          prev.map((imgItem, idx) => ({
-                            ...imgItem,
-                            principal: idx === i,
-                          }))
-                        );
-                      }}
-                      className={`absolute bottom-1 left-1 px-2 py-0.5 text-xs rounded ${
-                        img.principal ? "bg-amber-400 text-white" : "bg-gray-200 text-gray-700"
-                      }`}
-                    >
-                      {img.principal ? "Principal" : "Hacer principal"}
-                    </button>
-                  </div>
-                ))}
-                {imagenes.length === 0 && (
-                  <div className="text-center mt-4 w-full">
-                    <p className="text-sm text-gray-500">Haz clic o arrastra imágenes aquí</p>
-                  </div>
-                )}
-              </div>
-              <input
-                id="fileInput"
-                type="file"
-                multiple
-                accept="image/*"
-                className="hidden"
-                onChange={handleFileChange}
+
+            <div className="md:col-span-3">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Descripción
+              </label>
+              <textarea
+                name="detalles"
+                defaultValue={initialData?.detalles ?? ""}
+                rows={4}
+                className="w-full px-4 py-2.5 border rounded-lg"
               />
             </div>
           </div>
-          {/* ✅ Botones: Cancelar a la izquierda, Guardar a la derecha */}
-          <div className="flex justify-end gap-3">
-            {onCancel && (
-              <button
-                type="button"
-                onClick={onCancel}
-                className="px-6 py-3 rounded-xl font-semibold border border-gray-300 text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-colors"
+
+          {/* 📷 Imágenes */}
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
+              <h2 className="text-lg font-semibold text-gray-800 mb-6 flex items-center gap-3">
+                <Upload className="w-5 h-5 text-blue-600" /> Imágenes
+              </h2>
+
+              <div
+                className="border-2 border-dashed border-gray-300 rounded-xl p-8 cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all duration-200"
+                onClick={() => document.getElementById("fileInput")?.click()}
               >
-                Cancelar
-              </button>
-            )}
+                <div className="flex flex-wrap gap-4 justify-center">
+                  {imagenes.map((img, i) => (
+                    <div key={i} className="relative w-32 h-32 group">
+                      <img
+                        src={img.file ? URL.createObjectURL(img.file) : img.url}
+                        alt="preview"
+                        className="w-full h-full object-cover rounded-lg border-2 border-gray-200"
+                      />
+
+                      {/* Botón eliminar */}
+                      <button
+                        type="button"
+                        onClick={(ev) => {
+                          ev.stopPropagation();
+                          handleRemoveFile(i);
+                        }}
+                        className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+
+                      {/* Botón marcar como principal */}
+                      <button
+                        type="button"
+                        onClick={(ev) => {
+                          ev.stopPropagation();
+                          setImagenes((prev) =>
+                            prev.map((imgItem, idx) => ({
+                              ...imgItem,
+                              principal: idx === i,
+                            }))
+                          );
+                        }}
+                        className={`absolute bottom-1 left-1 px-2 py-0.5 text-xs rounded ${
+                          img.principal
+                            ? "bg-amber-400 text-white"
+                            : "bg-gray-200 text-gray-700"
+                        }`}
+                      >
+                        {img.principal ? "Principal" : "Hacer principal"}
+                      </button>
+                    </div>
+                  ))}
+
+                  {/* Texto inicial si no hay imágenes */}
+                  {imagenes.length === 0 && (
+                    <div className="text-center mt-4 w-full">
+                      <p className="text-sm text-gray-500">Haz clic o arrastra imágenes aquí</p>
+                    </div>
+                  )}
+                </div>
+
+                <input
+                  id="fileInput"
+                  type="file"
+                  multiple
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleFileChange}
+                />
+              </div>
+            </div>
+
+
+          {/* BOTONES */}
+        <div className="flex justify-end gap-4 pt-4">
+          {onCancel && (
             <button
-              type="submit"
-              disabled={loading}
-              className={`px-6 py-3 rounded-xl font-semibold text-white transition ${
-                loading ? "bg-gray-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700"
-              }`}
+              type="button"
+              onClick={onCancel}
+              className="px-4 py-2 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100 transition"
             >
-              {loading ? "Guardando..." : submitLabel ?? "Guardar Inmueble"}
+              Cancelar
             </button>
-          </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="px-6 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition disabled:opacity-50"
+          >
+            {loading ? "Guardando..." : submitLabel ?? "Guardar"}
+          </button>
+        </div>
+
         </form>
       </div>
     </div>

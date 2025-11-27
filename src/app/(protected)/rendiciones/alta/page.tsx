@@ -1,3 +1,4 @@
+// src/app/(protected)/rendiciones/alta/page.tsx
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
@@ -46,11 +47,13 @@ export default function AltaRendicionPage() {
     try {
       const res = await fetch("/api/clientes");
       const data = await res.json();
+
       const lista: Cliente[] = Array.isArray(data)
         ? data
         : Array.isArray(data?.clientes)
         ? data.clientes
         : [];
+
       setClientes(lista);
     } catch (e) {
       console.error("❌ Error al cargar clientes:", e);
@@ -65,10 +68,25 @@ export default function AltaRendicionPage() {
   }, []);
 
   // ==========================================================
+  // VALIDACIONES MODERADAS DURANTE FILTRADO
+  // ==========================================================
+  const validarFiltros = () => {
+    if (anio && Number(anio) < 2020) {
+      toast("⚠ El año es muy bajo, ¿estás segura?");
+    }
+
+    if (mes && (Number(mes) < 1 || Number(mes) > 12)) {
+      toast("⚠ El mes no es válido");
+    }
+  };
+
+  // ==========================================================
   // CARGAR COBRANZAS
   // ==========================================================
   const cargarCobranzas = async () => {
     if (!loadedClientes) return;
+
+    validarFiltros();
 
     if (!cliente && !anio && !mes) {
       setCobranzas([]);
@@ -144,10 +162,37 @@ export default function AltaRendicionPage() {
   };
 
   // ==========================================================
+  // VALIDACIONES DURAS AL GUARDAR
+  // ==========================================================
+  const validarGuardar = () => {
+    if (seleccionadas.length === 0) {
+      toast.error("Seleccioná al menos una cobranza");
+      return false;
+    }
+
+    if ((mesIPC && !anioIPC) || (!mesIPC && anioIPC)) {
+      toast.error("Si usás IPC, debés completar mes y año");
+      return false;
+    }
+
+    if (anioIPC && Number(anioIPC) < 2020) {
+      toast.error("Año IPC inválido");
+      return false;
+    }
+
+    if (mesIPC && (Number(mesIPC) < 1 || Number(mesIPC) > 12)) {
+      toast.error("Mes IPC inválido");
+      return false;
+    }
+
+    return true;
+  };
+
+  // ==========================================================
   // GUARDAR RENDICIÓN + DESCARGAR EXCEL DIRECTO
   // ==========================================================
   const guardar = async () => {
-    if (seleccionadas.length === 0) return toast.error("Seleccioná al menos una cobranza");
+    if (!validarGuardar()) return;
 
     setLoading(true);
 
@@ -159,7 +204,6 @@ export default function AltaRendicionPage() {
         anio_ipc: anioIPC ? Number(anioIPC) : undefined,
       };
 
-      // Crear la rendición y recibir el Excel directamente
       const res = await fetch("/api/rendiciones", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -171,7 +215,6 @@ export default function AltaRendicionPage() {
         throw new Error(errorData.error || "Error desconocido");
       }
 
-      // Descargar Excel directamente
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");

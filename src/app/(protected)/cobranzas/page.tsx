@@ -6,6 +6,10 @@ import Header from '@/components/ui/Header';
 import toast, { Toaster } from 'react-hot-toast';
 import { useRouter } from "next/navigation";
 
+interface UserInfo {
+  id: string;
+  name: string;
+}
 
 interface Cliente {
   id_cliente: number;
@@ -24,6 +28,12 @@ interface Cobranza {
   concepto: string;
   observaciones?: string | null;
   activa: boolean;
+
+  // NUEVO HISTORIAL
+  createdAt?: string;
+  updatedAt?: string;
+  createdBy?: UserInfo | null;
+  updatedBy?: UserInfo | null;
 }
 
 export default function CobranzasPage() {
@@ -162,7 +172,8 @@ export default function CobranzasPage() {
       </header>
 
       <main className="max-w-7xl mx-auto px-6 py-8">
-        {/* Action Buttons */}
+
+        {/* BOTÓN CREAR */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
           <a
             href="/cobranzas/alta"
@@ -179,8 +190,7 @@ export default function CobranzasPage() {
           </a>
         </div>
 
-
-        {/* FILTROS NUEVOS Y MÁS LINDOS */}
+        {/* FILTROS */}
         <div className="bg-white p-5 rounded-xl shadow-sm border mb-6">
           <h3 className="text-lg font-semibold text-gray-700 mb-4">Filtrar cobranzas</h3>
 
@@ -235,7 +245,7 @@ export default function CobranzasPage() {
             ) : cobranzas.length === 0 ? (
               <p className="text-center py-16">No hay cobranzas</p>
             ) : (
-             <div className="grid gap-4">
+              <div className="grid gap-4">
                 {[...cobranzas]
                   .sort((a, b) => Number(b.activa) - Number(a.activa))
                   .map(c => (
@@ -243,6 +253,7 @@ export default function CobranzasPage() {
                       key={c.id_cobranza}
                       className="border rounded-xl p-5 relative hover:shadow-lg transition-all border-l-4 border-l-[#63bae9]"
                     >
+                      {/* ESTADO */}
                       <button
                         onClick={() => toggleActiva(c)}
                         className={`absolute top-4 right-4 px-3 py-1 rounded-full text-sm font-semibold ${
@@ -252,6 +263,7 @@ export default function CobranzasPage() {
                         {c.activa ? 'Activa' : 'Inactiva'}
                       </button>
 
+                      {/* INFO PRINCIPAL */}
                       <p className="text-lg font-bold text-gray-800 mb-2">
                         {c.concepto} — ${c.monto.toLocaleString()}
                       </p>
@@ -274,6 +286,26 @@ export default function CobranzasPage() {
                         </p>
                       )}
 
+                      {/* 🆕 HISTORIAL */}
+                      <div className="mt-4 p-3 bg-gray-50 rounded-lg border text-sm text-gray-600">
+                        {c.createdBy && (
+                          <p>Creado por: <span className="font-medium">{c.createdBy.name}</span></p>
+                        )}
+
+                        {c.updatedBy && (
+                          <p>Actualizado por: <span className="font-medium">{c.updatedBy.name}</span></p>
+                        )}
+
+                        {c.createdAt && (
+                          <p>Fecha de creación: {new Date(c.createdAt).toLocaleString()}</p>
+                        )}
+
+                        {c.updatedAt && (
+                          <p>Última actualización: {new Date(c.updatedAt).toLocaleString()}</p>
+                        )}
+                      </div>
+
+                      {/* ACCIONES */}
                       <div className="mt-4 flex items-center justify-end gap-4">
                         <button
                           onClick={() => router.push(`/cobranzas/modificar/${c.id_cobranza}`)}
@@ -291,14 +323,13 @@ export default function CobranzasPage() {
                       </div>
                     </div>
                   ))}
-
               </div>
-
             )}
           </div>
 
         </div>
 
+        {/* PAGINACIÓN */}
         <div className="flex justify-center mt-6 gap-4">
           <button
             disabled={page === 1}
