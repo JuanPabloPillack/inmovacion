@@ -1,22 +1,41 @@
+//| src/app/api/pagos/route.ts
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // ===============================================
 // API: Pagos a Proveedor (Listado y Creación)
 // Ruta: /api/pagos
-// Runtime Node.js
 // ===============================================
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 
+import {
+  validateConcepto,
+  validateMonto,
+  validateResponsable,
+  validateComprobante,
+} from "@/actions/pagos/validaciones";
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+// -------------------------------
+// FIX Decimal → number
+// -------------------------------
+function serialize(obj: any) {
+  return JSON.parse(
+    JSON.stringify(obj, (_, value) =>
+      value?.toNumber instanceof Function ? value.toNumber() : value
+    )
+  );
+}
+
 // ===============================================
-// GET — Listar todos los pagos
+// GET — Listar todos los pagos activos
 // ===============================================
 export async function GET() {
   try {
     const pagos = await db.pagoProveedor.findMany({
+      where: { estado: true },
       orderBy: { fecha_pago: "desc" },
       include: {
         proveedor: true,
@@ -25,78 +44,90 @@ export async function GET() {
       },
     });
 
-    return NextResponse.json(pagos);
+    return NextResponse.json(serialize(pagos));
   } catch (error) {
-    console.error("Error cargando pagos a proveedores:", error);
+    console.error("Error cargando pagos:", error);
     return NextResponse.json(
-      { error: "Error al obtener pagos a proveedores" },
+      { error: "Error al obtener pagos" },
       { status: 500 }
     );
   }
 }
 
 // ===============================================
-// POST — Crear un pago a proveedor
+// POST — Crear un pago
 // ===============================================
 export async function POST(req: NextRequest) {
   try {
     const data = await req.json();
 
-    const proveedorId = Number(data.proveedorId);
-    const medioPagoId = Number(data.medioPagoId);
-    const estadoPagoId = Number(data.estadoPagoId);
-    const importe = Number(data.importe);
-
-    if (isNaN(proveedorId) || proveedorId <= 0) {
+    // ======================
+    // VALIDACIONES BACKEND
+    // ======================
+    const errConcepto = validateConcepto(data.concepto);
+    if (errConcepto)
       return NextResponse.json(
-        { success: false, message: "proveedorId inválido" },
+        { success: false, message: errConcepto },
         { status: 400 }
       );
-    }
 
-    if (isNaN(medioPagoId)) {
+    const errMonto = validateMonto(data.importe);
+    if (errMonto)
       return NextResponse.json(
-        { success: false, message: "medioPagoId inválido" },
+        { success: false, message: errMonto },
         { status: 400 }
       );
-    }
 
-    if (isNaN(estadoPagoId)) {
+    const errResp = validateResponsable(data.responsable);
+    if (errResp)
       return NextResponse.json(
-        { success: false, message: "estadoPagoId inválido" },
+        { success: false, message: errResp },
         { status: 400 }
       );
-    }
 
-    if (isNaN(importe)) {
+    const errComp = validateComprobante(data.comprobante);
+    if (errComp)
       return NextResponse.json(
-        { success: false, message: "importe inválido" },
+        { success: false, message: errComp },
         { status: 400 }
       );
+
+    // ======================
+    // FECHA — SIEMPRE AUTOMÁTICA
+    // ======================
+    let fechaPagoFinal = new Date(); // por defecto siempre hoy
+
+    if (data.fecha_pago && !isNaN(Date.parse(data.fecha_pago))) {
+      fechaPagoFinal = new Date(data.fecha_pago);
     }
 
+    // ======================
+    // CREAR EN LA DB
+    // ======================
     const pago = await db.pagoProveedor.create({
       data: {
-        proveedorId,
-        medioPagoId,
-        estadoPagoId,
-        importe,
-        concepto: data.concepto,
-        comprobante: data.comprobante || null,
-        responsable: data.responsable,
-        fecha_pago: data.fecha_pago ? new Date(data.fecha_pago) : new Date(),
+        proveedorId: Number(data.proveedorId),
+        medioPagoId: Number(data.medioPagoId),
+        estadoPagoId: Number(data.estadoPagoId),
+        importe: Number(data.importe),
+        concepto: data.concepto.trim(),
+        comprobante: data.comprobante?.trim() || null,
+        responsable: data.responsable.trim(),
+        fecha_pago: fechaPagoFinal,
+        estado: true,
       },
     });
 
-    return NextResponse.json({ success: true, pago }, { status: 201 });
+    return NextResponse.json(
+      { success: true, pago: serialize(pago) },
+      { status: 201 }
+    );
+
   } catch (error: any) {
-    console.error("Error creando pago a proveedor:", error);
+    console.error("Error creando pago:", error);
 
     return NextResponse.json(
-      {
-        success: false,
-        message: error?.message || "Error interno al crear pago",
-      },
+      { success: false, message: error?.message || "Error creando pago" },
       { status: 500 }
     );
   }

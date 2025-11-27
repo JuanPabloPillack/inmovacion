@@ -1,32 +1,27 @@
+// src/app/api/pagos/[id]/route.ts
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// ===============================================
-// API: Pago a Proveedor (Detalle, Update, Delete)
-// Ruta: /api/pagos-proveedores/:id
-// Runtime Node.js
-// ===============================================
-
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+
+// FIX Decimal → number
+function serialize(obj: any) {
+  return JSON.parse(
+    JSON.stringify(obj, (_, value) =>
+      value?.toNumber instanceof Function ? value.toNumber() : value
+    )
+  );
+}
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// ===============================================
-// GET — Obtener un pago por ID
-// ===============================================
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { id: string } }
-) {
+// ===============================
+// GET — Obtener Pago
+// ===============================
+export async function GET(req: NextRequest, { params }: any) {
   try {
     const id = Number(params.id);
-
-    if (isNaN(id)) {
-      return NextResponse.json(
-        { error: "ID inválido" },
-        { status: 400 }
-      );
-    }
+    if (isNaN(id)) return NextResponse.json({ error: "ID inválido" }, { status: 400 });
 
     const pago = await db.pagoProveedor.findUnique({
       where: { id_pago: id },
@@ -37,101 +32,56 @@ export async function GET(
       },
     });
 
-    if (!pago) {
-      return NextResponse.json(
-        { error: "Pago no encontrado" },
-        { status: 404 }
-      );
-    }
-
-    return NextResponse.json(pago);
+    return NextResponse.json(serialize(pago));
   } catch (error) {
-    console.error("Error obteniendo pago:", error);
-    return NextResponse.json(
-      { error: "Error al obtener el pago" },
-      { status: 500 }
-    );
+    console.error(error);
+    return NextResponse.json({ error: "Error al obtener pago" }, { status: 500 });
   }
 }
 
-// ===============================================
-// PUT — Actualizar un pago a proveedor
-// ===============================================
-export async function PUT(
-  req: NextRequest,
-  { params }: { params: { id: string } }
-) {
+// ===============================
+// PUT — Actualizar Pago
+// ===============================
+export async function PUT(req: NextRequest, { params }: any) {
   try {
     const id = Number(params.id);
     const data = await req.json();
 
-    if (isNaN(id)) {
-      return NextResponse.json(
-        { success: false, message: "ID inválido" },
-        { status: 400 }
-      );
-    }
-
     const pago = await db.pagoProveedor.update({
       where: { id_pago: id },
       data: {
-        concepto: data.concepto,
+        concepto: data.concepto?.trim(),
         importe: Number(data.importe),
         medioPagoId: Number(data.medioPagoId),
         estadoPagoId: Number(data.estadoPagoId),
-        comprobante: data.comprobante || null,
-        responsable: data.responsable,
+        comprobante: data.comprobante?.trim() || null,
+        responsable: data.responsable?.trim(),
         fecha_pago: data.fecha_pago ? new Date(data.fecha_pago) : undefined,
       },
     });
 
-    return NextResponse.json(
-      { success: true, pago },
-      { status: 200 }
-    );
-  } catch (error: any) {
-    console.error("Error actualizando pago:", error);
-
-    return NextResponse.json(
-      {
-        success: false,
-        message: error?.message || "Error interno al actualizar pago",
-      },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: true, pago: serialize(pago) });
+  } catch (error) {
+    console.error(error);
+    return NextResponse.json({ error: "Error al actualizar pago" }, { status: 500 });
   }
 }
 
-// ===============================================
-// DELETE — Eliminar un pago a proveedor
-// ===============================================
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: { id: string } }
-) {
+// ===============================
+// DELETE — Soft Delete
+// ===============================
+export async function DELETE(req: NextRequest, { params }: any) {
   try {
     const id = Number(params.id);
 
-    if (isNaN(id)) {
-      return NextResponse.json(
-        { error: "ID inválido" },
-        { status: 400 }
-      );
-    }
-
-    await db.pagoProveedor.delete({
+    const pago = await db.pagoProveedor.update({
       where: { id_pago: id },
+      data: { estado: false },
     });
 
-    return NextResponse.json(
-      { success: true, message: "Pago eliminado" },
-      { status: 200 }
-    );
+    return NextResponse.json({ success: true, pago: serialize(pago) });
   } catch (error) {
-    console.error("Error eliminando pago:", error);
-    return NextResponse.json(
-      { error: "Error al eliminar pago" },
-      { status: 500 }
-    );
+    console.error(error);
+    return NextResponse.json({ error: "Error al eliminar pago" }, { status: 500 });
   }
 }

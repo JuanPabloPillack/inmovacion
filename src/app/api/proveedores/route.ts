@@ -1,87 +1,64 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-// ===============================================
-// API: Crear y listar Proveedores
-// Ruta: /api/proveedores
-// Runtime Node.js
-// ===============================================
+// =============================================================
+// src/app/api/proveedores/route.ts
+// =============================================================
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { proveedorSchema } from "@/lib/zod";
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
-
-// =========================
-// POST — Crear proveedor
-// =========================
 export async function POST(req: NextRequest) {
   try {
-    const data = await req.json().catch(() => null);
+    const json = await req.json();
+    const parsed = proveedorSchema.safeParse(json);
 
-    if (!data) {
+    if (!parsed.success) {
       return NextResponse.json(
-        { success: false, message: "Body inválido" },
+        {
+          success: false,
+          message: parsed.error.issues[0].message
+        },
         { status: 400 }
       );
     }
 
-    const tipoServicioId = Number(data.tipoServicioId);
-    if (isNaN(tipoServicioId)) {
-      return NextResponse.json(
-        { success: false, message: "tipoServicioId inválido" },
-        { status: 400 }
-      );
-    }
+    const data = parsed.data;
 
-    // Crear proveedor
     const proveedor = await db.proveedor.create({
       data: {
-        nombre_razon_social: data.nombre_razon_social,
-        cuit_cuil: data.cuit_cuil,
-        correo_contacto: data.correo_contacto || null,
-        telefono_contacto: data.telefono_contacto || null,
-        direccion: data.direccion || null,
-        tipoServicioId,
-        datos_bancarios: data.datos_bancarios || null,
-        observaciones: data.observaciones || null,
+        ...data,
+        tipoServicioId: Number(data.tipoServicioId), // ← CONVERSIÓN AQUÍ
         estado: true,
       },
     });
 
-    return NextResponse.json(
-      { success: true, proveedor },
-      { status: 201 }
-    );
-  } catch (error: any) {
-    console.error("Error creando proveedor:", error);
+    return NextResponse.json({ success: true, proveedor });
+
+  } catch (err: any) {
+    console.error("Error proveedor:", err);
+
+    if (err.code === "P2002") {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Ya existe un proveedor con ese CUIT/CUIL"
+        },
+        { status: 400 }
+      );
+    }
 
     return NextResponse.json(
-      { success: false, message: "Error interno al crear proveedor" },
+      { success: false, message: "Error interno" },
       { status: 500 }
     );
   }
 }
 
-// =========================
-// GET — Listar proveedores
-// =========================
 export async function GET() {
-  try {
-    const proveedores = await db.proveedor.findMany({
-      orderBy: { id_proveedor: "desc" },
-      include: {
-        tipoServicio: true,
-      },
-    });
+  const proveedores = await db.proveedor.findMany({
+    where: { estado: true },
+    include: { tipoServicio: true },
+    orderBy: { id_proveedor: "desc" },
+  });
 
-    // 🔥 IMPORTANTE: debe devolver SIEMPRE un array
-    return NextResponse.json(proveedores);
-  } catch (error) {
-    console.error("Error obteniendo proveedores:", error);
-
-    return NextResponse.json(
-      { success: false, message: "Error al obtener proveedores" },
-      { status: 500 }
-    );
-  }
+  return NextResponse.json(proveedores);
 }

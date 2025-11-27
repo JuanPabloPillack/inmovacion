@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // ===============================================
 // Archivo: src/app/(protected)/pagos/page.tsx
-// Descripción: Gestión de Pagos a Proveedores
+// Descripción: Gestión de Pagos a Proveedores (SOLO ACTIVOS)
 // Proyecto: inmovacion (GBS y Asociados)
 // ===============================================
 
@@ -71,7 +71,11 @@ export default function PagosProveedoresPage() {
   const refreshPagos = useCallback(async () => {
     try {
       const data = await getPagos();
-      setPagos(data);
+
+      // 🔥 FILTRAR SOLO ACTIVOS
+      const activos = (data || []).filter((p: any) => p.estado !== false);
+
+      setPagos(activos);
     } catch (error) {
       console.error("Error al cargar pagos:", error);
     }
@@ -101,7 +105,7 @@ export default function PagosProveedoresPage() {
       await deletePago(pagoId);
       await refreshPagos();
     } catch (error) {
-      console.error("Error eliminando pago:", error);
+      console.error("Error desactivando pago:", error);
     } finally {
       setIsModalOpen(false);
       setPagoId(null);
@@ -117,28 +121,19 @@ export default function PagosProveedoresPage() {
     return pagos.filter((p) => {
       switch (filterField) {
         case "proveedor":
-          return p.proveedor?.nombre_razon_social
-            ?.toLowerCase()
-            .includes(term);
-
+          return p.proveedor?.nombre_razon_social?.toLowerCase().includes(term);
         case "concepto":
           return p.concepto?.toLowerCase().includes(term);
-
         case "medioPago":
           return p.medioPago?.nombre?.toLowerCase().includes(term);
-
         case "estadoPago":
           return p.estadoPago?.nombre?.toLowerCase().includes(term);
-
         default:
           return true;
       }
     });
   }, [pagos, searchTerm, filterField]);
 
-  // =======================
-  // LOADING
-  // =======================
   if (loading) return <Loading message="Cargando pagos a proveedores..." />;
 
   // =======================
@@ -151,7 +146,7 @@ export default function PagosProveedoresPage() {
           <div className="flex items-center gap-2">
             <FileText className="h-5 w-5 text-[#63bae9]" />
             <CardTitle className="text-xl text-[#686363]">
-              Lista de Pagos
+              Lista de Pagos Activos
             </CardTitle>
           </div>
           <Badge className="bg-[#969696]/10 text-[#686363] border border-[#969696]/30">
@@ -164,21 +159,13 @@ export default function PagosProveedoresPage() {
         <Table>
           <TableHeader>
             <TableRow className="border-[#969696]/20">
-              <TableHead className="text-[#686363] font-medium">
-                Proveedor
-              </TableHead>
-              <TableHead className="text-[#686363] font-medium">
-                Concepto
-              </TableHead>
-              <TableHead className="text-[#686363] font-medium">
-                Importe
-              </TableHead>
+              <TableHead className="text-[#686363] font-medium">Proveedor</TableHead>
+              <TableHead className="text-[#686363] font-medium">Concepto</TableHead>
+              <TableHead className="text-[#686363] font-medium">Importe</TableHead>
               <TableHead className="text-[#686363] font-medium">Medio</TableHead>
               <TableHead className="text-[#686363] font-medium">Estado</TableHead>
               <TableHead className="text-[#686363] font-medium">Fecha</TableHead>
-              <TableHead className="text-right text-[#686363] font-medium">
-                Acciones
-              </TableHead>
+              <TableHead className="text-right text-[#686363] font-medium">Acciones</TableHead>
             </TableRow>
           </TableHeader>
 
@@ -194,9 +181,7 @@ export default function PagosProveedoresPage() {
 
                 <TableCell className="text-[#686363]">{p.concepto}</TableCell>
 
-                <TableCell className="text-[#686363]">
-                  ${p.importe}
-                </TableCell>
+                <TableCell className="text-[#686363]">${p.importe}</TableCell>
 
                 <TableCell className="text-[#686363]">
                   {p.medioPago?.nombre}
@@ -227,16 +212,16 @@ export default function PagosProveedoresPage() {
                     >
                       <DropdownMenuItem
                         onClick={() => router.push(`/pagos/${p.id_pago}`)}
-                        className="text-[#686363] hover:bg-[#63bae9]/10 hover:text-[#63bae9]">
+                        className="text-[#686363] hover:bg-[#63bae9]/10 hover:text-[#63bae9]"
+                      >
                         <Eye className="mr-2 h-4 w-4" />
                         Ver detalles
                       </DropdownMenuItem>
 
                       <DropdownMenuItem
-                        onClick={() =>
-                          router.push(`/pagos/editar?id=${p.id_pago}`)
-                        }
-                        className="text-[#686363] hover:bg-[#63bae9]/10 hover:text-[#63bae9]">
+                        onClick={() => router.push(`/pagos/editar?id=${p.id_pago}`)}
+                        className="text-[#686363] hover:bg-[#63bae9]/10 hover:text-[#63bae9]"
+                      >
                         <Edit className="mr-2 h-4 w-4" />
                         Editar
                       </DropdownMenuItem>
@@ -246,7 +231,8 @@ export default function PagosProveedoresPage() {
                           setPagoId(p.id_pago);
                           setIsModalOpen(true);
                         }}
-                        className="text-red-500 hover:bg-red-500/10">
+                        className="text-red-500 hover:bg-red-500/10"
+                      >
                         <Trash2 className="mr-2 h-4 w-4" />
                         Eliminar
                       </DropdownMenuItem>
@@ -266,6 +252,7 @@ export default function PagosProveedoresPage() {
       <Header />
 
       <div className="container mx-auto px-4 py-8">
+        {/* TITULO */}
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-2">
             <FileText className="h-8 w-8 text-[#63bae9]" />
@@ -273,9 +260,7 @@ export default function PagosProveedoresPage() {
               Pagos a Proveedores
             </h1>
           </div>
-          <p className="text-[#969696]">
-            Administra todos los pagos realizados
-          </p>
+          <p className="text-[#969696]">Administra todos los pagos activos</p>
         </div>
 
         {/* Buscador + Filtros + Crear */}
@@ -325,7 +310,7 @@ export default function PagosProveedoresPage() {
         onClose={() => setIsModalOpen(false)}
         onConfirm={confirmDelete}
         title="¿Eliminar pago?"
-        message="Esta acción eliminará el pago definitivamente."
+        message="Esto eliminará el pago del sistema, pero NO de la base de datos."
         confirmText="Eliminar"
         cancelText="Cancelar"
         variant="danger"
