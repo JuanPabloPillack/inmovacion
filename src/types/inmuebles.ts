@@ -7,24 +7,28 @@ export interface InmuebleDTO {
   id_ubicacion: number;
   id_estado: number;
   id_cliente: number | null;
-  id_operacion?: number;
+  id_operacion: number | null;
   precio: number | null;
   superficie_total: number;
   superficie_cubierta: number | null;
   cantidad_ambientes: number | null;
+  cantidades_banos?: number;
   cantidad_banos: number | null;
   cantidad_dormitorios: number | null;
   cantidad_cocheras: number | null;
   cantidad_pisos: number | null;
   antiguedad: number | null;
+
   foto?: string | null;
   fotoPrincipal: string;
   detalles?: string | null;
   titulo: string;
   archivado?: boolean;
 
+  // Relaciones
   tipo_inmueble?: { id_tipo_inmueble: number; nombre: string };
-  operacion?: { id_operacion: number; nombre: string };
+  operacion: { id_operacion: number; nombre: string } | null;
+
   ubicacion?: {
     id_ubicacion: number;
     direccion: string;
@@ -38,11 +42,21 @@ export interface InmuebleDTO {
       localidad: { id_localidad: number; nombre: string };
     } | null;
   };
+
   estado?: { id_estado: number; nombre: string };
   cliente?: { id_cliente: number; nombre: string } | null;
+
   imagenes?: InmuebleImagen[];
+
   estadoNombre?: "venta" | "alquiler";
+
+  createdAt?: string;
+  updatedAt?: string;
+
+    createdBy?: { id_usuario: number; nombre: string } | null;
+  updatedBy?: { id_usuario: number; nombre: string } | null;
 }
+
 
 export interface InmuebleEdit {
   id_inmueble: number;

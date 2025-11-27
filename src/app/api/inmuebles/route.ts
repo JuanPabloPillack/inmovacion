@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { Prisma } from "@/generated/prisma";
+import { Prisma } from "@/generated/prisma"; // ← IMPORT CORRECTO
 
 const toNumberOrUndefined = (v: any): number | undefined =>
   v !== undefined && v !== null && v !== "" ? Number(v) : undefined;
@@ -11,6 +11,8 @@ const toDecimalOrUndefined = (v: any): Prisma.Decimal | undefined =>
   v !== undefined && v !== null && v !== "" ? new Prisma.Decimal(Number(v)) : undefined;
 
 export async function GET(req: NextRequest) {
+  console.log("🔍 GET /api/inmuebles iniciado");
+
   try {
     const { searchParams } = new URL(req.url);
     const where: any = { archivado: false };
@@ -20,10 +22,14 @@ export async function GET(req: NextRequest) {
     const precioMin = searchParams.get("precioMin");
     const precioMax = searchParams.get("precioMax");
 
+    console.log("🔎 Parámetros:", { tipo, estado, precioMin, precioMax });
+
     if (tipo) where.id_tipo_inmueble = Number(tipo);
     if (estado) where.id_estado = Number(estado);
     if (precioMin) where.precio = { gte: Number(precioMin) };
     if (precioMax) where.precio = { ...(where.precio || {}), lte: Number(precioMax) };
+
+    console.log("🧩 WHERE generado:", where);
 
     const inmuebles = await db.inmueble.findMany({
       where,
@@ -38,41 +44,55 @@ export async function GET(req: NextRequest) {
       orderBy: { id_inmueble: "desc" },
     });
 
+    console.log("✅ Inmuebles encontrados:", inmuebles.length);
+
     return NextResponse.json(inmuebles);
-  } catch (error) {
+  } catch (error: any) {
     console.error("❌ Error GET /api/inmuebles:", error);
+    console.error("➡️ Código Prisma:", error.code);
+    console.error("➡️ Meta Prisma:", error.meta);
     return NextResponse.json({ error: "Error al obtener inmuebles" }, { status: 500 });
   }
 }
 
 export async function POST(req: NextRequest) {
+  console.log("📥 POST /api/inmuebles llamado");
+
   try {
     const body = await req.json();
     console.log("📦 Payload recibido:", body);
 
-    // Manejar cliente: id directo o desde objeto
-    const clienteId = body.id_cliente || (body.cliente && typeof body.cliente === 'object' ? body.cliente.id : null);
+    // -------------------------
+    // VALIDACIÓN CLIENTE
+    // -------------------------
+    const clienteId =
+      body.id_cliente || (body.cliente && typeof body.cliente === "object" ? body.cliente.id : null);
+
     if (!clienteId) {
       return NextResponse.json({ error: "Debe seleccionar un propietario" }, { status: 400 });
     }
 
-    // Manejar barrio: id directo o nombre para crear/buscar
+    // -------------------------
+    // MANEJO DE BARRIO
+    // -------------------------
     let idBarrio: number;
+
     if (body.id_barrio) {
       idBarrio = Number(body.id_barrio);
     } else if (body.barrio) {
-      // Buscar o crear barrio
       let barrioDb = await db.barrio.findFirst({ where: { nombre: body.barrio } });
+
       if (!barrioDb) {
         let localidadId = body.localidadId;
+
         if (!localidadId) {
-          // Buscar primera localidad o crear una por defecto
           const defaultLocalidad = await db.localidad.findFirst();
+
           if (!defaultLocalidad) {
-            // Crear localidad por defecto si no existe ninguna
             const createdLocalidad = await db.localidad.create({
-              data: { nombre: "Localidad por defecto" }
+              data: { nombre: "Localidad por defecto" },
             });
+
             localidadId = createdLocalidad.id_localidad;
           } else {
             localidadId = defaultLocalidad.id_localidad;
@@ -80,15 +100,24 @@ export async function POST(req: NextRequest) {
         }
 
         barrioDb = await db.barrio.create({
-          data: { nombre: body.barrio, id_localidad: Number(localidadId) },
+          data: {
+            nombre: body.barrio,
+            id_localidad: Number(localidadId),
+          },
         });
       }
+
       idBarrio = barrioDb.id_barrio;
     } else {
-      return NextResponse.json({ error: "Debe seleccionar o escribir un barrio" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Debe seleccionar o escribir un barrio" },
+        { status: 400 }
+      );
     }
 
-    // Crear inmueble con ubicación conectada
+    // -------------------------
+    // CREACIÓN DEL INMUEBLE
+    // -------------------------
     const inmueble = await db.inmueble.create({
       data: {
         titulo: body.titulo,
@@ -106,9 +135,7 @@ export async function POST(req: NextRequest) {
         tipo_inmueble: body.id_tipo_inmueble
           ? { connect: { id_tipo_inmueble: Number(body.id_tipo_inmueble) } }
           : undefined,
-        estado: body.id_estado
-          ? { connect: { id_estado: Number(body.id_estado) } }
-          : undefined,
+        estado: body.id_estado ? { connect: { id_estado: Number(body.id_estado) } } : undefined,
         cliente: { connect: { id_cliente: Number(clienteId) } },
         operacion: body.id_operacion
           ? { connect: { id_operacion: Number(body.id_operacion) } }
@@ -125,7 +152,9 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // Guardar imágenes
+    // -------------------------
+    // IMÁGENES
+    // -------------------------
     if (Array.isArray(body.imagenes) && body.imagenes.length > 0) {
       await db.inmuebleImagen.createMany({
         data: body.imagenes.map((img: any) => ({
@@ -136,7 +165,9 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Retornar inmueble creado con relaciones
+    // -------------------------
+    // RETORNAR INMUEBLE COMPLETO
+    // -------------------------
     const creado = await db.inmueble.findUnique({
       where: { id_inmueble: inmueble.id_inmueble },
       include: {

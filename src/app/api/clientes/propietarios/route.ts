@@ -1,15 +1,35 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 
-export default async function handler(req: any, res: any) {
+export async function GET() {
   try {
     const propietarios = await db.cliente.findMany({
-      where: { tipoCliente: { nombre: "Propietario" } },
-      select: { id_cliente: true, nombre: true }
+      where: {
+        tipoCliente: {
+          is: {
+            nombre: "Propietario",
+          },
+        },
+      },
+      select: {
+        id_cliente: true,
+        nombre: true,
+        apellido: true,
+        tipoCliente: {
+          select: {
+            nombre: true,
+          },
+        },
+      },
     });
-    res.status(200).json(propietarios);
+
+    return NextResponse.json(propietarios);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Error al obtener propietarios" });
+    console.error("Error al obtener propietarios:", error);
+    return NextResponse.json(
+      { error: "Error al obtener propietarios" },
+      { status: 500 }
+    );
   }
 }

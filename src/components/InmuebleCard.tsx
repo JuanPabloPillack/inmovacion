@@ -4,12 +4,15 @@ import { useState, useMemo } from "react";
 import type { InmuebleDTO } from "@/types/inmuebles";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
+import type { FiltrosInmueble } from "@/types/filtros";
+
 interface Props {
   inmueble: InmuebleDTO;
+  filtrosAplicados?: FiltrosInmueble; // 👈 se agregan los filtros aquí
 }
 
-export default function InmuebleCard({ inmueble }: Props) {
-  // 🩵 Ordenar imágenes: principal primero
+export default function InmuebleCard({ inmueble, filtrosAplicados }: Props) {
+  // Ordenar imágenes: principal primero
   const orderedImages = useMemo(() => {
     if (!inmueble.imagenes?.length) return [];
     return [...inmueble.imagenes].sort((a, b) =>
@@ -21,14 +24,10 @@ export default function InmuebleCard({ inmueble }: Props) {
   const images = orderedImages.map((img) => img.url);
 
   const handlePrevImage = () =>
-    setCurrentImageIndex((prev) =>
-      prev > 0 ? prev - 1 : images.length - 1
-    );
+    setCurrentImageIndex((prev) => (prev > 0 ? prev - 1 : images.length - 1));
 
   const handleNextImage = () =>
-    setCurrentImageIndex((prev) =>
-      prev < images.length - 1 ? prev + 1 : 0
-    );
+    setCurrentImageIndex((prev) => (prev < images.length - 1 ? prev + 1 : 0));
 
   const direccion = inmueble.ubicacion?.direccion ?? "Desconocida";
   const barrio = inmueble.ubicacion?.barrio?.nombre ?? "Desconocido";
@@ -37,6 +36,7 @@ export default function InmuebleCard({ inmueble }: Props) {
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-8 bg-gray-100 p-6 rounded-xl shadow-md">
+
       {/* 🖼 Galería */}
       <div className="relative w-full md:col-span-2 h-80 md:h-96 rounded-md overflow-hidden">
         <Image
@@ -50,20 +50,19 @@ export default function InmuebleCard({ inmueble }: Props) {
           <>
             <button
               onClick={handlePrevImage}
-              className="absolute left-2 top-1/2 transform -translate-y-1/2 bg-white shadow-md rounded-full p-2 hover:bg-blue-500 hover:text-white transition-colors duration-200"
+              className="absolute left-2 top-1/2 -translate-y-1/2 bg-white shadow-md rounded-full p-2 hover:bg-blue-500 hover:text-white transition"
             >
               <ChevronLeft className="w-6 h-6" />
             </button>
 
             <button
               onClick={handleNextImage}
-              className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-white shadow-md rounded-full p-2 hover:bg-blue-500 hover:text-white transition-colors duration-200"
+              className="absolute right-2 top-1/2 -translate-y-1/2 bg-white shadow-md rounded-full p-2 hover:bg-blue-500 hover:text-white transition"
             >
               <ChevronRight className="w-6 h-6" />
             </button>
 
-            {/* Indicadores */}
-            <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 flex space-x-2">
+            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex space-x-2">
               {images.map((_, index) => (
                 <span
                   key={index}
@@ -79,11 +78,10 @@ export default function InmuebleCard({ inmueble }: Props) {
 
       {/* 📄 Detalles */}
       <div className="bg-white p-4 rounded-md flex flex-col justify-between">
+
         <div>
-          {/* 🔹 Título siempre visible */}
           <h2 className="text-2xl font-semibold mb-2">{inmueble.titulo}</h2>
 
-          {/* 🔹 Descripción solo si existe y no está vacía */}
           {inmueble.detalles && inmueble.detalles.trim() !== "" && (
             <p className="text-gray-700 mb-2">{inmueble.detalles}</p>
           )}
@@ -111,6 +109,28 @@ export default function InmuebleCard({ inmueble }: Props) {
           <p className="text-gray-700 mt-1 font-semibold">
             Precio: ${inmueble.precio?.toLocaleString() || "N/A"}
           </p>
+
+          {/* 🔵 Filtros aplicados */}
+          {filtrosAplicados && (
+            <div className="mt-4">
+              <h4 className="font-semibold text-gray-800 text-lg mb-2">
+                Filtros aplicados
+              </h4>
+
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(filtrosAplicados).map(([key, value]) =>
+                  value ? (
+                    <span
+                      key={key}
+                      className="bg-blue-100 text-blue-600 px-3 py-1 rounded-full text-sm font-medium"
+                    >
+                      {key}: {value}
+                    </span>
+                  ) : null
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Contacto */}
@@ -131,6 +151,7 @@ export default function InmuebleCard({ inmueble }: Props) {
             </a>
           </p>
         </div>
+
       </div>
     </div>
   );

@@ -14,6 +14,7 @@ const publicRoutes = [
     "/forgot-password",
     "/api/auth/reset-password",
     "/reset-password",
+    "/propiedades",
     
     
 

@@ -48,6 +48,15 @@ model User {
   createdContracts Contrato[]  @relation("CreatedContracts")
   updatedContracts Contrato[]  @relation("UpdatedContracts")
   createdTemplates Template[]  @relation("CreatedTemplates")
+  createdInmuebles   Inmueble[]  @relation("CreatedInmuebles")
+  updatedInmuebles   Inmueble[]  @relation("UpdatedInmuebles")
+
+  createdRendiciones Rendicion[] @relation("CreatedInmuebles")
+  updatedRendiciones Rendicion[] @relation("UpdatedInmuebles")
+
+  createdCobranzas   Cobranza[]  @relation("CreatedInmuebles")
+  updatedCobranzas   Cobranza[]  @relation("UpdatedInmuebles")
+
 }
 
 model Account {
@@ -182,6 +191,14 @@ model Inmueble {
   pagos                Pago[]
   historial            Historial[]       @relation("HistorialInmueble")
   imagenes             InmuebleImagen[]
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  createdById    String?
+  createdBy      User?    @relation("CreatedInmuebles", fields: [createdById], references: [id], onDelete: SetNull)
+
+  updatedById    String?
+  updatedBy      User?    @relation("UpdatedInmuebles", fields: [updatedById], references: [id], onDelete: SetNull)
 }
 
 model InmuebleImagen {
@@ -245,6 +262,14 @@ model Rendicion {
   cobranzas    Cobranza[] @relation("RendicionCobranza")
   mes_ipc      Int?
   anio_ipc     Int?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  createdById    String?
+  createdBy      User?    @relation("CreatedInmuebles", fields: [createdById], references: [id], onDelete: SetNull)
+
+  updatedById    String?
+  updatedBy      User?    @relation("UpdatedInmuebles", fields: [updatedById], references: [id], onDelete: SetNull)
 }
 
 //
@@ -269,10 +294,14 @@ model Cobranza {
   id_rendicion    Int?
   rendicion       Rendicion?  @relation("RendicionCobranza", fields: [id_rendicion], references: [id_rendicion], onDelete: SetNull, onUpdate: Cascade)
   recibo          Recibo?
-  creadoPor       String?     @db.VarChar(100)
-  modificadoPor   String?     @db.VarChar(100)
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @default(now()) @updatedAt
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  createdById    String?
+  createdBy      User?    @relation("CreatedInmuebles", fields: [createdById], references: [id], onDelete: SetNull)
+
+  updatedById    String?
+  updatedBy      User?    @relation("UpdatedInmuebles", fields: [updatedById], references: [id], onDelete: SetNull)
 
   @@index([id_inmueble])
   @@index([id_cliente])
