@@ -1,7 +1,7 @@
 //src/app/(protected)/propiedades/page.tsx
 'use client';
 import { useEffect, useState } from 'react';
-import { Home, PlusCircle, AlertCircle } from 'lucide-react';
+import { Home, PlusCircle, AlertCircle, User, Calendar } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Header from '@/components/ui/Header';
 import InmuebleCard from '@/components/InmuebleCard';
@@ -247,6 +247,48 @@ const inmueblesFiltrados = inmuebles.filter((i) => {
 
                     <InmuebleCard inmueble={i} />
 
+                    {/* ← Info básica de creación/modificación (como en contratos) */}
+                    <div className="pt-4 border-t border-gray-100 mt-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                          <User className="w-3.5 h-3.5" />
+                          <span className="font-medium">Creado por:</span>
+                          <span className="font-bold text-gray-700">{i.createdBy?.nombre || 'N/A'}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                          <Calendar className="w-3.5 h-3.5" />
+                          <span className="font-medium">Creado:</span>
+                          <span className="font-bold text-gray-700">
+                            {i.createdAt ? new Date(i.createdAt).toLocaleDateString('es-ES', {
+                              day: '2-digit',
+                              month: 'short',
+                              year: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            }).replace(',', ' •') : 'N/A'}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                          <User className="w-3.5 h-3.5" />
+                          <span className="font-medium">Actualizado por:</span>
+                          <span className="font-bold text-gray-700">{i.updatedBy?.nombre || 'N/A'}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                          <Calendar className="w-3.5 h-3.5" />
+                          <span className="font-medium">Actualizado:</span>
+                          <span className="font-bold text-gray-700">
+                            {i.updatedAt ? new Date(i.updatedAt).toLocaleDateString('es-ES', {
+                              day: '2-digit',
+                              month: 'short',
+                              year: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            }).replace(',', ' •') : 'N/A'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
                     <div className="mt-4 flex gap-3">
                       {/* ARCHIVAR → cuando NO está archivado */}
                       <button
@@ -347,6 +389,48 @@ const inmueblesFiltrados = inmuebles.filter((i) => {
                     </div>
 
                     <InmuebleCard inmueble={i} />
+
+                    {/* ← Info básica de creación/modificación (igual para archivados) */}
+                    <div className="pt-4 border-t border-gray-100 mt-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                          <User className="w-3.5 h-3.5" />
+                          <span className="font-medium">Creado por:</span>
+                          <span className="font-bold text-gray-700">{i.createdBy?.nombre || 'N/A'}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                          <Calendar className="w-3.5 h-3.5" />
+                          <span className="font-medium">Creado:</span>
+                          <span className="font-bold text-gray-700">
+                            {i.createdAt ? new Date(i.createdAt).toLocaleDateString('es-ES', {
+                              day: '2-digit',
+                              month: 'short',
+                              year: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            }).replace(',', ' •') : 'N/A'}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                          <User className="w-3.5 h-3.5" />
+                          <span className="font-medium">Actualizado por:</span>
+                          <span className="font-bold text-gray-700">{i.updatedBy?.nombre || 'N/A'}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                          <Calendar className="w-3.5 h-3.5" />
+                          <span className="font-medium">Actualizado:</span>
+                          <span className="font-bold text-gray-700">
+                            {i.updatedAt ? new Date(i.updatedAt).toLocaleDateString('es-ES', {
+                              day: '2-digit',
+                              month: 'short',
+                              year: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            }).replace(',', ' •') : 'N/A'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
 
                     <div className="mt-4 flex gap-3">
                       {/* ACTIVAR → cuando SÍ está archivado */}

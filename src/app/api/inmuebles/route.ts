@@ -1,8 +1,9 @@
-// src/app/api/inmuebles/route.ts
 /* eslint-disable @typescript-eslint/no-explicit-any */
+// src/app/api/inmuebles/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { Prisma } from "@/generated/prisma"; // ← IMPORT CORRECTO
+import { Prisma } from "@/generated/prisma";
+import { auth } from '../../../../auth';
 
 const toNumberOrUndefined = (v: any): number | undefined =>
   v !== undefined && v !== null && v !== "" ? Number(v) : undefined;
@@ -15,19 +16,25 @@ export async function GET(req: NextRequest) {
 
   try {
     const { searchParams } = new URL(req.url);
-    const where: any = { archivado: false };
+    const where: any = {};
 
-    const tipo = searchParams.get("tipo");
-    const estado = searchParams.get("estado");
+    const tipo = searchParams.get("tipoId");
+    const estado = searchParams.get("estadoId");
+    const operacion = searchParams.get("operacionId");
     const precioMin = searchParams.get("precioMin");
     const precioMax = searchParams.get("precioMax");
 
-    console.log("🔎 Parámetros:", { tipo, estado, precioMin, precioMax });
+    console.log("🔎 Parámetros:", { tipo, estado, operacion, precioMin, precioMax });
 
     if (tipo) where.id_tipo_inmueble = Number(tipo);
     if (estado) where.id_estado = Number(estado);
-    if (precioMin) where.precio = { gte: Number(precioMin) };
-    if (precioMax) where.precio = { ...(where.precio || {}), lte: Number(precioMax) };
+    if (operacion) where.id_operacion = Number(operacion);
+
+    if (precioMin || precioMax) {
+      where.precio = {};
+      if (precioMin) where.precio.gte = toDecimalOrUndefined(precioMin);
+      if (precioMax) where.precio.lte = toDecimalOrUndefined(precioMax);
+    }
 
     console.log("🧩 WHERE generado:", where);
 
@@ -40,13 +47,37 @@ export async function GET(req: NextRequest) {
         cliente: true,
         ubicacion: { include: { barrio: { include: { localidad: true } } } },
         imagenes: true,
+        createdBy: { select: { id: true, name: true, email: true } },
+        updatedBy: { select: { id: true, name: true, email: true } },
       },
       orderBy: { id_inmueble: "desc" },
     });
 
-    console.log("✅ Inmuebles encontrados:", inmuebles.length);
+    // DEBUG: Log para verificar relaciones (remover en prod)
+    if (inmuebles.length > 0) {
+      console.log("🔍 Ejemplo createdBy:", inmuebles[0].createdBy);
+      console.log("🔍 Ejemplo updatedBy:", inmuebles[0].updatedBy);
+    }
 
-    return NextResponse.json(inmuebles);
+    const formattedInmuebles = inmuebles.map((inmueble) => ({
+      ...inmueble,
+      createdBy: inmueble.createdBy
+        ? {
+            id_usuario: inmueble.createdBy.id,
+            nombre: inmueble.createdBy.name || inmueble.createdBy.email || 'Usuario desconocido',
+          }
+        : null,
+      updatedBy: inmueble.updatedBy
+        ? {
+            id_usuario: inmueble.updatedBy.id,
+            nombre: inmueble.updatedBy.name || inmueble.updatedBy.email || 'Usuario desconocido',
+          }
+        : null,
+    }));
+
+    console.log("✅ Inmuebles encontrados:", formattedInmuebles.length);
+
+    return NextResponse.json(formattedInmuebles);
   } catch (error: any) {
     console.error("❌ Error GET /api/inmuebles:", error);
     console.error("➡️ Código Prisma:", error.code);
@@ -56,7 +87,18 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  console.log("📥 POST /api/inmuebles llamado");
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+  }
+
+  // FIX: Convertir ID a número
+  const userId = Number(session.user.id);
+  if (isNaN(userId)) {
+    return NextResponse.json({ error: 'ID de usuario inválido' }, { status: 400 });
+  }
+
+  console.log("📥 POST /api/inmuebles llamado por usuario ID:", userId);
 
   try {
     const body = await req.json();
@@ -132,6 +174,8 @@ export async function POST(req: NextRequest) {
         precio: toDecimalOrUndefined(body.precio),
         detalles: body.detalles ?? null,
         archivado: false,
+        createdById: userId,  // FIX: Usar número
+        updatedById: userId,  // FIX: Usar número
         tipo_inmueble: body.id_tipo_inmueble
           ? { connect: { id_tipo_inmueble: Number(body.id_tipo_inmueble) } }
           : undefined,
@@ -177,10 +221,28 @@ export async function POST(req: NextRequest) {
         operacion: true,
         ubicacion: { include: { barrio: { include: { localidad: true } } } },
         imagenes: true,
+        createdBy: { select: { id: true, name: true, email: true } },
+        updatedBy: { select: { id: true, name: true, email: true } },
       },
     });
 
-    return NextResponse.json(creado, { status: 201 });
+    const formattedCreado = {
+      ...creado,
+      createdBy: creado?.createdBy
+        ? {
+            id_usuario: creado.createdBy.id,
+            nombre: creado.createdBy.name || creado.createdBy.email || 'Usuario desconocido',
+          }
+        : null,
+      updatedBy: creado?.updatedBy
+        ? {
+            id_usuario: creado.updatedBy.id,
+            nombre: creado.updatedBy.name || creado.updatedBy.email || 'Usuario desconocido',
+          }
+        : null,
+    };
+
+    return NextResponse.json(formattedCreado, { status: 201 });
   } catch (error: any) {
     console.error("❌ Error POST /api/inmuebles:", error);
     return NextResponse.json({ error: error.message || "Error al crear inmueble" }, { status: 500 });
