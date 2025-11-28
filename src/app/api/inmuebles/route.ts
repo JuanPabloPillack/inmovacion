@@ -5,12 +5,25 @@ import { db } from "@/lib/db";
 import { Prisma } from "@/generated/prisma";
 import { auth } from "../../../../auth";
 
+/* -------------------------------------------------------------
+   Helpers
+---------------------------------------------------------------- */
 const toNumberOrUndefined = (v: any): number | undefined =>
-  v !== undefined && v !== null && v !== "" ? Number(v) : undefined;
+  v !== undefined && v !== null && v !== "" && !isNaN(Number(v))
+    ? Number(v)
+    : undefined;
 
 const toDecimalOrUndefined = (v: any): Prisma.Decimal | undefined =>
-  v !== undefined && v !== null && v !== "" ? new Prisma.Decimal(Number(v)) : undefined;
+  v !== undefined &&
+  v !== null &&
+  v !== "" &&
+  !isNaN(Number(v))
+    ? new Prisma.Decimal(Number(v))
+    : undefined;
 
+/* =============================================================
+   🚀 GET /api/inmuebles
+=============================================================== */
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
@@ -50,21 +63,20 @@ export async function GET(req: NextRequest) {
     const formattedInmuebles = inmuebles.map((inmueble) => ({
       ...inmueble,
       superficie_total: Number(inmueble.superficie_total),
-      superficie_cubierta: inmueble.superficie_cubierta != null ? Number(inmueble.superficie_cubierta) : null,
+      superficie_cubierta:
+        inmueble.superficie_cubierta != null
+          ? Number(inmueble.superficie_cubierta)
+          : null,
       precio: inmueble.precio != null ? Number(inmueble.precio) : null,
       createdBy: inmueble.createdBy
-        ? { id: inmueble.createdBy.id, name: inmueble.createdBy.name || inmueble.createdBy.email || "Usuario desconocido" }
+        ? { id: inmueble.createdBy.id, name: inmueble.createdBy.name || inmueble.createdBy.email }
         : null,
       updatedBy: inmueble.updatedBy
-        ? { id: inmueble.updatedBy.id, name: inmueble.updatedBy.name || inmueble.updatedBy.email || "Usuario desconocido" }
+        ? { id: inmueble.updatedBy.id, name: inmueble.updatedBy.name || inmueble.updatedBy.email }
         : null,
       createdAt: inmueble.createdAt?.toISOString(),
       updatedAt: inmueble.updatedAt?.toISOString(),
     }));
-
-    // ← AGREGADO: Log para debug (revisa terminal del servidor)
-    console.log('🔍 Backend - Primer inmueble createdBy:', formattedInmuebles[0]?.createdBy);
-    console.log('🔍 Backend - Primer inmueble updatedBy:', formattedInmuebles[0]?.updatedBy);
 
     return NextResponse.json(formattedInmuebles);
   } catch (error: any) {
@@ -73,33 +85,46 @@ export async function GET(req: NextRequest) {
   }
 }
 
+/* =============================================================
+   🚀 POST /api/inmuebles (mejorado, con validación de usuario)
+=============================================================== */
 export async function POST(req: NextRequest) {
   const session = await auth();
+
   if (!session?.user?.id) {
     return NextResponse.json({ error: "No autenticado" }, { status: 401 });
   }
 
   const userId = session.user.id;
 
-  // ← AGREGADO: Log para debug
-  console.log('🆕 Backend POST - Session userId:', userId);
-  if (!userId) {
-    console.error('❌ No userId en session');
-    return NextResponse.json({ error: "User ID no disponible en sesión" }, { status: 401 });
-  }
-
   try {
+    // ✅ Validar que el usuario exista en la DB
+    let user = await db.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      // En desarrollo podemos crear un usuario por defecto
+      user = await db.user.create({
+        data: {
+          id: userId,
+          name: session.user.name ?? "Usuario Dev",
+          email: session.user.email ?? `dev_${userId}@example.com`,
+        },
+      });
+    }
+
     const body = await req.json();
 
+    /* -------------------- Validaciones -------------------- */
     const clienteId =
-      body.id_cliente || (body.cliente && typeof body.cliente === "object" ? body.cliente.id : null);
+      body.id_cliente ||
+      (body.cliente && typeof body.cliente === "object" ? body.cliente.id : null);
 
     if (!clienteId) return NextResponse.json({ error: "Debe seleccionar un propietario" }, { status: 400 });
     if (!body.id_tipo_inmueble) return NextResponse.json({ error: "Debe seleccionar un tipo de inmueble" }, { status: 400 });
     if (!body.id_estado) return NextResponse.json({ error: "Debe seleccionar un estado" }, { status: 400 });
 
-    // === Crear o recuperar Barrio ===
+    /* -------------------- Crear o Buscar Barrio -------------------- */
     let idBarrio: number;
+
     if (body.id_barrio) {
       idBarrio = Number(body.id_barrio);
     } else if (body.barrio) {
@@ -107,6 +132,7 @@ export async function POST(req: NextRequest) {
 
       if (!barrioDb) {
         let localidadId = body.localidadId;
+
         if (!localidadId) {
           const defaultLocalidad = await db.localidad.findFirst();
           if (!defaultLocalidad) {
@@ -116,14 +142,16 @@ export async function POST(req: NextRequest) {
             localidadId = defaultLocalidad.id_localidad;
           }
         }
+
         barrioDb = await db.barrio.create({ data: { nombre: body.barrio, id_localidad: Number(localidadId) } });
       }
+
       idBarrio = barrioDb.id_barrio;
     } else {
       return NextResponse.json({ error: "Debe seleccionar o escribir un barrio" }, { status: 400 });
     }
 
-    // === Crear Ubicacion ===
+    /* -------------------- Crear Ubicación -------------------- */
     const ubicacion = await db.ubicacion.create({
       data: {
         direccion: body.direccion ?? null,
@@ -133,19 +161,26 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // === Crear Inmueble ===
+    /* -------------------- Validaciones de campos numéricos -------------------- */
+    const superficie_total = toDecimalOrUndefined(body.superficie_total);
+    if (!superficie_total) return NextResponse.json({ error: "Superficie total inválida" }, { status: 400 });
+
+    const superficie_cubierta = toDecimalOrUndefined(body.superficie_cubierta);
+    const precio = toDecimalOrUndefined(body.precio);
+
+    /* -------------------- Crear Inmueble -------------------- */
     const inmueble = await db.inmueble.create({
       data: {
         titulo: body.titulo,
-        superficie_total: new Prisma.Decimal(body.superficie_total),
-        superficie_cubierta: body.superficie_cubierta != null ? new Prisma.Decimal(body.superficie_cubierta) : null,
+        superficie_total,
+        superficie_cubierta: superficie_cubierta ?? null,
         cantidad_ambientes: toNumberOrUndefined(body.cantidad_ambientes),
         cantidad_banos: toNumberOrUndefined(body.cantidad_banos),
         cantidad_dormitorios: toNumberOrUndefined(body.cantidad_dormitorios),
         cantidad_cocheras: toNumberOrUndefined(body.cantidad_cocheras),
         cantidad_pisos: toNumberOrUndefined(body.cantidad_pisos),
         antiguedad: toNumberOrUndefined(body.antiguedad),
-        precio: body.precio != null ? new Prisma.Decimal(body.precio) : null,
+        precio: precio ?? null,
         detalles: body.detalles ?? null,
         archivado: false,
         createdById: userId,
@@ -159,21 +194,21 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // ← AGREGADO: Log después de create para verificar IDs en DB
-    console.log('🆕 Backend POST - Inmueble creado ID:', inmueble.id_inmueble);
-    console.log('🆕 Backend POST - createdById guardado:', inmueble.createdById);
-    console.log('🆕 Backend POST - updatedById guardado:', inmueble.updatedById);
-
+    /* -------------------- Crear imágenes (si existen) -------------------- */
     if (Array.isArray(body.imagenes) && body.imagenes.length > 0) {
-      await db.inmuebleImagen.createMany({
-        data: body.imagenes.map((img: any) => ({
-          url: img.url,
-          inmuebleId: inmueble.id_inmueble,
-          principal: Boolean(img.principal),
-        })),
-      });
+      const imagenesValidas = body.imagenes.filter((img: any) => img.url);
+      if (imagenesValidas.length > 0) {
+        await db.inmuebleImagen.createMany({
+          data: imagenesValidas.map((img: any) => ({
+            url: img.url,
+            inmuebleId: inmueble.id_inmueble,
+            principal: Boolean(img.principal),
+          })),
+        });
+      }
     }
 
+    /* -------------------- Recuperar inmueble completo -------------------- */
     const creado = await db.inmueble.findUnique({
       where: { id_inmueble: inmueble.id_inmueble },
       include: {
@@ -188,28 +223,26 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    if (!creado) throw new Error("Error al recuperar el inmueble creado");
+
     const formattedCreado = {
       ...creado,
-      superficie_total: Number(creado?.superficie_total),
-      superficie_cubierta: creado?.superficie_cubierta != null ? Number(creado.superficie_cubierta) : null,
-      precio: creado?.precio != null ? Number(creado.precio) : null,
-      createdBy: creado?.createdBy
+      superficie_total: Number(creado.superficie_total),
+      superficie_cubierta: creado.superficie_cubierta ? Number(creado.superficie_cubierta) : null,
+      precio: creado.precio ? Number(creado.precio) : null,
+      createdBy: creado.createdBy
         ? { id: creado.createdBy.id, name: creado.createdBy.name || creado.createdBy.email || "Usuario desconocido" }
         : null,
-      updatedBy: creado?.updatedBy
+      updatedBy: creado.updatedBy
         ? { id: creado.updatedBy.id, name: creado.updatedBy.name || creado.updatedBy.email || "Usuario desconocido" }
         : null,
-      createdAt: creado?.createdAt?.toISOString(),
-      updatedAt: creado?.updatedAt?.toISOString(),
+      createdAt: creado.createdAt?.toISOString(),
+      updatedAt: creado.updatedAt?.toISOString(),
     };
-
-    // ← AGREGADO: Log para debug
-    console.log('🆕 Backend POST - formatted createdBy:', formattedCreado.createdBy);
-    console.log('🆕 Backend POST - formatted updatedBy:', formattedCreado.updatedBy);
 
     return NextResponse.json(formattedCreado, { status: 201 });
   } catch (error: any) {
-    console.error("❌ Error POST /api/inmuebles:", error);
+    console.error("❌ Error POST /api/inmuebles:", JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
     return NextResponse.json({ error: error.message || "Error al crear inmueble" }, { status: 500 });
   }
 }

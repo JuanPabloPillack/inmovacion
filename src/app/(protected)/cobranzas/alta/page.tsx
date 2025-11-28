@@ -1,11 +1,15 @@
 // src/app/(protected)/cobranzas/alta/page.tsx
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
+
 import { useState, useEffect } from 'react';
 import { Save, AlertCircle, FileCheck2, Plus, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Header from '@/components/ui/Header';
 
+// ----------------------------------------------------------
+// Tipos para tipar la respuesta de APIs
+// ----------------------------------------------------------
 interface Cliente {
   id_cliente: number;
   nombre: string;
@@ -23,15 +27,28 @@ interface Contrato {
 export default function NuevaCobranzaPage() {
   const router = useRouter();
 
+  // =========================================
+  //  ESTADOS PRINCIPALES
+  // =========================================
+
+  // Lista de clientes cargados desde la API
   const [clientes, setClientes] = useState<Cliente[]>([]);
+
+  // Lista de contratos filtrados por cliente
   const [contratos, setContratos] = useState<Contrato[]>([]);
+
+  // Cliente seleccionado en el formulario
   const [selectedCliente, setSelectedCliente] = useState<number | ''>('');
+
+  // Tipo de cliente (propietario, inquilino, otro)
   const [tipoCliente, setTipoCliente] = useState('');
 
+  // Fecha por defecto → día 9 del mes siguiente
   const hoy = new Date();
   const siguienteMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 9);
   const fechaDefault = siguienteMes.toISOString().split('T')[0];
 
+  // Lista dinámica de cobranzas (permite agregar varias)
   const [cobranzas, setCobranzas] = useState([
     {
       id_contrato: '',
@@ -43,29 +60,33 @@ export default function NuevaCobranzaPage() {
     },
   ]);
 
+  // Mensajes de la UI
   const [error, setError] = useState<string | null>(null);
   const [mensaje, setMensaje] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // ============================
-  //     CARGA DE CLIENTES
-  // ============================
+  // ==========================================================
+  //     CARGAR CLIENTES AL MONTAR LA PÁGINA
+  // ==========================================================
   useEffect(() => {
     const fetchClientes = async () => {
       try {
-        const res = await fetch('/api/clientes');
+        const res = await fetch('/api/clientes'); // Llamada al backend
         const data = await res.json();
+
+        // La API a veces responde { clientes: [...] } o directamente []
         setClientes(Array.isArray(data) ? data : data.clientes || []);
       } catch {
         setError('Error al cargar los clientes.');
       }
     };
+
     fetchClientes();
   }, []);
 
-  // ============================
-  //   CARGA DE CONTRATOS
-  // ============================
+  // ==========================================================
+  //   CARGAR CONTRATOS CUANDO EL USUARIO CAMBIA EL CLIENTE
+  // ==========================================================
   useEffect(() => {
     if (!selectedCliente) {
       setContratos([]);
@@ -76,6 +97,7 @@ export default function NuevaCobranzaPage() {
       try {
         const res = await fetch(`/api/contracts?id_cliente=${selectedCliente}`);
         const data = await res.json();
+
         setContratos(Array.isArray(data) ? data : data.contratos || []);
       } catch {
         setError('Error al cargar contratos del cliente.');
@@ -86,23 +108,26 @@ export default function NuevaCobranzaPage() {
     fetchContratos();
   }, [selectedCliente]);
 
-  // ============================
-  //   TIPO CLIENTE
-  // ============================
+  // ==========================================================
+  //   ACTUALIZA TIPO DE CLIENTE AUTOMÁTICAMENTE
+  // ==========================================================
   useEffect(() => {
     const cliente = clientes.find(c => c.id_cliente === selectedCliente);
     setTipoCliente(cliente?.tipo_cliente || '');
   }, [selectedCliente, clientes]);
 
-  // ============================
-  //   HANDLERS
-  // ============================
+  // ==========================================================
+  //   HANDLERS PARA CONTROLAR EL FORM
+  // ==========================================================
+
+  // Actualiza un campo de una cobranza concreta
   const handleCobranzaChange = (index: number, field: string, value: any) => {
     const updated = [...cobranzas];
     (updated as any)[index][field] = value;
     setCobranzas(updated);
   };
 
+  // Agregar una nueva fila de cobranza
   const agregarCobranza = () => {
     setCobranzas([
       ...cobranzas,
@@ -117,54 +142,51 @@ export default function NuevaCobranzaPage() {
     ]);
   };
 
+  // Eliminar una cobranza (si hay más de una)
   const eliminarCobranza = (index: number) => {
     if (cobranzas.length === 1) return;
     setCobranzas(cobranzas.filter((_, i) => i !== index));
   };
 
-  // ============================
-  //   VALIDACIONES COMPLETAS
-  // ============================
+  // ==========================================================
+  //   VALIDACIONES (todas las cobranzas son revisadas)
+  // ==========================================================
   const validar = () => {
     if (!selectedCliente) return 'Debes seleccionar un cliente.';
 
-    const hoyISO = new Date().toISOString().split("T")[0];
+    // Fechas límites
+    const hoyISO = new Date().toISOString().split('T')[0];
     const maxFecha = new Date();
     maxFecha.setFullYear(maxFecha.getFullYear() + 2);
-    const maxFechaISO = maxFecha.toISOString().split("T")[0];
+    const maxFechaISO = maxFecha.toISOString().split('T')[0];
 
+    // Validamos una por una
     for (const c of cobranzas) {
-      // Contrato
       if (!c.id_contrato) return 'Debes seleccionar un contrato.';
 
-      // Monto
       if (!c.monto) return 'El monto es obligatorio.';
       if (isNaN(Number(c.monto))) return 'El monto debe ser numérico.';
       if (Number(c.monto) <= 0) return 'El monto debe ser mayor a 0.';
       if (Number(c.monto) > 99999999) return 'El monto es demasiado grande.';
 
-      // Fecha
       if (!c.fecha_cobranza) return 'Debes ingresar una fecha.';
       if (c.fecha_cobranza < hoyISO)
         return 'La fecha no puede ser anterior a hoy.';
       if (c.fecha_cobranza > maxFechaISO)
         return 'La fecha no puede ser mayor a 2 años.';
 
-      // Medio de pago
       if (!c.medio_pago.trim()) return 'El medio de pago es obligatorio.';
       if (c.medio_pago.length < 3)
         return 'El medio de pago debe tener al menos 3 caracteres.';
       if (!/^[a-zA-Z0-9 áéíóúÁÉÍÓÚ.-]+$/.test(c.medio_pago))
         return 'El medio de pago contiene caracteres no válidos.';
 
-      // Concepto
       if (!c.concepto.trim()) return 'El concepto es obligatorio.';
       if (c.concepto.length < 3)
         return 'El concepto debe tener al menos 3 caracteres.';
       if (!/^[a-zA-Z0-9 áéíóúÁÉÍÓÚ.-]+$/.test(c.concepto))
         return 'El concepto contiene caracteres no válidos.';
 
-      // Observaciones
       if (c.observaciones && c.observaciones.length > 300)
         return 'Las observaciones no pueden superar los 300 caracteres.';
     }
@@ -172,20 +194,23 @@ export default function NuevaCobranzaPage() {
     return null;
   };
 
-  // ============================
-  //   SUBMIT
-  // ============================
+  // ==========================================================
+  //   SUBMIT DEL FORMULARIO (envía todas las cobranzas juntas)
+  // ==========================================================
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
     setError(null);
     setMensaje(null);
 
+    // 1) Validar antes de enviar
     const err = validar();
     if (err) return setError(err);
 
     try {
       setLoading(true);
 
+      // 2) Enviar todo al backend
       const res = await fetch('/api/cobranzas', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -198,8 +223,10 @@ export default function NuevaCobranzaPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
 
+      // 3) Mensaje de éxito
       setMensaje('Cobranzas registradas correctamente.');
 
+      // 4) Reset del formulario
       setSelectedCliente('');
       setTipoCliente('');
       setContratos([]);
@@ -214,6 +241,7 @@ export default function NuevaCobranzaPage() {
         },
       ]);
 
+      // 5) Refrescar pantallas y redirigir
       router.refresh();
       router.push('/cobranzas');
 

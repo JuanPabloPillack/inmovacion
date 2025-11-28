@@ -2,15 +2,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 
+/* =============================================================
+   ================   MÉTODO GET – LISTAR COBRANZAS   ===========
+   ============================================================= */
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
 
+    // Parámetros de paginación (por defecto page=1, pageSize=10)
     const page = Number(searchParams.get("page") || 1);
     const pageSize = Number(searchParams.get("pageSize") || 10);
 
-    // Normalizador
-    const normalize = (v: string | null) => v && v.trim() !== "" ? v : null;
+    // Normaliza valores: si viene "" o null → lo convierte en null real
+    const normalize = (v: string | null) =>
+      v && v.trim() !== "" ? v : null;
 
     const anio = normalize(searchParams.get("anio"));
     const mes = normalize(searchParams.get("mes"));
@@ -19,15 +24,15 @@ export async function GET(req: NextRequest) {
     const id_cliente_raw = normalize(searchParams.get("cliente"));
     const id_cliente = id_cliente_raw !== null ? Number(id_cliente_raw) : null;
 
-    // si ?sinRendir=1 → buscar solo cobranzas sin rendir
+    // Filtro: sinRendir=1 → buscar solo cobranzas que NO estén ligadas a una rendición
     const sinRendir = searchParams.get("sinRendir") === "1";
 
     const skip = (page - 1) * pageSize;
     const take = pageSize;
 
-    // -----------------------------------------
-    // ARMAR FILTRO WHERE
-    // -----------------------------------------
+    /* ---------------------------------------------------------
+       Construcción del filtro dinámico "where" para Prisma
+       --------------------------------------------------------- */
     const where: any = {};
 
     if (id_cliente !== null) {
@@ -38,21 +43,21 @@ export async function GET(req: NextRequest) {
       where.id_rendicion = null;
     }
 
-    // FILTRO DE FECHA: mes y año independientes
+    // --- FILTROS POR FECHA (MES y AÑO) ---
     if (anio && mes) {
-      // Filtrar mes del año seleccionado
+      // Caso: año + mes → filtro por mes específico del año
       where.fecha_cobranza = {
         gte: new Date(Number(anio), Number(mes) - 1, 1),
         lte: new Date(Number(anio), Number(mes), 0, 23, 59, 59),
       };
     } else if (anio && !mes) {
-      // Filtrar todo el año
+      // Solo año → 1 de enero a 31 de diciembre
       where.fecha_cobranza = {
         gte: new Date(Number(anio), 0, 1),
         lte: new Date(Number(anio), 11, 31, 23, 59, 59),
       };
     } else if (!anio && mes) {
-      // Filtrar solo mes del año actual
+      // Solo mes → del mes del año actual
       const currentYear = new Date().getFullYear();
       where.fecha_cobranza = {
         gte: new Date(currentYear, Number(mes) - 1, 1),
@@ -60,25 +65,26 @@ export async function GET(req: NextRequest) {
       };
     }
 
-    // -----------------------------------------
-    // CONSULTA A DB
-    // -----------------------------------------
+    /* ---------------------------------------------------------
+       CONSULTA PRINCIPAL A LA BASE DE DATOS
+       --------------------------------------------------------- */
     const cobranzas = await db.cobranza.findMany({
       skip,
       take,
       where,
       include: {
-        cliente: true,
-        inmueble: { include: { ubicacion: true } },
+        cliente: true, // trae datos del cliente
+        inmueble: { include: { ubicacion: true } }, // trae inmueble + dirección
       },
-      orderBy: { fecha_cobranza: "desc" },
+      orderBy: { fecha_cobranza: "desc" }, // últimas primero
     });
 
+    // Total de resultados para paginación
     const total = await db.cobranza.count({ where });
 
-    // -----------------------------------------
-    // MAPEO DE NOMBRE DEL INMUEBLE
-    // -----------------------------------------
+    /* ---------------------------------------------------------
+       MAPEO FINAL: nombre amigable del inmueble
+       --------------------------------------------------------- */
     const mapped = cobranzas.map((c) => ({
       ...c,
       inmueble: c.inmueble
@@ -107,11 +113,17 @@ export async function GET(req: NextRequest) {
 }
 
 
+
+/* =============================================================
+   =============   MÉTODO POST – CREAR COBRANZAS   =============
+   ============================================================= */
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
+
     const { id_cliente, cobranzas } = body;
 
+    // Validaciones mínimas
     if (!id_cliente || !Array.isArray(cobranzas) || cobranzas.length === 0) {
       return NextResponse.json(
         { error: "Datos incompletos." },
@@ -119,23 +131,24 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // --- Función robusta para parsear una fecha ---
+    /* ---------------------------------------------------------
+       Función robusta para parsear fechas de distintos formatos
+       --------------------------------------------------------- */
     const parseFecha = (f: any): Date => {
-      if (!f) return new Date();
+      if (!f) return new Date(); // fallback: hoy
 
-      // Si ya es Date válida → OK
+      // Si ya es Date válida
       if (f instanceof Date && !isNaN(f.getTime())) return f;
 
-      // Si llega como string
       if (typeof f === "string") {
-        // Normalizo: YYYY-MM-DD
+        // Reemplaza "/" por "-" → normaliza strings
         const normalizada = f.replace(/\//g, "-");
 
-        // Intento YYYY-MM-DD
+        // Prueba YYYY-MM-DD
         const d1 = new Date(normalizada);
         if (!isNaN(d1.getTime())) return d1;
 
-        // Intento DD-MM-YYYY
+        // Prueba DD-MM-YYYY
         const m = normalizada.match(/^(\d{2})-(\d{2})-(\d{4})$/);
         if (m) {
           const [_, dd, mm, yyyy] = m;
@@ -143,16 +156,20 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // Último recurso
+      // Último recurso: intentar new Date(f)
       const fallback = new Date(f);
       if (!isNaN(fallback.getTime())) return fallback;
 
-      // Si es totalmente inválida → hoy
+      // Si todo falla → hoy
       return new Date();
     };
 
+    /* ---------------------------------------------------------
+       Crear todas las cobranzas en paralelo
+       --------------------------------------------------------- */
     const created = await Promise.all(
       cobranzas.map(async (c: any) => {
+        // Buscar el contrato y su inmueble asociado
         const contrato = await db.contrato.findUnique({
           where: { id_contrato: Number(c.id_contrato) },
           include: { inmueble: { include: { ubicacion: true } } },
@@ -160,6 +177,7 @@ export async function POST(req: NextRequest) {
 
         const fecha = parseFecha(c.fecha_cobranza);
 
+        // Crear la cobranza
         return db.cobranza.create({
           data: {
             id_cliente: Number(id_cliente),
@@ -181,8 +199,11 @@ export async function POST(req: NextRequest) {
       })
     );
 
+    /* ---------------------------------------------------------
+       MAPEO FINAL PARA EL FRONTEND
+       --------------------------------------------------------- */
     const mapped = created.map((c) => ({
-      ...c,
+      ...c, //devolviendo todos los datos de la cobranza
       inmueble: c.inmueble
         ? {
             ...c.inmueble,

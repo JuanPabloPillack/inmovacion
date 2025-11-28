@@ -18,7 +18,7 @@ export default function Header() {
 
   const modules: [string, string, any][] = [
     ["Clientes", "/clientes", User],
-    ["Propiedades", "/propiedades/modulo", Home],
+    ["Propiedades", "/propiedades", Home],
     ["Proveedores", "/proveedores", CreditCard],
     ["Pagos", "/pagos", CreditCard],
     ["Rendiciones", "/rendiciones", FileText],

@@ -1,9 +1,16 @@
-// lib/excelGenerator.ts
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import ExcelJS from "exceljs";
 
-// Interfaz ajustada para alinearse mejor con el schema de Prisma
-// Agrega campos directos del modelo Cobranza y derivados de relaciones (Inmueble, Cliente, Rendicion, Ipc)
+/**
+ * ==========================================================
+ *     INTERFAZ CobranzaForExcel
+ * ==========================================================
+ * Representa cada Cobranza ya "preparada" para el Excel.
+ * Este objeto resulta del servicio antes de generar el archivo.
+ *
+ * - Se basa en el modelo Prisma real
+ * - Incluye datos derivados (contratoStr, ipcAumento, unFuncional, etc)
+ */
 export interface CobranzaForExcel {
   id_cobranza: number;
   id_inmueble: number | null;
@@ -11,8 +18,8 @@ export interface CobranzaForExcel {
 
   cliente: {
     nombre: string;
-    email: string | null;      // ← antes era string | undefined
-    telefono: string | null;   // ← antes era string | undefined
+    email: string | null;
+    telefono: string | null;
   };
 
   inmueble?: {
@@ -30,95 +37,149 @@ export interface CobranzaForExcel {
   pagado: boolean;
   observaciones: string | null;
 
+  // Valores calculados en el servicio
   total_cobrar?: number;
   total_cobrado?: number;
   a_cobrar?: number;
 
+  // Derivados
   unFuncional?: string;
   contratoStr?: string;
 
+  // IPC
   ipcAumento?: string;
-  ipcValor?: number | null;   // ← permite null
+  ipcValor?: number | null;
 }
 
-
+/* ==========================================================
+ *   Helper: Convertir número de mes a nombre en español
+ * ========================================================== */
 function getMonthName(monthNum: number): string {
   const months = [
-    'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+    "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+    "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
   ];
-  return months[monthNum - 1] || '';
+  return months[monthNum - 1] || "";
 }
 
+/* ==========================================================
+ *   Helper: Convertir número a palabras en español
+ * ==========================================================
+ * Ej: 154 → "CIENTO CINCUENTA Y CUATRO"
+ */
 function numberToSpanishWords(n: number): string {
-  if (n === 0) return 'CERO';
-  const units = ['', 'UNO', 'DOS', 'TRES', 'CUATRO', 'CINCO', 'SEIS', 'SIETE', 'OCHO', 'NUEVE', 'DIEZ', 'ONCE', 'DOCE', 'TRECE', 'CATORCE', 'QUINCE', 'DIECISÉIS', 'DIECISIETE', 'DIECIOCHO', 'DIECINUEVE'];
-  const tens = ['', '', 'VEINTE', 'TREINTA', 'CUARENTA', 'CINCUENTA', 'SESENTA', 'SETENTA', 'OCHENTA', 'NOVENTA'];
-  const hundreds = ['', 'CIENTO', 'DOSCIENTOS', 'TRESCIENTOS', 'CUATROCIENTOS', 'QUINIENTOS', 'SEISCIENTOS', 'SETECIENTOS', 'OCHOCIENTOS', 'NOVECIENTOS'];
+  if (n === 0) return "CERO";
 
+  const units = [
+    "", "UNO", "DOS", "TRES", "CUATRO", "CINCO",
+    "SEIS", "SIETE", "OCHO", "NUEVE", "DIEZ", "ONCE",
+    "DOCE", "TRECE", "CATORCE", "QUINCE", "DIECISÉIS",
+    "DIECISIETE", "DIECIOCHO", "DIECINUEVE"
+  ];
+
+  const tens = [
+    "", "", "VEINTE", "TREINTA", "CUARENTA",
+    "CINCUENTA", "SESENTA", "SETENTA", "OCHENTA", "NOVENTA"
+  ];
+
+  const hundreds = [
+    "", "CIENTO", "DOSCIENTOS", "TRESCIENTOS", "CUATROCIENTOS",
+    "QUINIENTOS", "SEISCIENTOS", "SETECIENTOS",
+    "OCHOCIENTOS", "NOVECIENTOS"
+  ];
+
+  // Convierte números < 1000
   function convertLessThan1000(x: number): string {
-    if (x === 0) return '';
     if (x < 20) return units[x];
+
     if (x < 100) {
       const t = Math.floor(x / 10);
       const u = x % 10;
-      let res = tens[t];
-      if (u > 0) res += ' Y ' + units[u];
-      return res;
+      return u ? `${tens[t]} Y ${units[u]}` : tens[t];
     }
+
     const h = Math.floor(x / 100);
     const rem = x % 100;
-    let res = hundreds[h];
-    if (rem > 0) {
-      if (h === 1 && rem < 10) {
-        res = 'CIENTO ' + units[rem];
-      } else {
-        res += ' ' + convertLessThan1000(rem);
-      }
-    }
-    return res;
+    if (rem === 0) return hundreds[h];
+    if (h === 1 && rem < 10) return `CIENTO ${units[rem]}`;
+    return `${hundreds[h]} ${convertLessThan1000(rem)}`;
   }
 
-  let res = '';
+  // Miles + resto
   const thousands = Math.floor(n / 1000);
-  if (thousands > 0) {
-    res += convertLessThan1000(thousands) + ' MIL ';
-  }
   const rest = n % 1000;
-  if (rest > 0) {
-    res += convertLessThan1000(rest);
-  }
-  return res.toUpperCase();
+
+  let res = "";
+  if (thousands > 0) res += `${convertLessThan1000(thousands)} MIL `;
+  if (rest > 0) res += convertLessThan1000(rest);
+
+  return res.trim().toUpperCase();
 }
 
-// Función helper para formatear fechas de contrato (no usada por ahora, remover si no se query Contrato)
+/* ==========================================================
+ *   Helper: Generar string del contrato
+ * ========================================================== */
 function formatContratoStr(contrato?: { fecha_inicio: Date; fecha_fin: Date }): string {
-  if (!contrato) return '';
-  const format = (d: Date) => d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' }).replace(/\//g, '-');
-  return `${format(contrato.fecha_inicio)} a ${format(contrato.fecha_fin)}`;
+  if (!contrato) return "";
+  const fmt = (d: Date) =>
+    d.toLocaleDateString("es-AR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "2-digit"
+    }).replace(/\//g, "-");
+
+  return `${fmt(contrato.fecha_inicio)} a ${fmt(contrato.fecha_fin)}`;
 }
 
+/**
+ * ==========================================================
+ *             FUNCIÓN PRINCIPAL: generarExcelRendicion
+ * ==========================================================
+ *
+ * Genera el archivo Excel EXACTO al modelo que enviaste
+ * y que usa la inmobiliaria.
+ *
+ * Parámetros:
+ * - numeroRendicion: nro correlativo
+ * - fechaRendicion: "DD-MM-YYYY"
+ * - cobranzas: array con todos los datos ya procesados
+ * - ipcData: valores opcionales del IPC del mes
+ * - saldoAnterior: saldo arrastrado de rendición previa
+ *
+ * Devuelve:
+ * - Buffer del archivo .xlsx para descargar
+ */
 export async function generarExcelRendicion(
   numeroRendicion: string | number,
   fechaRendicion: string,
   cobranzas: CobranzaForExcel[],
-  ipcData?: { mes: number | null; anio: number | null; valor: number | null }, // De Rendicion.mes_ipc, anio_ipc y relación Ipc
-  saldoAnterior?: number // Nuevo: Pasar saldo anterior de rendición previa (no en schema, calcular en servicio)
+  ipcData?: { mes: number | null; anio: number | null; valor: number | null },
+  saldoAnterior?: number
 ): Promise<Buffer> {
+
+  /* --------------------------------------------
+   * Crear workbook (archivo) y preparar fecha
+   * -------------------------------------------- */
   const workbook = new ExcelJS.Workbook();
 
-  // Parse fecha for sheet name and date serial
-  const [day, month, year] = fechaRendicion.split('-').map(Number);
+  // Parseo "DD-MM-YYYY"
+  const [day, month, year] = fechaRendicion.split("-").map(Number);
   const monthName = getMonthName(month);
   const shortYear = year.toString().substring(2);
-  const date = new Date(year, month - 1, day);
-  const dateSerial = Math.floor(date.getTime() / (1000 * 60 * 60 * 24)) + 25569; // Excel serial (1900 system)
 
-  // =============================================================
-  //                 HOJA RENDICIONES (estilo exacto del sample)
-  // =============================================================
-  const sheetNameR = `Rend ${numeroRendicion}-${monthName} ${shortYear} `;
-  const sheetR = workbook.addWorksheet(sheetNameR);
+  // Excel usa números de serie para fechas
+  const date = new Date(year, month - 1, day);
+  const dateSerial = Math.floor(date.getTime() / 86400000) + 25569;
+
+  /* ==========================================================
+   *               HOJA PRINCIPAL: "Rend XX-Mes YY"
+   * ========================================================== */
+  const sheetName = `Rend ${numeroRendicion}-${monthName} ${shortYear} `;
+  const sheetR = workbook.addWorksheet(sheetName); //sheet -> hoja principal
+
+  /* --------------------------------------------
+   * Encabezado
+   * -------------------------------------------- */
 
   // Row 1
   sheetR.getCell('B1').value = 'EP';

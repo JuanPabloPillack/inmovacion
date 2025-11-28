@@ -6,6 +6,9 @@ import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import Header from "@/components/ui/Header";
 
+/* ==========================================================
+   📌 Interfaces para tipar los datos recibidos desde la API
+   ========================================================== */
 interface Cliente {
   id_cliente: number;
   nombre: string;
@@ -22,32 +25,45 @@ interface Cobranza {
   anio_ipc?: number;
 }
 
+/* ==========================================================
+   📌 Componente principal de la página
+   ========================================================== */
 export default function AltaRendicionPage() {
+  // Lista de clientes para el filtro
   const [clientes, setClientes] = useState<Cliente[]>([]);
-  const [loadedClientes, setLoadedClientes] = useState(false);
+  const [loadedClientes, setLoadedClientes] = useState(false); // evita llamar cobranzas antes de cargar clientes
 
+  // Lista de cobranzas filtradas
   const [cobranzas, setCobranzas] = useState<Cobranza[]>([]);
+
+  // IDs de cobranzas seleccionadas para rendición
   const [seleccionadas, setSeleccionadas] = useState<number[]>([]);
+
+  // Flags de carga
   const [loading, setLoading] = useState(false);
 
+  // Filtros
   const [cliente, setCliente] = useState("");
   const [anio, setAnio] = useState("");
   const [mes, setMes] = useState("");
 
+  // Valores de IPC auto–calculados o ingresados
   const [mesIPC, setMesIPC] = useState("");
   const [anioIPC, setAnioIPC] = useState("");
 
+  // Lista de años disponibles desde 2020 hasta hoy
   const currentYear = new Date().getFullYear();
   const years = Array.from({ length: currentYear - 2020 + 1 }, (_, i) => 2020 + i);
 
-  // ==========================================================
-  // CARGAR CLIENTES
-  // ==========================================================
+  /* ==========================================================
+     📌 1) CARGAR CLIENTES DESDE LA API
+     ========================================================== */
   const cargarClientes = async () => {
     try {
       const res = await fetch("/api/clientes");
       const data = await res.json();
 
+      // La API puede devolver: [clientes] o { clientes: [...] }
       const lista: Cliente[] = Array.isArray(data)
         ? data
         : Array.isArray(data?.clientes)
@@ -63,13 +79,14 @@ export default function AltaRendicionPage() {
     }
   };
 
+  // Se carga una sola vez al montar la página
   useEffect(() => {
     cargarClientes();
   }, []);
 
-  // ==========================================================
-  // VALIDACIONES MODERADAS DURANTE FILTRADO
-  // ==========================================================
+  /* ==========================================================
+     📌 2) VALIDACIONES SUAVES mientras el usuario filtra
+     ========================================================== */
   const validarFiltros = () => {
     if (anio && Number(anio) < 2020) {
       toast("⚠ El año es muy bajo, ¿estás segura?");
@@ -80,14 +97,16 @@ export default function AltaRendicionPage() {
     }
   };
 
-  // ==========================================================
-  // CARGAR COBRANZAS
-  // ==========================================================
+  /* ==========================================================
+     📌 3) CARGAR COBRANZAS según los filtros
+     ========================================================== */
   const cargarCobranzas = async () => {
+    // Evita llamar antes de tener clientes cargados
     if (!loadedClientes) return;
 
     validarFiltros();
 
+    // Si no hay filtros → limpio todo
     if (!cliente && !anio && !mes) {
       setCobranzas([]);
       setSeleccionadas([]);
@@ -98,10 +117,16 @@ export default function AltaRendicionPage() {
 
     try {
       const params = new URLSearchParams();
+
+      // Solo cobranzas sin rendir
       params.append("sinRendir", "1");
+
+      // Filtros dinámicos
       if (cliente) params.append("cliente", cliente);
       if (anio) params.append("anio", anio);
       if (mes) params.append("mes", mes);
+
+      // Evitamos paginación
       params.append("page", "1");
       params.append("pageSize", "1000");
 
@@ -109,6 +134,7 @@ export default function AltaRendicionPage() {
       const res = await fetch(url);
       const data = await res.json();
 
+      // Normalización de cobranzas
       const lista: Cobranza[] = Array.isArray(data?.cobranzas)
         ? data.cobranzas.map((c: any) => ({
             ...c,
@@ -128,42 +154,50 @@ export default function AltaRendicionPage() {
     }
   };
 
+  // Refiltra cada vez que cambian los filtros o se cargan clientes
   useEffect(() => {
     cargarCobranzas();
   }, [cliente, anio, mes, loadedClientes]);
 
-  // ==========================================================
-  // TOGGLE COBRANZA + AUTO IPC
-  // ==========================================================
+  /* ==========================================================
+     📌 4) SELECCIONAR/Deseleccionar UNA COBRANZA
+         + Cálculo automático del IPC sugerido
+     ========================================================== */
   const toggle = (id: number) => {
+    // Agregar o quitar la cobranza
     const next = seleccionadas.includes(id)
       ? seleccionadas.filter((x) => x !== id)
       : [...seleccionadas, id];
 
     setSeleccionadas(next);
 
+    // Obtener cobranzas seleccionadas
     const seleccionadasAhora = cobranzas.filter((c) => next.includes(c.id_cobranza));
 
+    // Si se deseleccionó todo → limpias IPC
     if (seleccionadasAhora.length === 0) {
       setMesIPC("");
       setAnioIPC("");
       return;
     }
 
+    // Tomar solo las fechas existentes
     const fechasValidas = seleccionadasAhora
       .map((c) => (c.fecha_cobranza ? new Date(c.fecha_cobranza) : null))
       .filter(Boolean) as Date[];
 
+    // Si alguna tienen fecha → tomar la más reciente
     if (fechasValidas.length > 0) {
       const masReciente = fechasValidas.reduce((a, b) => (a > b ? a : b));
-      setMesIPC(String(masReciente.getMonth() + 1));
+
+      setMesIPC(String(masReciente.getMonth() + 1)); // meses empiezan en 0
       setAnioIPC(String(masReciente.getFullYear()));
     }
   };
 
-  // ==========================================================
-  // VALIDACIONES DURAS AL GUARDAR
-  // ==========================================================
+  /* ==========================================================
+     📌 5) VALIDACIONES DURAS al guardar
+     ========================================================== */
   const validarGuardar = () => {
     if (seleccionadas.length === 0) {
       toast.error("Seleccioná al menos una cobranza");
@@ -188,9 +222,9 @@ export default function AltaRendicionPage() {
     return true;
   };
 
-  // ==========================================================
-  // GUARDAR RENDICIÓN + DESCARGAR EXCEL DIRECTO
-  // ==========================================================
+  /* ==========================================================
+     📌 6) GUARDAR RENDICIÓN + DESCARGAR AUTOMÁTICAMENTE EL EXCEL
+     ========================================================== */
   const guardar = async () => {
     if (!validarGuardar()) return;
 
@@ -204,6 +238,7 @@ export default function AltaRendicionPage() {
         anio_ipc: anioIPC ? Number(anioIPC) : undefined,
       };
 
+      // Enviamos la rendición al backend
       const res = await fetch("/api/rendiciones", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -215,7 +250,10 @@ export default function AltaRendicionPage() {
         throw new Error(errorData.error || "Error desconocido");
       }
 
+      // El backend devuelve un archivo Excel
       const blob = await res.blob();
+
+      // Fuerzo descarga del archivo
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -227,6 +265,7 @@ export default function AltaRendicionPage() {
 
       toast.success("Rendición registrada y Excel descargado");
 
+      // Redirige automáticamente después de descargar
       setTimeout(() => {
         window.location.href = "/rendiciones";
       }, 1000);

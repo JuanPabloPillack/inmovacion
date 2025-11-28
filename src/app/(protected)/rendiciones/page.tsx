@@ -1,38 +1,54 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-'use client';
+'use client'; 
+// 🔹 Indica que este componente se renderiza del lado del cliente (Client Component)
+// Necesario porque usa hooks como useState y useEffect.
 
 import { useState, useEffect } from 'react';
 import { FileText, PlusCircle, Trash2, Pencil } from 'lucide-react';
+// 🔹 Iconos SVG usados en los botones y elementos visuales.
+
 import ConfirmationModal from '@/components/ui/confirmation-modal';
 import Header from '@/components/ui/Header';
 import toast, { Toaster } from 'react-hot-toast';
-import { useRouter } from "next/navigation";
+// 🔹 toast = para mostrar notificaciones tipo “¡Éxito!” o “Error”.
 
+import { useRouter } from "next/navigation";
+// 🔹 Permite navegar programáticamente (router.push).
+
+// ----------------------
+// 📌 Interfaces de tipos
+// ----------------------
+
+// Cliente con datos básicos
 interface Cliente {
   id_cliente: number;
   nombre: string;
 }
 
+// Recibo asociado a una cobranza
 interface Recibo {
   id_recibo: number;
   total: number;
   descripcion: string;
 }
 
+// Cobranza perteneciente a una rendición
 interface Cobranza {
   id_cobranza: number;
-  cliente: Cliente;
+  cliente: Cliente;   // Objeto cliente relacionado
   monto: number;
   concepto: string;
   fecha_cobranza: string;
-  recibo: Recibo | null;
+  recibo: Recibo | null; // Puede no existir
 }
 
+// Inmueble asociado a la rendición
 interface Inmueble {
   id_inmueble: number;
   nombre: string;
 }
 
+// Rendición completa
 interface Rendicion {
   id_rendicion: number;
   fecha: string;
@@ -41,28 +57,44 @@ interface Rendicion {
   cobranzas: Cobranza[];
 }
 
+// ---------------------------
+// 📌 Componente principal
+// ---------------------------
+
 export default function RendicionesPage() {
+
   const router = useRouter();
+
+  // Estado principal: lista de rendiciones obtenidas del backend
   const [rendiciones, setRendiciones] = useState<Rendicion[]>([]);
+
+  // Para manejo de errores y loader
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // Estados del modal de confirmación para eliminar
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<Rendicion | null>(null);
 
+  // useEffect ejecuta la carga inicial al montar el componente
   useEffect(() => {
     fetchRendiciones();
   }, []);
 
+  // -------------------------------------------------------
+  // 📌 fetchRendiciones() → Obtiene todas las rendiciones
+  // -------------------------------------------------------
   const fetchRendiciones = async () => {
     try {
-      setLoading(true);
+      setLoading(true); // Activar pantallita de carga si existiera
 
-      const res = await fetch('/api/rendiciones');
+      const res = await fetch('/api/rendiciones'); // GET del backend
+
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
       const data = await res.json();
-      setRendiciones(data || []);
+      setRendiciones(data || []); // Guardamos la respuesta en el estado
+
       setError(null);
     } catch (err: any) {
       setError(err?.message || 'No se pudieron cargar las rendiciones');
@@ -71,23 +103,31 @@ export default function RendicionesPage() {
     }
   };
 
+  // -------------------------------------------------------
+  // 📌 handleDelete() → Abre modal para confirmar eliminación
+  // -------------------------------------------------------
   const handleDelete = (rend: Rendicion) => {
-    setItemToDelete(rend);
-    setDeleteModalOpen(true);
+    setItemToDelete(rend);     // Guardamos qué rendición se quiere borrar
+    setDeleteModalOpen(true);  // Se abre el modal
   };
 
+  // -------------------------------------------------------
+  // 📌 confirmDelete() → Hace DELETE al backend
+  // -------------------------------------------------------
   const confirmDelete = async () => {
-    if (!itemToDelete) return;
+    if (!itemToDelete) return; // Seguridad
 
     try {
-      const res = await fetch(`/api/rendiciones/${itemToDelete.id_rendicion}`, {
-        method: 'DELETE',
-      });
+      const res = await fetch(
+        `/api/rendiciones/${itemToDelete.id_rendicion}`,
+        { method: 'DELETE' }
+      );
 
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
       toast.success('Rendición eliminada correctamente');
 
+      // Sacamos del estado la rendición eliminada
       setRendiciones(prev =>
         prev.filter(r => r.id_rendicion !== itemToDelete.id_rendicion)
       );
@@ -102,10 +142,14 @@ export default function RendicionesPage() {
     }
   };
 
+  // -------------------------------------------------------
+  // 📌 closeModal() → Cierra el modal sin eliminar nada
+  // -------------------------------------------------------
   const closeModal = () => {
     setDeleteModalOpen(false);
     setItemToDelete(null);
   };
+
 
   return (
     <div className="min-h-screen bg-gray-50">

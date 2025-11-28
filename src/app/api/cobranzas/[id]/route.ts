@@ -1,36 +1,44 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-//cobranzas/[id]/route.ts
+// Archivo: app/api/cobranzas/[id]/route.ts
+
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 
-// =====================================================
-// GET — obtener una cobranza por ID
-// =====================================================
+/* =====================================================
+   GET — obtener una cobranza por ID
+   ===================================================== */
 export async function GET(req: NextRequest, { params }: any) {
+  // Convertimos el parámetro dinámico "id" a número
   const id_cobranza = Number(params.id);
+
+  // Validamos que sea un número válido
   if (isNaN(id_cobranza))
     return NextResponse.json({ error: "ID inválido." }, { status: 400 });
 
   try {
+    // Buscamos la cobranza en la BD y traemos también relaciones
     const cobranza = await db.cobranza.findUnique({
       where: { id_cobranza },
       include: {
-        cliente: true,
-        inmueble: { include: { ubicacion: true } },
+        cliente: true, // une información del cliente
+        inmueble: { include: { ubicacion: true } }, // inmueble + ubicación asociada
       },
     });
 
+    // Si no existe la cobranza → error 404
     if (!cobranza)
       return NextResponse.json(
         { error: "Cobranza no encontrada." },
         { status: 404 }
       );
 
+    // Creamos un objeto "mapeado" para enriquecer los datos
     const mapped = {
       ...cobranza,
       inmueble: cobranza.inmueble
         ? {
             ...cobranza.inmueble,
+            // Creamos un "nombre completo" concatenando título y dirección
             nombre:
               cobranza.inmueble.titulo +
               (cobranza.inmueble.ubicacion?.direccion
@@ -40,6 +48,7 @@ export async function GET(req: NextRequest, { params }: any) {
         : null,
     };
 
+    // Devolvemos la cobranza formateada
     return NextResponse.json({ cobranza: mapped });
   } catch (error) {
     console.error("❌ Error GET /cobranzas/[id]:", error);
@@ -50,15 +59,18 @@ export async function GET(req: NextRequest, { params }: any) {
   }
 }
 
-// =====================================================
-// DELETE — eliminar una cobranza
-// =====================================================
+/* =====================================================
+   DELETE — eliminar una cobranza por ID
+   ===================================================== */
 export async function DELETE(req: NextRequest, { params }: any) {
   const id_cobranza = Number(params.id);
+
+  // Validación del ID
   if (isNaN(id_cobranza))
     return NextResponse.json({ error: "ID inválido." }, { status: 400 });
 
   try {
+    // Primero verificamos que la cobranza exista
     const cobranza = await db.cobranza.findUnique({ where: { id_cobranza } });
 
     if (!cobranza)
@@ -67,6 +79,7 @@ export async function DELETE(req: NextRequest, { params }: any) {
         { status: 404 }
       );
 
+    // Eliminamos el registro de la BD
     await db.cobranza.delete({ where: { id_cobranza } });
 
     return NextResponse.json({ message: "Eliminada correctamente." });
@@ -79,15 +92,17 @@ export async function DELETE(req: NextRequest, { params }: any) {
   }
 }
 
-// =====================================================
-// PUT — actualizar una cobranza
-// =====================================================
+/* =====================================================
+   PUT — actualizar una cobranza existente
+   ===================================================== */
 export async function PUT(req: NextRequest, { params }: any) {
   const id_cobranza = Number(params.id);
+
   if (isNaN(id_cobranza))
     return NextResponse.json({ error: "ID inválido." }, { status: 400 });
 
   try {
+    // Verificamos que la cobranza exista
     const existente = await db.cobranza.findUnique({
       where: { id_cobranza },
     });
@@ -98,34 +113,46 @@ export async function PUT(req: NextRequest, { params }: any) {
         { status: 404 }
       );
 
+    // Obtenemos cuerpo enviado desde el cliente
     const body = await req.json();
+
+    // Creamos un objeto donde solo agregaremos los campos enviados
     const dataToUpdate: any = {};
 
+    // Validaciones y asignaciones campo por campo
     if ("id_cliente" in body)
       dataToUpdate.id_cliente = Number(body.id_cliente);
 
+    // Si viene id_contrato, buscamos ese contrato
     if ("id_contrato" in body && body.id_contrato) {
       const contrato = await db.contrato.findUnique({
         where: { id_contrato: Number(body.id_contrato) },
-        include: { inmueble: true },
+        include: { inmueble: true }, // obtenemos el inmueble asociado
       });
+
       dataToUpdate.id_contrato = Number(body.id_contrato);
+
+      // Asociamos automáticamente el inmueble del contrato
       dataToUpdate.id_inmueble = contrato?.inmueble?.id_inmueble || null;
     }
 
     if ("monto" in body) dataToUpdate.monto = Number(body.monto);
     if ("medio_pago" in body) dataToUpdate.medio_pago = body.medio_pago;
     if ("concepto" in body) dataToUpdate.concepto = body.concepto;
+
     if ("observaciones" in body)
       dataToUpdate.observaciones = body.observaciones ?? null;
 
+    // Parseamos la fecha (viene como "YYYY-MM-DD")
     if ("fecha_cobranza" in body && body.fecha_cobranza) {
       const [y, m, d] = body.fecha_cobranza.split("-").map(Number);
       dataToUpdate.fecha_cobranza = new Date(y, m - 1, d, 12, 0, 0);
+      // Se setea a las 12:00 para evitar desfases por timezone
     }
 
     if ("activa" in body) dataToUpdate.activa = Boolean(body.activa);
 
+    // Ejecutamos la actualización
     const updated = await db.cobranza.update({
       where: { id_cobranza },
       data: dataToUpdate,
@@ -135,6 +162,7 @@ export async function PUT(req: NextRequest, { params }: any) {
       },
     });
 
+    // Mapeamos nuevamente para agregar el nombre del inmueble
     const mapped = {
       ...updated,
       inmueble: updated.inmueble

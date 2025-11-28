@@ -1,20 +1,39 @@
-'use client';
+'use client'; 
+// Indica que este archivo se ejecuta del lado del cliente (React).
+// Es necesario para usar hooks como useState o useEffect.
+
 import { useState, useEffect } from 'react';
 import { DollarSign, PlusCircle, AlertCircle, Trash2 } from 'lucide-react';
+// Iconos SVG importados como componentes React.
+
 import ConfirmationModal from '@/components/ui/confirmation-modal';
+// Modal de confirmación para eliminar cobranzas.
+
 import Header from '@/components/ui/Header';
+// Componente visual para el encabezado de la página.
+
 import toast, { Toaster } from 'react-hot-toast';
+// Biblioteca para notificaciones visuales.
+
 import { useRouter } from "next/navigation";
+// Hook de Next.js para navegación del lado del cliente.
+
+
+// ---------------------------
+// TIPOS (interfaces TypeScript)
+// ---------------------------
 
 interface UserInfo {
   id: string;
   name: string;
 }
+// Info del usuario que creó o actualizó una cobranza.
 
 interface Cliente {
   id_cliente: number;
   nombre: string;
 }
+// Representa un cliente. Se usa en filtros y relaciones.
 
 interface Cobranza {
   id_cobranza: number;
@@ -22,46 +41,77 @@ interface Cobranza {
   id_inmueble?: number | null;
   cliente?: Cliente | null;
   inmueble?: { nombre: string } | null;
+
   monto: number;
-  fecha_cobranza: string;
+  fecha_cobranza: string;   // Llega como string desde la API
   medio_pago: string;
   concepto: string;
   observaciones?: string | null;
   activa: boolean;
 
-  // NUEVO HISTORIAL
+  // NUEVO historial
   createdAt?: string;
   updatedAt?: string;
   createdBy?: UserInfo | null;
   updatedBy?: UserInfo | null;
 }
 
+
 export default function CobranzasPage() {
   const router = useRouter();
+
+  // Estado donde se guardarán las cobranzas obtenidas de la API
   const [cobranzas, setCobranzas] = useState<Cobranza[]>([]);
+
+  // Lista de clientes para usar en filtros
   const [clientes, setClientes] = useState<Cliente[]>([]);
+
+  // Estado para errores globales
   const [error, setError] = useState<string | null>(null);
+
+  // Loading para indicar carga de datos
   const [loading, setLoading] = useState(false);
+
+  // Control del modal de eliminación
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<Cobranza | null>(null);
 
-  // PAGINACIÓN + FILTROS
-  const [page, setPage] = useState(1);
-  const [pageSize] = useState(10);
-  const [total, setTotal] = useState(0);
 
+  // ---------------------------
+  // PAGINACIÓN + FILTROS
+  // ---------------------------
+
+  const [page, setPage] = useState(1);      // Página actual
+  const [pageSize] = useState(10);          // Cantidad por página
+  const [total, setTotal] = useState(0);    // Total de cobranzas
+
+  // Filtros del usuario
   const [filterYear, setFilterYear] = useState('');
   const [filterMonth, setFilterMonth] = useState('');
   const [filterCliente, setFilterCliente] = useState('');
 
+
+  // ----------------------------------------
+  // Cargar lista de clientes una sola vez
+  // ----------------------------------------
   useEffect(() => {
     fetchClientes();
   }, []);
 
+
+  // ----------------------------------------
+  // Cargar cobranzas cuando cambia:
+  // página, año, mes, cliente
+  // ----------------------------------------
   useEffect(() => {
     fetchCobranzas();
   }, [page, filterYear, filterMonth, filterCliente]);
 
+
+
+  // ========================================
+  // FUNCIÓN: obtener clientes desde la API
+  // ========================================
   const fetchClientes = async () => {
     try {
       const res = await fetch('/api/clientes');
@@ -72,10 +122,15 @@ export default function CobranzasPage() {
     }
   };
 
+
+  // ========================================
+  // FUNCIÓN: obtener cobranzas (paginadas + filtros)
+  // ========================================
   const fetchCobranzas = async () => {
     try {
       setLoading(true);
 
+      // Construimos query params dinámicamente
       const query = new URLSearchParams({
         page: String(page),
         pageSize: String(pageSize),
@@ -85,11 +140,13 @@ export default function CobranzasPage() {
       if (filterMonth) query.append("mes", filterMonth);
       if (filterCliente) query.append("cliente", filterCliente);
 
+      // Llamado a la API
       const res = await fetch(`/api/cobranzas?${query.toString()}`);
       if (!res.ok) throw new Error();
 
       const data = await res.json();
 
+      // Guardamos datos en estado
       setCobranzas(data.cobranzas);
       setTotal(data.total);
       setError(null);
@@ -100,6 +157,10 @@ export default function CobranzasPage() {
     }
   };
 
+
+  // ========================================
+  // FUNCIÓN: toggle del campo "activa"
+  // ========================================
   const toggleActiva = async (cobranza: Cobranza) => {
     try {
       const res = await fetch(`/api/cobranzas/${cobranza.id_cobranza}`, {
@@ -110,6 +171,7 @@ export default function CobranzasPage() {
 
       if (!res.ok) throw new Error();
 
+      // Refrescamos el estado sin volver a pegar a la API
       setCobranzas(prev =>
         prev.map(c =>
           c.id_cobranza === cobranza.id_cobranza
@@ -124,13 +186,22 @@ export default function CobranzasPage() {
     }
   };
 
+
+  // ========================================
+  // FUNCIÓN: abrir modal para eliminar
+  // ========================================
   const handleDelete = (cobranza: Cobranza) => {
     setItemToDelete(cobranza);
     setDeleteModalOpen(true);
   };
 
+
+  // ========================================
+  // FUNCIÓN: confirmar eliminación
+  // ========================================
   const confirmDelete = async () => {
     if (!itemToDelete) return;
+
     try {
       const res = await fetch(`/api/cobranzas/${itemToDelete.id_cobranza}`, {
         method: 'DELETE',
@@ -138,8 +209,10 @@ export default function CobranzasPage() {
 
       if (!res.ok) throw new Error();
 
+      // Recargamos listado después de eliminar
       fetchCobranzas();
       toast.success('Cobranza eliminada correctamente');
+
     } catch {
       toast.error('Error al eliminar la cobranza');
     } finally {
@@ -147,6 +220,7 @@ export default function CobranzasPage() {
       setItemToDelete(null);
     }
   };
+
 
   return (
     <div className="min-h-screen bg-gray-50">

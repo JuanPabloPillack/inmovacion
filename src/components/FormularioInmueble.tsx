@@ -1,8 +1,10 @@
 //  src/components/FormularioInmueble.tsx
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
-"use client";
+"use client"; // Esto indica a Next.js que el componente es del lado del cliente (usa hooks).
+
 import { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter } from "next/navigation"; // Para redirecciones sin recargar página.
 import {
   Building2,
   User,
@@ -16,13 +18,17 @@ import {
 } from "lucide-react";
 import type { InmuebleEdit } from "@/types/inmuebles";
 
-// ------------------ TIPOS ------------------
+// -----------------------------------------------------------
+//                        TIPOS
+// -----------------------------------------------------------
+// Se tipan las entidades que vienen desde tu API, para mejorar autocompletado y validaciones.
 interface Cliente { id_cliente: number; nombre: string; apellido: string; }
 interface TipoInmueble { id_tipo_inmueble: number; nombre: string; }
 interface Estado { id_estado: number; nombre: string; }
 interface Operacion { id_operacion: number; nombre: string; }
 interface ImagenData { url: string; principal: boolean; file?: File; }
 
+// Props del componente, flexibles para usarlo en "crear" y en "editar".
 interface FormularioInmuebleProps {
   onSuccess?: () => void;
   initialData?: InmuebleEdit;
@@ -31,98 +37,111 @@ interface FormularioInmuebleProps {
   onCancel?: () => void;
 }
 
-// =====================================================
-//            COMPONENTE PRINCIPAL
-// =====================================================
+// -----------------------------------------------------------
+//                     COMPONENTE PRINCIPAL
+// -----------------------------------------------------------
 export default function FormularioInmueble({
-  onSuccess,
-  initialData,
-  submitLabel,
-  submitHandler,
-  onCancel,
+  onSuccess, //Función que se ejecuta cuando el formulario termina con éxito
+  initialData, //define si es crear o editar
+  submitLabel, //Texto del botón de envío
+  submitHandler, //Función que procesa el formulario: crear o editar el inmueble. Se pasa desde el padre
+  onCancel, //Función para manejar el botón "Cancelar" (cerrar modal, volver atrás, etc)
 }: FormularioInmuebleProps) {
   const router = useRouter();
+
+  // Referencia al formulario, útil para capturar datos con FormData
   const formRef = useRef<HTMLFormElement>(null);
 
   // ------------------ ESTADOS ------------------
+  // Listas obtenidas desde tus endpoints
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [tipos, setTipos] = useState<TipoInmueble[]>([]);
   const [estados, setEstados] = useState<Estado[]>([]);
   const [operaciones, setOperaciones] = useState<Operacion[]>([]);
+
+  // Loading para evitar múltiples envíos
   const [loading, setLoading] = useState(false);
+
+  // Manejo de imágenes: cada imagen tiene URL, si es principal, y el archivo real
   const [imagenes, setImagenes] = useState<ImagenData[]>([]);
 
-  // selects
+  // Estados para selects
   const [selectedCliente, setSelectedCliente] = useState<number | "">(initialData?.id_cliente ?? "");
   const [selectedTipo, setSelectedTipo] = useState<number | "">(initialData?.id_tipo_inmueble ?? "");
   const [selectedOperacion, setSelectedOperacion] = useState<number | "">(initialData?.id_operacion ?? "");
   const [selectedEstado, setSelectedEstado] = useState<number | "">(initialData?.id_estado ?? "");
 
-  // barrio
+  // Estado local para el texto del barrio
   const [barrioText, setBarrioText] = useState(initialData?.ubicacion?.barrio ?? "");
 
-useEffect(() => {
-  const loadData = async () => {
-    try {
-      const [propRaw, tRaw, eRaw, oRaw] = await Promise.all([
-        fetch("/api/clientes/propietarios").then((r) => r.json()),
-        fetch("/api/tipos_inmueble").then((r) => r.json()),
-        fetch("/api/estados").then((r) => r.json()),
-        fetch("/api/operaciones").then((r) => r.json()),
-      ]);
+  // -----------------------------------------------------------
+  //               CARGA DE DATOS INICIALES
+  // -----------------------------------------------------------
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        // Se ejecutan las 4 llamadas en paralelo con Promise.all
+        const [propRaw, tRaw, eRaw, oRaw] = await Promise.all([
+          fetch("/api/clientes/propietarios").then((r) => r.json()),
+          fetch("/api/tipos_inmueble").then((r) => r.json()),
+          fetch("/api/estados").then((r) => r.json()),
+          fetch("/api/operaciones").then((r) => r.json()),
+        ]);
 
-      console.log("DEBUG propietarios desde API:", propRaw);
+        console.log("DEBUG propietarios desde API:", propRaw);
 
-      // Asignar directamente (ya vienen filtrados)
-      setClientes(Array.isArray(propRaw) ? propRaw : []);
+        // Cada endpoint puede devolver array directo o { data: [] }
+        setClientes(Array.isArray(propRaw) ? propRaw : []);
+        setTipos(Array.isArray(tRaw) ? tRaw : tRaw.data || []);
+        setEstados(Array.isArray(eRaw) ? eRaw : eRaw.data || []);
+        setOperaciones(Array.isArray(oRaw) ? oRaw : oRaw.data || []);
+      } catch (err) {
+        console.error("Error cargando datos:", err);
+      }
+    };
 
-      setTipos(Array.isArray(tRaw) ? tRaw : tRaw.data || []);
-      setEstados(Array.isArray(eRaw) ? eRaw : eRaw.data || []);
-      setOperaciones(Array.isArray(oRaw) ? oRaw : oRaw.data || []);
-    } catch (err) {
-      console.error("Error cargando datos:", err);
+    loadData();
+
+    // Si estamos editando, cargamos imágenes iniciales
+    if (initialData?.imagenes?.length) {
+      setImagenes(
+        initialData.imagenes.map((img) => ({
+          url: img.url,
+          principal: img.principal,
+        }))
+      );
     }
-  };
+  }, [initialData]);
 
-  loadData();
+  // -----------------------------------------------------------
+  //                   MANEJO DE IMÁGENES
+  // -----------------------------------------------------------
 
-  // cargar imágenes si hay data para editar
-  if (initialData?.imagenes?.length) {
-    setImagenes(
-      initialData.imagenes.map((img) => ({
-        url: img.url,
-        principal: img.principal,
-      }))
-    );
-  }
-}, [initialData]);
-
-
-
-  // =====================================================
-  //   MANEJO DE IMÁGENES
-  // =====================================================
+  // Cuando se seleccionan nuevas imágenes desde el input
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = Array.from(e.target.files || []);
     if (!selectedFiles.length) return;
 
+    // Convertimos archivos en objetos ImagenData
     const nuevas = selectedFiles.map((file) => ({
-      url: URL.createObjectURL(file),
+      url: URL.createObjectURL(file), // URL temporal para previsualizar
       file,
       principal: false,
     }));
 
     setImagenes((prev) => {
+      // Si no había una imagen principal, se asigna la primera nueva
       const sinPrincipal = !prev.some((i) => i.principal);
       if (sinPrincipal && nuevas.length > 0) nuevas[0].principal = true;
       return [...prev, ...nuevas];
     });
   };
 
+  // Eliminar una imagen por índice
   const handleRemoveFile = (index: number) => {
     const actualizadas = imagenes.filter((_, i) => i !== index);
 
-    // si se elimina la principal, asignar otra
+    // Si se elimina la imagen principal, asignar la primera disponible
     if (imagenes[index].principal && actualizadas.length > 0) {
       actualizadas[0].principal = true;
     }
@@ -130,70 +149,61 @@ useEffect(() => {
     setImagenes(actualizadas);
   };
 
+  // Marcar una imagen como principal
   const handleSetPrincipal = (index: number) => {
     setImagenes((prev) =>
       prev.map((img, i) => ({ ...img, principal: i === index }))
     );
   };
 
-  // =====================================================
-  //     VALIDACIONES
-  // =====================================================
+  // -----------------------------------------------------------
+  //                     VALIDACIONES
+  // -----------------------------------------------------------
   const validarFormulario = (fields: any) => {
-    // propietario
     if (!selectedCliente) return "Debe seleccionar un propietario.";
-
-    // tipo
     if (!selectedTipo) return "Debe seleccionar un tipo de propiedad.";
-
-    // estado
     if (!selectedEstado) return "Debe seleccionar un estado.";
 
-    // barrio
     if (!barrioText.trim()) return "El barrio es obligatorio.";
 
-    // dirección
     if (!fields.direccion || fields.direccion.toString().trim() === "")
       return "La dirección es obligatoria.";
 
-    // superficie total
     const supTotal = Number(fields.superficie_total);
     if (!supTotal || supTotal <= 0) return "Superficie total debe ser mayor a 0.";
 
-    // superficie cubierta
     const supCub = Number(fields.superficie_cubierta);
     if (supCub && supCub > supTotal)
       return "La superficie cubierta no puede ser mayor a la superficie total.";
 
-    // precio
     const precio = Number(fields.precio);
     if (!precio || precio <= 0) return "El precio debe ser mayor a 0.";
 
-    // imágenes
     if (imagenes.length === 0) return "Debe subir al menos una imagen.";
-    if (!imagenes.some((i) => i.principal)) return "Debe seleccionar una imagen principal.";
+    if (!imagenes.some((i) => i.principal))
+      return "Debe seleccionar una imagen principal.";
 
-    return null; // todo OK
+    return null;
   };
 
-  // =====================================================
-  //    SUBMIT
-  // =====================================================
+  // -----------------------------------------------------------
+  //                        SUBMIT
+  // -----------------------------------------------------------
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+    e.preventDefault(); // Previene recarga del formulario
     if (!formRef.current) return;
 
     const formData = new FormData(formRef.current);
     const fields = Object.fromEntries(formData.entries());
 
-    // Validaciones
+    // Validaciones previas
     const error = validarFormulario(fields);
     if (error) {
       alert(error);
       return;
     }
 
-    // ---- Si viene un submitHandler personalizado (modo edición externo)
+    // Si el componente está en modo "submitHandler" externo (edición desde otro lado)
     if (submitHandler) {
       try {
         await submitHandler(formData, imagenes);
@@ -205,11 +215,12 @@ useEffect(() => {
       return;
     }
 
-    // ---- Modo normal (crear / editar)
+    // Modo normal: crear o editar inmueble
     setLoading(true);
     try {
-      // subir imágenes
       const uploadedImages: { url: string; principal: boolean }[] = [];
+
+      // Subir archivos a /api/upload
       for (const img of imagenes) {
         if (img.file) {
           const f = new FormData();
@@ -225,7 +236,7 @@ useEffect(() => {
         }
       }
 
-      // payload final
+      // Construcción del payload final
       const payload = {
         ...fields,
         id_cliente: Number(selectedCliente),
@@ -245,6 +256,7 @@ useEffect(() => {
         imagenes: uploadedImages,
       };
 
+      // Decidir si es POST o PUT
       const method = initialData ? "PUT" : "POST";
       const url = initialData
         ? `/api/inmuebles/${initialData.id_inmueble}`

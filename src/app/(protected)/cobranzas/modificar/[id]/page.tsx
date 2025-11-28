@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
+// Importaciones de React y utilidades
 import { useState, useEffect } from 'react';
 import {
   Save,
@@ -10,29 +11,47 @@ import { useRouter, useParams } from 'next/navigation';
 import Header from '@/components/ui/Header';
 import toast from 'react-hot-toast';
 
+// =========================
+// Tipos usados en el frontend
+// =========================
+
+// Representa un cliente disponible para vincular con una cobranza
 interface Cliente {
   id_cliente: number;
   nombre: string;
-  tipo_cliente?: string;
+  tipo_cliente?: string; // permite determinar si es dueño, inquilino, etc.
 }
 
+// Representa un contrato vinculado a un cliente
 interface Contrato {
   id_contrato: number;
   nombre: string;
-  inmueble?: { titulo: string };
+  inmueble?: { titulo: string }; // inmueble asociado al contrato
 }
 
 export default function EditarCobranzaPage() {
   const router = useRouter();
-  const params = useParams();
-  const id = params?.id as string;
+  const params = useParams();   // Obtiene /cobranzas/[id]
+  const id = params?.id as string; // ID de la cobranza a editar
 
+  // =============================
+  // Estados principales del form
+  // =============================
+
+  // Listas cargadas desde la API
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [contratos, setContratos] = useState<Contrato[]>([]);
+
+  // Cliente seleccionado
   const [selectedCliente, setSelectedCliente] = useState<number | ''>('');
+
+  // Tipo del cliente (dueño / inquilino / otro)
   const [tipoCliente, setTipoCliente] = useState('');
+
+  // Nombre del inmueble del contrato
   const [propiedadVinculada, setPropiedadVinculada] = useState('');
 
+  // Datos del formulario
   const [form, setForm] = useState({
     id_contrato: '',
     monto: '',
@@ -42,30 +61,41 @@ export default function EditarCobranzaPage() {
     observaciones: '',
   });
 
+  // Estados UI
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // =============================
+  // FECHA DEFAULT (día 9 mes siguiente)
+  // =============================
   const hoy = new Date();
   const siguienteMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 9);
   const fechaDefault = siguienteMes.toISOString().split('T')[0];
 
-  // 🟦 Cargar clientes
+  // =====================================================
+  // 🟦 1) Cargar clientes al entrar a la página
+  // =====================================================
   useEffect(() => {
     const fetchClientes = async () => {
       try {
         const res = await fetch('/api/clientes');
         const data = await res.json();
+
+        // Compatibilidad con diferentes formatos
         setClientes(Array.isArray(data) ? data : data.clientes || []);
       } catch {
         setError('Error al cargar clientes.');
       }
     };
+
     fetchClientes();
   }, []);
 
-  // 🟨 Cargar cobranza existente
+  // =====================================================
+  // 🟨 2) Cargar la información de la cobranza a editar
+  // =====================================================
   useEffect(() => {
-    if (!id) return;
+    if (!id) return; // seguridad
 
     const fetchData = async () => {
       try {
@@ -73,8 +103,10 @@ export default function EditarCobranzaPage() {
         const data = await res.json();
         const c = data.cobranza;
 
+        // Rellenar cliente seleccionado
         setSelectedCliente(c.id_cliente);
 
+        // Rellenar formulario
         setForm({
           id_contrato: c.id_contrato || '',
           monto: c.monto?.toString() || '',
@@ -83,6 +115,7 @@ export default function EditarCobranzaPage() {
           concepto: c.concepto || '',
           observaciones: c.observaciones || '',
         });
+
       } catch {
         setError('No se pudo cargar la cobranza.');
       }
@@ -91,7 +124,9 @@ export default function EditarCobranzaPage() {
     fetchData();
   }, [id]);
 
-  // 🟩 Cargar contratos según cliente
+  // =====================================================
+  // 🟩 3) Cargar contratos cuando cambia el cliente
+  // =====================================================
   useEffect(() => {
     if (!selectedCliente) {
       setContratos([]);
@@ -102,6 +137,7 @@ export default function EditarCobranzaPage() {
       try {
         const res = await fetch(`/api/contracts?id_cliente=${selectedCliente}`);
         const data = await res.json();
+
         setContratos(Array.isArray(data) ? data : data.contratos || []);
       } catch {
         setError('Error al cargar contratos.');
@@ -111,22 +147,38 @@ export default function EditarCobranzaPage() {
     fetchContratos();
   }, [selectedCliente]);
 
-  // 🟦 Tipo de cliente
+  // =====================================================
+  // 🟦 4) Determinar tipo de cliente automáticamente
+  // =====================================================
   useEffect(() => {
     const cli = clientes.find(c => c.id_cliente === selectedCliente);
     setTipoCliente(cli?.tipo_cliente || '');
   }, [selectedCliente, clientes]);
 
-  // 🟩 Mostrar propiedad vinculada
+  // =====================================================
+  // 🟩 5) Mostrar propiedad vinculada según contrato
+  // =====================================================
   useEffect(() => {
-    const contratoSel = contratos.find(c => c.id_contrato === Number(form.id_contrato));
+    const contratoSel = contratos.find(
+      c => c.id_contrato === Number(form.id_contrato)
+    );
+
     setPropiedadVinculada(contratoSel?.inmueble?.titulo || '');
   }, [form.id_contrato, contratos]);
 
+  // =====================================================
+  // 🟪 Handler para inputs del formulario
+  // =====================================================
   const handleChange = (e: any) => {
-    setForm(prev => ({ ...prev, [e.target.name]: e.target.value }));
+    setForm(prev => ({
+      ...prev,
+      [e.target.name]: e.target.value,
+    }));
   };
 
+  // =====================================================
+  // 🟥 Validación antes de enviar
+  // =====================================================
   const validar = () => {
     if (!selectedCliente) return 'Debes seleccionar un cliente.';
     if (!form.id_contrato) return 'Debes seleccionar un contrato.';
@@ -136,47 +188,50 @@ export default function EditarCobranzaPage() {
     return null;
   };
 
+  // =====================================================
+  // 🟦 6) Enviar formulario
+  // =====================================================
   const handleSubmit = async (e: any) => {
-  e.preventDefault();
-  setError(null);
+    e.preventDefault();
+    setError(null);
 
-  const err = validar();
-  if (err) return setError(err);
+    const err = validar();
+    if (err) return setError(err);
 
-  try {
-    setLoading(true);
+    try {
+      setLoading(true);
 
-    const res = await fetch(`/api/cobranzas/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        id_cliente: selectedCliente,
-        id_contrato: form.id_contrato,
-        monto: Number(form.monto),
-        fecha_cobranza: form.fecha_cobranza,
-        medio_pago: form.medio_pago,
-        concepto: form.concepto,
-        observaciones: form.observaciones,
-      }),
-    });
+      const res = await fetch(`/api/cobranzas/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id_cliente: selectedCliente,
+          id_contrato: form.id_contrato,
+          monto: Number(form.monto),
+          fecha_cobranza: form.fecha_cobranza,
+          medio_pago: form.medio_pago,
+          concepto: form.concepto,
+          observaciones: form.observaciones,
+        }),
+      });
 
-    if (!res.ok) {
-      const d = await res.json();
-      throw new Error(d.error);
+      if (!res.ok) {
+        const d = await res.json();
+        throw new Error(d.error);
+      }
+
+      toast.success('Cobranza modificada correctamente.');
+
+      router.refresh(); // Refresca los datos
+      setTimeout(() => router.push('/cobranzas'), 1000);
+
+    } catch (e: any) {
+      toast.error('Error al modificar.');
+      setError(e.message);
+    } finally {
+      setLoading(false);
     }
-
-    toast.success('Cobranza modificada correctamente.');
-
-    router.refresh();
-    setTimeout(() => router.push('/cobranzas'), 1000);
-
-  } catch (e: any) {
-    toast.error('Error al modificar.');
-    setError(e.message);
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   // -------------------------------------
   // 🟦 UI — COPIADA DE LA ALTA

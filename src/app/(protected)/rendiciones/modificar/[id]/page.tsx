@@ -7,6 +7,10 @@ import { useParams } from "next/navigation";
 import toast from "react-hot-toast";
 import Header from "@/components/ui/Header";
 
+/**
+ * Interfaces que describen la estructura de los datos
+ * que devuelve la API. Esto permite autocompletado y tipado estricto.
+ */
 interface Cliente {
   id_cliente: number;
   nombre: string;
@@ -21,39 +25,55 @@ interface Cobranza {
   fecha?: string;
 }
 
+/**
+ * Página de modificación de una rendición.
+ * Se carga desde: /rendiciones/modificar/[id]
+ */
 export default function ModificarRendicionPage() {
-  const params = useParams();
-  const id_rendicion = params?.id;
+  const params = useParams();            // Obtiene los params dinámicos de la URL
+  const id_rendicion = params?.id;       // Extrae el ID de la rendición
 
+  // Estados principales
   const [clientes, setClientes] = useState<Cliente[]>([]);
-  const [loadedClientes, setLoadedClientes] = useState(false);
+  const [loadedClientes, setLoadedClientes] = useState(false); // Saber si clientes ya cargaron
 
   const [cobranzas, setCobranzas] = useState<Cobranza[]>([]);
   const [seleccionadas, setSeleccionadas] = useState<number[]>([]);
   const [loading, setLoading] = useState(false);
 
+  // Filtros seleccionados
   const [cliente, setCliente] = useState("");
   const [anio, setAnio] = useState("");
   const [mes, setMes] = useState("");
 
+  // IPC automático
   const [mesIPC, setMesIPC] = useState("");
   const [anioIPC, setAnioIPC] = useState("");
 
+  // Años desde 2020 al actual
   const currentYear = new Date().getFullYear();
   const years = Array.from({ length: currentYear - 2020 + 1 }, (_, i) => 2020 + i);
 
-  // ============================
-  // CARGAR CLIENTES
-  // ============================
+  // ====================================================
+  // 1. CARGAR CLIENTES
+  // ====================================================
   const cargarClientes = async () => {
     try {
       const res = await fetch("/api/clientes");
       const data = await res.json();
+
+      /**
+       * La API puede devolver:
+       *  → Un array directo
+       *  → Un objeto con { clientes: [...] }
+       * Por eso este manejo flexible.
+       */
       const lista = Array.isArray(data)
         ? data
         : Array.isArray(data?.clientes)
         ? data.clientes
         : [];
+
       setClientes(lista);
       setLoadedClientes(true);
     } catch (e) {
@@ -62,13 +82,14 @@ export default function ModificarRendicionPage() {
     }
   };
 
+  // Llama a cargarClientes al montar el componente
   useEffect(() => {
     cargarClientes();
   }, []);
 
-  // ============================
-  // CARGAR DATOS DE LA RENDICIÓN
-  // ============================
+  // ====================================================
+  // 2. CARGAR DATOS DE LA RENDICIÓN
+  // ====================================================
   const cargarRendicion = async () => {
     if (!id_rendicion) return;
 
@@ -83,9 +104,11 @@ export default function ModificarRendicionPage() {
 
       const r = data.rendicion;
 
+      // Carga campos base de la rendición
       setMesIPC(r.mes_ipc ? String(r.mes_ipc) : "");
       setAnioIPC(r.anio_ipc ? String(r.anio_ipc) : "");
 
+      // Cargar cobranzas previamente asociadas
       setSeleccionadas(
         Array.isArray(r.cobranzas)
           ? r.cobranzas.map((c: any) => c.id_cobranza)
@@ -104,31 +127,40 @@ export default function ModificarRendicionPage() {
     cargarRendicion();
   }, [id_rendicion]);
 
-  // ============================
-  // CARGAR COBRANZAS
-  // ============================
+  // ====================================================
+  // 3. CARGAR COBRANZAS SEGÚN FILTROS
+  // ====================================================
   const cargarCobranzas = async () => {
-    if (!loadedClientes) return;
+    if (!loadedClientes) return; // Esperar a que clientes esté listo
 
     try {
+      // Armado dinámico de query params
       const params = new URLSearchParams();
       params.append("page", "1");
       params.append("pageSize", "1000");
+
       if (cliente) params.append("cliente", cliente);
       if (anio) params.append("anio", anio);
       if (mes) params.append("mes", mes);
+
+      // Para incluir cobranzas ya seleccionadas aunque no coincidan con los filtros nuevos
       params.append("incluirSeleccionadas", "1");
       params.append("rendicionActual", String(id_rendicion));
 
       const res = await fetch(`/api/cobranzas?${params.toString()}`);
       const data = await res.json();
 
+      /**
+       * Mapeamos las cobranzas para agregar la propiedad "fecha"
+       * ya que la API usa "fecha_cobranza".
+       */
       const lista: Cobranza[] = Array.isArray(data?.cobranzas)
         ? data.cobranzas.map((c: any) => ({
             ...c,
             fecha: c.fecha_cobranza,
           }))
         : [];
+
       setCobranzas(lista);
     } catch (e) {
       toast.error("Error al cargar cobranzas");
@@ -139,29 +171,34 @@ export default function ModificarRendicionPage() {
     cargarCobranzas();
   }, [cliente, anio, mes, loadedClientes]);
 
-  // ============================
-  // TOGGLE + IPC AUTO
-  // ============================
+  // ====================================================
+  // 4. SELECCIONAR / DESELECCIONAR COBRANZAS + IPC AUTO
+  // ====================================================
   const toggle = (id: number) => {
     setSeleccionadas((prev) => {
+      // Si está seleccionada → se quita, sino se agrega
       const next = prev.includes(id)
         ? prev.filter((x) => x !== id)
         : [...prev, id];
 
+      // Obtener las cobranzas seleccionadas actualmente
       const seleccionadasAhora = cobranzas.filter((c) =>
         next.includes(c.id_cobranza)
       );
 
+      // Si no hay ninguna → limpiar IPC
       if (seleccionadasAhora.length === 0) {
         setMesIPC("");
         setAnioIPC("");
         return next;
       }
 
+      // Tomar las fechas válidas de las cobranzas seleccionadas
       const fechasValidas = seleccionadasAhora
         .map((c) => (c.fecha ? new Date(c.fecha) : null))
         .filter(Boolean) as Date[];
 
+      // Selecciona la fecha más reciente para el IPC
       if (fechasValidas.length > 0) {
         const masReciente = fechasValidas.reduce((a, b) => (a > b ? a : b));
         setMesIPC(String(masReciente.getMonth() + 1));
@@ -172,9 +209,9 @@ export default function ModificarRendicionPage() {
     });
   };
 
-  // ============================
-  // GUARDAR Y DESCARGAR EXCEL DIRECTO
-  // ============================
+  // ====================================================
+  // 5. GUARDAR CAMBIOS Y DESCARGAR EXCEL DIRECTO
+  // ====================================================
   const guardar = async () => {
     if (seleccionadas.length === 0)
       return toast.error("Seleccioná al menos una cobranza");
@@ -182,12 +219,14 @@ export default function ModificarRendicionPage() {
     setLoading(true);
 
     try {
+      // Armamos el cuerpo del PUT
       const payload = {
         cobranzas: seleccionadas,
         mes_ipc: mesIPC ? Number(mesIPC) : undefined,
         anio_ipc: anioIPC ? Number(anioIPC) : undefined,
       };
 
+      // Guardar la rendición
       const res = await fetch(`/api/rendiciones/${id_rendicion}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -199,19 +238,22 @@ export default function ModificarRendicionPage() {
         throw new Error(err.error || "Error actualizando");
       }
 
-      // Recibir directamente el Excel
+      // Descarga automática del Excel generado
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
+
       const a = document.createElement("a");
       a.href = url;
       a.download = `Rendicion_${id_rendicion}.xlsx`;
       document.body.appendChild(a);
       a.click();
       a.remove();
+
       window.URL.revokeObjectURL(url);
 
       toast.success("Rendición modificada y Excel descargado");
 
+      // Redirigir después de 1 segundo
       setTimeout(() => {
         window.location.href = "/rendiciones";
       }, 1000);

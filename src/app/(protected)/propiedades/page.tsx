@@ -1,65 +1,135 @@
-//src/app/(protected)/propiedades/page.tsx
+// src/app/(protected)/propiedades/page.tsx
+
 'use client';
-import { useEffect, useState } from 'react';
+
+/**
+ * Página principal de gestión de propiedades.
+ * Contiene:
+ * - Listado de inmuebles (activos y archivados)
+ * - Paginación
+ * - Filtros
+ * - CRUD básico (crear, modificar, archivar y eliminar)
+ * - Control de sesión (NextAuth)
+ */
+
+import { useEffect, useState, useMemo } from 'react';
 import { Home, PlusCircle, AlertCircle, User, Calendar } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
+
 import Header from '@/components/ui/Header';
 import InmuebleCard from '@/components/InmuebleCard';
 import Filtros from '@/components/Filtros';
+
 import toast, { Toaster } from 'react-hot-toast';
+
 import type { InmuebleDTO } from '@/types/inmuebles';
 import type { FiltrosInmueble } from '@/types/filtros';
 
+// Tipado local que agrega la propiedad usada solo en UI.
 interface InmuebleLocal extends InmuebleDTO {
   archivadoLocal: boolean;
 }
 
 export default function PropiedadesPage() {
+
+  // -----------------------------
+  // SESIÓN
+  // -----------------------------
+  const { data: session, status } = useSession();
+  const isAuthenticated = !!session;
+  const isLoadingAuth = status === 'loading';
+
+  // -----------------------------
+  // ESTADOS PRINCIPALES
+  // -----------------------------
   const [inmuebles, setInmuebles] = useState<InmuebleLocal[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  // Paginación separada para activos y archivados
   const [paginaActivos, setPaginaActivos] = useState(1);
   const [paginaArchivados, setPaginaArchivados] = useState(1);
+
   const [filtros, setFiltros] = useState<FiltrosInmueble>({});
+
   const inmueblesPorPagina = 5;
   const router = useRouter();
 
-  // ------- FETCH -------
+
+  // =====================================================================
+  // ============================ FETCH INMUEBLES ==========================
+  // =====================================================================
+
   const fetchInmuebles = async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/inmuebles');
-      if (!res.ok) throw new Error('Error al obtener los inmuebles');
+
+      const res = await fetch('/api/inmuebles'); //Aquí el frontend hace un GET al endpoint /api/inmuebles
+      if (!res.ok) {
+        const errorText = await res.text();
+
+        // Detecta respuesta HTML que indica redirección o login
+        if (
+          errorText.includes('<!DOCTYPE') ||
+          errorText.includes('login') ||
+          res.status === 401 ||
+          res.status === 302
+        ) {
+          toast.error('Sesión requerida. Redirigiendo al login...');
+          router.push('/login');
+          return;
+        }
+
+        throw new Error(`Error ${res.status}: No se pudieron cargar los inmuebles`);
+      }
 
       const data: InmuebleDTO[] = await res.json();
 
-      // ← AGREGADO: Log para debug (revisa consola del browser)
-      console.log('🔍 Datos crudos de API /inmuebles:', data);
-      console.log('🔍 Primer inmueble - createdBy:', data[0]?.createdBy);
-      console.log('🔍 Primer inmueble - updatedBy:', data[0]?.updatedBy);
-
-      setInmuebles(
-        data.map((i) => ({
-          ...i,
-          archivadoLocal: i.archivado ?? false,
-        }))
-      );
+      // Si NO está logueado → mostrar solo activos
+      if (!isAuthenticated) {
+        const activeData = data.filter((i) => !(i.archivado ?? false));
+        setInmuebles(
+          activeData.map((i) => ({
+            ...i,
+            archivadoLocal: false,
+          }))
+        );
+      } else {
+        // Usuario logueado → ver todo
+        setInmuebles(
+          data.map((i) => ({
+            ...i,
+            archivadoLocal: i.archivado ?? false,
+          }))
+        );
+      }
     } catch (err) {
-      console.error('❌ Error en fetchInmuebles:', err);  // ← AGREGADO: Log del error
+      console.error('❌ Error en fetchInmuebles:', err);
       setError('No se pudieron cargar los inmuebles');
     } finally {
       setLoading(false);
     }
   };
 
+  // Ejecuta el fetch cuando la sesión está lista
   useEffect(() => {
+    if (status === 'loading') return;
     fetchInmuebles();
-  }, []);
+  }, [status]);
 
-  // ------- HANDLERS -------
+
+  // =====================================================================
+  // ============================ HANDLERS ================================
+  // =====================================================================
+
+  // Crear nuevo inmueble
   const handleCrear = () => router.push('/propiedades/nuevo');
+
+  // Modificar inmueble
   const handleModificar = (id: number) => router.push(`/propiedades/modificar/${id}`);
 
+  // Archivar / Desarchivar
   const toggleArchivar = async (id: number, archivado: boolean) => {
     try {
       const res = await fetch(`/api/inmuebles/${id}`, {
@@ -68,8 +138,22 @@ export default function PropiedadesPage() {
         body: JSON.stringify({ archivado: !archivado }),
       });
 
-      if (!res.ok) throw new Error();
+      if (!res.ok) { //Si la respuesta falla (res.ok === false), se maneja el error, Si es correcta, se parsea JSON y se guarda en el estado inmuebles.
+        const errorText = await res.text();
 
+        if (
+          errorText.includes('<!DOCTYPE') ||
+          errorText.includes('login') ||
+          res.status === 401
+        ) {
+          toast.error('Sesión requerida. Redirigiendo...');
+          router.push('/login');
+          return;
+        }
+        throw new Error();
+      }
+
+      // Actualiza en frontend inmediato
       setInmuebles((prev) =>
         prev.map((i) =>
           i.id_inmueble === id ? { ...i, archivadoLocal: !archivado } : i
@@ -81,75 +165,129 @@ export default function PropiedadesPage() {
           ? 'Propiedad reactivada correctamente'
           : 'Propiedad archivada correctamente'
       );
+
     } catch {
       toast.error('Error al actualizar el inmueble');
     }
   };
 
+  // Eliminar inmueble
   const handleEliminar = async (id: number) => {
     if (!confirm('¿Estás seguro de eliminar esta propiedad?')) return;
 
     try {
       const res = await fetch(`/api/inmuebles/${id}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error();
+
+      if (!res.ok) {
+        const errorText = await res.text();
+
+        if (
+          errorText.includes('<!DOCTYPE') ||
+          errorText.includes('login') ||
+          res.status === 401
+        ) {
+          toast.error('Sesión requerida. Redirigiendo...');
+          router.push('/login');
+          return;
+        }
+        throw new Error();
+      }
 
       setInmuebles((prev) => prev.filter((i) => i.id_inmueble !== id));
       toast.success('Propiedad eliminada correctamente');
+
     } catch {
       toast.error('Error al eliminar la propiedad');
     }
   };
 
-// ------- FILTRADO -------
-const inmueblesFiltrados = inmuebles.filter((i) => {
-  // Filtrar por operación
-  if (filtros.operacionId && i.id_operacion !== filtros.operacionId) return false;
 
-  // Filtrar por estado
-  if (filtros.estadoId && i.id_estado !== filtros.estadoId) return false;
+  // =====================================================================
+  // ============================ FILTRADO ================================
+  // =====================================================================
 
-  // Filtrar por tipo de inmueble
-  if (filtros.tipoId && i.id_tipo_inmueble !== filtros.tipoId) return false;
+  const inmueblesFiltrados = inmuebles.filter((i) => {
+    if (filtros.operacionId && i.id_operacion !== filtros.operacionId) return false;
+    if (filtros.estadoId && i.id_estado !== filtros.estadoId) return false;
+    if (filtros.tipoId && i.id_tipo_inmueble !== filtros.tipoId) return false;
 
-  // Filtrar precio mínimo
-  if (filtros.precioMin) {
-    const min = Number(filtros.precioMin);
-    if (i.precio == null || i.precio < min) return false;
-  }
+    // Precio mínimo
+    if (filtros.precioMin) {
+      const min = Number(filtros.precioMin);
+      if (i.precio == null || i.precio < min) return false;
+    }
 
-  // Filtrar precio máximo
-  if (filtros.precioMax) {
-    const max = Number(filtros.precioMax);
-    if (i.precio == null || i.precio > max) return false;
-  }
+    // Precio máximo
+    if (filtros.precioMax) {
+      const max = Number(filtros.precioMax);
+      if (i.precio == null || i.precio > max) return false;
+    }
 
-  return true;
-});
-
+    return true;
+  });
 
   const activos = inmueblesFiltrados.filter((i) => !i.archivadoLocal);
   const archivados = inmueblesFiltrados.filter((i) => i.archivadoLocal);
 
-  // ------- PAGINACIÓN -------
-  const paginar = (arr: InmuebleLocal[], page: number) => {
-    const inicio = (page - 1) * inmueblesPorPagina;
-    return arr.slice(inicio, inicio + inmueblesPorPagina);
-  };
 
-  const activosPagina = paginar(activos, paginaActivos);
-  const archivadosPagina = paginar(archivados, paginaArchivados);
+  // =====================================================================
+  // ============================ PAGINACIÓN ==============================
+  // =====================================================================
 
-  const totalPaginasActivos = Math.ceil(activos.length / inmueblesPorPagina);
-  const totalPaginasArchivados = Math.ceil(archivados.length / inmueblesPorPagina);
+  const paginar = useMemo(
+    () => (arr: InmuebleLocal[], page: number) => {
+      const inicio = (page - 1) * inmueblesPorPagina;
+      return arr.slice(inicio, inicio + inmueblesPorPagina);
+    },
+    [inmueblesPorPagina]
+  );
 
-  // -------------------------------------------------------------
-  // ------------------------ RENDER ------------------------------
-  // -------------------------------------------------------------
+  const activosPagina = useMemo(
+    () => paginar(activos, paginaActivos),
+    [activos, paginaActivos, paginar]
+  );
+
+  const archivadosPagina = useMemo(
+    () => paginar(archivados, paginaArchivados),
+    [archivados, paginaArchivados, paginar]
+  );
+
+  const totalPaginasActivos = useMemo(
+    () => Math.ceil(activos.length / inmueblesPorPagina),
+    [activos.length, inmueblesPorPagina]
+  );
+
+  const totalPaginasArchivados = useMemo(
+    () => Math.ceil(archivados.length / inmueblesPorPagina),
+    [archivados.length, inmueblesPorPagina]
+  );
+
+  const totalCount = useMemo(
+    () => (isAuthenticated ? inmuebles.length : activos.length),
+    [isAuthenticated, inmuebles.length, activos.length]
+  );
+
+
+  // =====================================================================
+  // ============================= RENDER ================================
+  // =====================================================================
+
+  // Mientras se valida la sesión
+  if (isLoadingAuth) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="inline-block w-12 h-12 border-4 border-gray-200 rounded-full animate-spin border-t-[#63bae9]" />
+          <p className="mt-4 text-lg font-medium text-gray-400">Cargando...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       <Header />
       <Toaster position="top-right" />
-
       {/* HEADER */}
       <header className="bg-white border-b border-gray-200 shadow-sm">
         <div className="max-w-7xl mx-auto px-6 py-6 flex items-center justify-between">
@@ -164,16 +302,14 @@ const inmueblesFiltrados = inmuebles.filter((i) => {
               </p>
             </div>
           </div>
-
           <div className="flex items-center gap-3 px-4 py-2 rounded-lg bg-[#fef9e7]">
             <div className="w-2 h-2 rounded-full animate-pulse bg-[#fcc238]" />
             <span className="text-sm font-medium text-gray-600">
-              {inmuebles.length} {inmuebles.length === 1 ? 'propiedad' : 'propiedades'}
+              {totalCount} {totalCount === 1 ? 'propiedad' : 'propiedades'}
             </span>
           </div>
         </div>
       </header>
-
       {/* CONTENIDO */}
       <main className="max-w-7xl mx-auto px-6 py-8">
         {error && (
@@ -182,23 +318,23 @@ const inmueblesFiltrados = inmuebles.filter((i) => {
             <p className="font-medium text-gray-600">{error}</p>
           </div>
         )}
-
-        {/* BOTÓN CREAR */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-          <button
-            onClick={handleCrear}
-            className="group p-6 rounded-xl font-medium text-white flex items-center gap-4 transition-all hover:shadow-lg hover:scale-[1.02] active:scale-[0.98] bg-[#63bae9]"
-          >
-            <div className="w-12 h-12 rounded-lg bg-white bg-opacity-20 flex items-center justify-center group-hover:rotate-12 transition-transform">
-              <PlusCircle className="w-6 h-6" />
-            </div>
-            <div>
-              <div className="text-lg font-semibold">Registrar Propiedad</div>
-              <div className="text-sm opacity-90">Agrega un nuevo inmueble</div>
-            </div>
-          </button>
-        </div>
-
+        {/* BOTÓN CREAR - Solo para usuarios logueados */}
+        {isAuthenticated && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+            <button
+              onClick={handleCrear}
+              className="group p-6 rounded-xl font-medium text-white flex items-center gap-4 transition-all hover:shadow-lg hover:scale-[1.02] active:scale-[0.98] bg-[#63bae9]"
+            >
+              <div className="w-12 h-12 rounded-lg bg-white bg-opacity-20 flex items-center justify-center group-hover:rotate-12 transition-transform">
+                <PlusCircle className="w-6 h-6" />
+              </div>
+              <div>
+                <div className="text-lg font-semibold">Registrar Propiedad</div>
+                <div className="text-sm opacity-90">Agrega un nuevo inmueble</div>
+              </div>
+            </button>
+          </div>
+        )}
         {/* FILTROS */}
         <Filtros
           filtros={filtros}
@@ -215,9 +351,8 @@ const inmueblesFiltrados = inmuebles.filter((i) => {
               Inmuebles Activos
             </h2>
           </div>
-
           <div className="p-6">
-            {loading ? (
+            {(loading || isLoadingAuth) ? (
               <div className="text-center py-16">
                 <div className="inline-block w-12 h-12 border-4 border-gray-200 rounded-full animate-spin border-t-[#63bae9]" />
                 <p className="mt-4 text-lg font-medium text-gray-400">
@@ -250,74 +385,74 @@ const inmueblesFiltrados = inmuebles.filter((i) => {
                         </span>
                       )}
                     </div>
-
                     <InmuebleCard inmueble={i} />
-
-                    {/* ← Info básica de creación/modificación (como en contratos) */}
-                    <div className="pt-4 border-t border-gray-100 mt-4">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-                        <div className="flex items-center gap-2 text-xs text-gray-500">
-                          <User className="w-3.5 h-3.5" />
-                          <span className="font-medium">Creado por:</span>
-                          <span className="font-bold text-gray-700">{i.createdBy?.nombre || 'N/A'}</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-xs text-gray-500">
-                          <Calendar className="w-3.5 h-3.5" />
-                          <span className="font-medium">Creado:</span>
-                          <span className="font-bold text-gray-700">
-                            {i.createdAt ? new Date(i.createdAt).toLocaleDateString('es-ES', {
-                              day: '2-digit',
-                              month: 'short',
-                              year: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit'
-                            }).replace(',', ' •') : 'N/A'}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2 text-xs text-gray-500">
-                          <User className="w-3.5 h-3.5" />
-                          <span className="font-medium">Actualizado por:</span>
-                          <span className="font-bold text-gray-700">{i.updatedBy?.nombre || 'N/A'}</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-xs text-gray-500">
-                          <Calendar className="w-3.5 h-3.5" />
-                          <span className="font-medium">Actualizado:</span>
-                          <span className="font-bold text-gray-700">
-                            {i.updatedAt ? new Date(i.updatedAt).toLocaleDateString('es-ES', {
-                              day: '2-digit',
-                              month: 'short',
-                              year: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit'
-                            }).replace(',', ' •') : 'N/A'}
-                          </span>
+                    {/* ← Info básica de creación/modificación (solo para logueados) */}
+                    {isAuthenticated && (
+                      <div className="pt-4 border-t border-gray-100 mt-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                          <div className="flex items-center gap-2 text-xs text-gray-500">
+                            <User className="w-3.5 h-3.5" />
+                            <span className="font-medium">Creado por:</span>
+                            <span className="font-bold text-gray-700">{i.createdBy?.nombre || 'N/A'}</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-xs text-gray-500">
+                            <Calendar className="w-3.5 h-3.5" />
+                            <span className="font-medium">Creado:</span>
+                            <span className="font-bold text-gray-700">
+                              {i.createdAt ? new Date(i.createdAt).toLocaleDateString('es-ES', {
+                                day: '2-digit',
+                                month: 'short',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              }).replace(',', ' •') : 'N/A'}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 text-xs text-gray-500">
+                            <User className="w-3.5 h-3.5" />
+                            <span className="font-medium">Actualizado por:</span>
+                            <span className="font-bold text-gray-700">{i.updatedBy?.nombre || 'N/A'}</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-xs text-gray-500">
+                            <Calendar className="w-3.5 h-3.5" />
+                            <span className="font-medium">Actualizado:</span>
+                            <span className="font-bold text-gray-700">
+                              {i.updatedAt ? new Date(i.updatedAt).toLocaleDateString('es-ES', {
+                                day: '2-digit',
+                                month: 'short',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              }).replace(',', ' •') : 'N/A'}
+                            </span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-
-                    <div className="mt-4 flex gap-3">
-                      {/* ARCHIVAR → cuando NO está archivado */}
-                      <button
-                        onClick={() =>
-                          toggleArchivar(i.id_inmueble, i.archivadoLocal)
-                        }
-                        className="px-4 py-2 text-sm rounded-md font-medium bg-red-100 text-red-700 hover:bg-red-200 transition"
-                      >
-                        Archivar
-                      </button>
-
-                      <button
-                        onClick={() => handleModificar(i.id_inmueble)}
-                        className="px-4 py-2 text-sm rounded-md font-medium bg-blue-100 text-blue-700 hover:bg-blue-200 transition"
-                      >
-                        Modificar
-                      </button>
-                    </div>
+                    )}
+                    {/* ACCIONES - Solo para usuarios logueados */}
+                    {isAuthenticated && (
+                      <div className="mt-4 flex gap-3">
+                        {/* ARCHIVAR → cuando NO está archivado */}
+                        <button
+                          onClick={() =>
+                            toggleArchivar(i.id_inmueble, i.archivadoLocal)
+                          }
+                          className="px-4 py-2 text-sm rounded-md font-medium bg-red-100 text-red-700 hover:bg-red-200 transition"
+                        >
+                          Archivar
+                        </button>
+                        <button
+                          onClick={() => handleModificar(i.id_inmueble)}
+                          className="px-4 py-2 text-sm rounded-md font-medium bg-blue-100 text-blue-700 hover:bg-blue-200 transition"
+                        >
+                          Modificar
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
             )}
-
             {/* PAGINACIÓN ACTIVOS */}
             {totalPaginasActivos > 1 && (
               <div className="flex justify-center items-center gap-3 mt-6">
@@ -330,7 +465,6 @@ const inmueblesFiltrados = inmuebles.filter((i) => {
                 >
                   ← Anterior
                 </button>
-
                 {[...Array(totalPaginasActivos)].map((_, index) => (
                   <button
                     key={index}
@@ -344,7 +478,6 @@ const inmueblesFiltrados = inmuebles.filter((i) => {
                     {index + 1}
                   </button>
                 ))}
-
                 <button
                   onClick={() =>
                     setPaginaActivos((p) =>
@@ -360,156 +493,148 @@ const inmueblesFiltrados = inmuebles.filter((i) => {
             )}
           </div>
         </div>
-
-        {/* ARCHIVADOS */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 mt-10">
-          <div className="p-6 border-b border-gray-200">
-            <h2 className="text-2xl font-semibold text-gray-700">
-              Inmuebles Archivados
-            </h2>
-          </div>
-
-          <div className="p-6">
-            {archivados.length === 0 ? (
-              <p className="text-center text-gray-500">
-                No hay inmuebles archivados.
-              </p>
-            ) : (
-              <div className="grid gap-4">
-                {archivadosPagina.map((i) => (
-                  <div
-                    key={i.id_inmueble}
-                    className="group border-2 border-gray-200 rounded-xl p-5 hover:shadow-lg transition-all relative border-l-4 border-l-red-400"
-                  >
-                    <div className="mb-3 flex flex-wrap items-center gap-2">
-                      {i.estado?.nombre && (
-                        <span className="px-3 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-700">
-                          {i.estado.nombre}
-                        </span>
-                      )}
-                      {i.operacion?.nombre && (
-                        <span className="px-3 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-700">
-                          {i.operacion.nombre}
-                        </span>
-                      )}
-                    </div>
-
-                    <InmuebleCard inmueble={i} />
-
-                    {/* ← Info básica de creación/modificación (igual para archivados) */}
-                    <div className="pt-4 border-t border-gray-100 mt-4">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-                        <div className="flex items-center gap-2 text-xs text-gray-500">
-                          <User className="w-3.5 h-3.5" />
-                          <span className="font-medium">Creado por:</span>
-                          <span className="font-bold text-gray-700">{i.createdBy?.nombre || 'N/A'}</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-xs text-gray-500">
-                          <Calendar className="w-3.5 h-3.5" />
-                          <span className="font-medium">Creado:</span>
-                          <span className="font-bold text-gray-700">
-                            {i.createdAt ? new Date(i.createdAt).toLocaleDateString('es-ES', {
-                              day: '2-digit',
-                              month: 'short',
-                              year: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit'
-                            }).replace(',', ' •') : 'N/A'}
+        {/* ARCHIVADOS - Solo para usuarios logueados */}
+        {isAuthenticated && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 mt-10">
+            <div className="p-6 border-b border-gray-200">
+              <h2 className="text-2xl font-semibold text-gray-700">
+                Inmuebles Archivados
+              </h2>
+            </div>
+            <div className="p-6">
+              {archivados.length === 0 ? (
+                <p className="text-center text-gray-500">
+                  No hay inmuebles archivados.
+                </p>
+              ) : (
+                <div className="grid gap-4">
+                  {archivadosPagina.map((i) => (
+                    <div
+                      key={i.id_inmueble}
+                      className="group border-2 border-gray-200 rounded-xl p-5 hover:shadow-lg transition-all relative border-l-4 border-l-red-400"
+                    >
+                      <div className="mb-3 flex flex-wrap items-center gap-2">
+                        {i.estado?.nombre && (
+                          <span className="px-3 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-700">
+                            {i.estado.nombre}
                           </span>
-                        </div>
-                        <div className="flex items-center gap-2 text-xs text-gray-500">
-                          <User className="w-3.5 h-3.5" />
-                          <span className="font-medium">Actualizado por:</span>
-                          <span className="font-bold text-gray-700">{i.updatedBy?.nombre || 'N/A'}</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-xs text-gray-500">
-                          <Calendar className="w-3.5 h-3.5" />
-                          <span className="font-medium">Actualizado:</span>
-                          <span className="font-bold text-gray-700">
-                            {i.updatedAt ? new Date(i.updatedAt).toLocaleDateString('es-ES', {
-                              day: '2-digit',
-                              month: 'short',
-                              year: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit'
-                            }).replace(',', ' •') : 'N/A'}
+                        )}
+                        {i.operacion?.nombre && (
+                          <span className="px-3 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-700">
+                            {i.operacion.nombre}
                           </span>
+                        )}
+                      </div>
+                      <InmuebleCard inmueble={i} />
+                      {/* ← Info básica de creación/modificación (igual para archivados) */}
+                      <div className="pt-4 border-t border-gray-100 mt-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                          <div className="flex items-center gap-2 text-xs text-gray-500">
+                            <User className="w-3.5 h-3.5" />
+                            <span className="font-medium">Creado por:</span>
+                            <span className="font-bold text-gray-700">{i.createdBy?.nombre || 'N/A'}</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-xs text-gray-500">
+                            <Calendar className="w-3.5 h-3.5" />
+                            <span className="font-medium">Creado:</span>
+                            <span className="font-bold text-gray-700">
+                              {i.createdAt ? new Date(i.createdAt).toLocaleDateString('es-ES', {
+                                day: '2-digit',
+                                month: 'short',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              }).replace(',', ' •') : 'N/A'}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 text-xs text-gray-500">
+                            <User className="w-3.5 h-3.5" />
+                            <span className="font-medium">Actualizado por:</span>
+                            <span className="font-bold text-gray-700">{i.updatedBy?.nombre || 'N/A'}</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-xs text-gray-500">
+                            <Calendar className="w-3.5 h-3.5" />
+                            <span className="font-medium">Actualizado:</span>
+                            <span className="font-bold text-gray-700">
+                              {i.updatedAt ? new Date(i.updatedAt).toLocaleDateString('es-ES', {
+                                day: '2-digit',
+                                month: 'short',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              }).replace(',', ' •') : 'N/A'}
+                            </span>
+                          </div>
                         </div>
                       </div>
+                      <div className="mt-4 flex gap-3">
+                        {/* ACTIVAR → cuando SÍ está archivado */}
+                        <button
+                          onClick={() =>
+                            toggleArchivar(i.id_inmueble, i.archivadoLocal)
+                          }
+                          className="px-4 py-2 text-sm rounded-md font-medium bg-green-100 text-green-700 hover:bg-green-200 transition"
+                        >
+                          Activar
+                        </button>
+                        <button
+                          onClick={() => handleModificar(i.id_inmueble)}
+                          className="px-4 py-2 text-sm rounded-md font-medium bg-blue-100 text-blue-700 hover:bg-blue-200 transition"
+                        >
+                          Modificar
+                        </button>
+                        <button
+                          onClick={() => handleEliminar(i.id_inmueble)}
+                          className="px-4 py-2 text-sm rounded-md font-medium bg-red-100 text-red-700 hover:bg-red-200 transition"
+                        >
+                          Eliminar
+                        </button>
+                      </div>
                     </div>
-
-                    <div className="mt-4 flex gap-3">
-                      {/* ACTIVAR → cuando SÍ está archivado */}
-                      <button
-                        onClick={() =>
-                          toggleArchivar(i.id_inmueble, i.archivadoLocal)
-                        }
-                        className="px-4 py-2 text-sm rounded-md font-medium bg-green-100 text-green-700 hover:bg-green-200 transition"
-                      >
-                        Activar
-                      </button>
-
-                      <button
-                        onClick={() => handleModificar(i.id_inmueble)}
-                        className="px-4 py-2 text-sm rounded-md font-medium bg-blue-100 text-blue-700 hover:bg-blue-200 transition"
-                      >
-                        Modificar
-                      </button>
-
-                      <button
-                        onClick={() => handleEliminar(i.id_inmueble)}
-                        className="px-4 py-2 text-sm rounded-md font-medium bg-red-100 text-red-700 hover:bg-red-200 transition"
-                      >
-                        Eliminar
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* PAGINACIÓN ARCHIVADOS */}
-            {totalPaginasArchivados > 1 && (
-              <div className="flex justify-center items-center gap-3 mt-6">
-                <button
-                  onClick={() =>
-                    setPaginaArchivados((p) => Math.max(p - 1, 1))
-                  }
-                  disabled={paginaArchivados === 1}
-                  className="px-3 py-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 disabled:opacity-50"
-                >
-                  ← Anterior
-                </button>
-
-                {[...Array(totalPaginasArchivados)].map((_, index) => (
+                  ))}
+                </div>
+              )}
+              {/* PAGINACIÓN ARCHIVADOS */}
+              {totalPaginasArchivados > 1 && (
+                <div className="flex justify-center items-center gap-3 mt-6">
                   <button
-                    key={index}
-                    onClick={() => setPaginaArchivados(index + 1)}
-                    className={`px-3 py-2 rounded-lg ${
-                      paginaArchivados === index + 1
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    }`}
+                    onClick={() =>
+                      setPaginaArchivados((p) => Math.max(p - 1, 1))
+                    }
+                    disabled={paginaArchivados === 1}
+                    className="px-3 py-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 disabled:opacity-50"
                   >
-                    {index + 1}
+                    ← Anterior
                   </button>
-                ))}
-
-                <button
-                  onClick={() =>
-                    setPaginaArchivados((p) =>
-                      Math.min(p + 1, totalPaginasArchivados)
-                    )
-                  }
-                  disabled={paginaArchivados === totalPaginasArchivados}
-                  className="px-3 py-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 disabled:opacity-50"
-                >
-                  Siguiente →
-                </button>
-              </div>
-            )}
+                  {[...Array(totalPaginasArchivados)].map((_, index) => (
+                    <button
+                      key={index}
+                      onClick={() => setPaginaArchivados(index + 1)}
+                      className={`px-3 py-2 rounded-lg ${
+                        paginaArchivados === index + 1
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                    >
+                      {index + 1}
+                    </button>
+                  ))}
+                  <button
+                    onClick={() =>
+                      setPaginaArchivados((p) =>
+                        Math.min(p + 1, totalPaginasArchivados)
+                      )
+                    }
+                    disabled={paginaArchivados === totalPaginasArchivados}
+                    className="px-3 py-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 disabled:opacity-50"
+                  >
+                    Siguiente →
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </main>
     </div>
   );

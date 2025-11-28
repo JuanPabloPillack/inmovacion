@@ -1,37 +1,61 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
+
 import { useState, useEffect } from 'react';
 import { TrendingUp, AlertCircle, Check, ArrowLeft, Upload, Trash2 } from 'lucide-react';
 import Header from '@/components/ui/Header';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 
+/**
+ * Interface que representa un registro de IPC almacenado en BD.
+ * "valor" puede venir como número o como string decimal desde la API.
+ */
 interface IpcData {
   id: number;
   mes: number;
   anio: number;
-  valor: number | string | null; // puede venir como string (Decimal) o número
+  valor: number | string | null;
   fuente: string;
   fechaConsulta: string;
 }
 
 export default function IpcManagementPage() {
+  
+  // Estado donde guardamos todos los datos de IPC obtenidos de la API
   const [ipcData, setIpcData] = useState<IpcData[]>([]);
+
+  // Manejo de errores
   const [error, setError] = useState<string | null>(null);
+
+  // Loading general mientras se cargan o procesan datos
   const [loading, setLoading] = useState(false);
+
+  // Filtro por año para la tabla
   const [filterYear, setFilterYear] = useState<number | null>(null);
 
+  /**
+   * useEffect que solo se ejecuta una vez al cargar la página.
+   * Llama a la función que obtiene los datos de IPC desde "/api/rendiciones/ipc"
+   */
   useEffect(() => {
     fetchIpcData();
   }, []);
 
+  /**
+   * Función que hace el fetch a la API y actualiza ipcData con los resultados.
+   */
   const fetchIpcData = async () => {
     setLoading(true);
+
     try {
       const res = await fetch('/api/rendiciones/ipc');
       if (!res.ok) throw new Error('No se pudieron cargar los datos de IPC');
+
+      // La API responde { datos: [...] }
       const { datos } = await res.json();
       setIpcData(datos || []);
+
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -39,16 +63,28 @@ export default function IpcManagementPage() {
     }
   };
 
+  // ============================================================
+  // 📌 SUBIR ARCHIVO EXCEL Y PROCESARLO AUTOMÁTICAMENTE
+  // ============================================================
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+
     const file = e.target.files?.[0];
     if (!file) return;
-    setLoading(true);
-    try {
-      const data = await file.arrayBuffer();
-      const workbook = XLSX.read(data);
-      const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      const rows: any[] = XLSX.utils.sheet_to_json(sheet);
 
+    setLoading(true);
+
+    try {
+      // Convertimos el archivo a ArrayBuffer para que XLSX pueda leerlo
+      const data = await file.arrayBuffer();
+
+      const workbook = XLSX.read(data); // Leemos el archivo
+      const sheet = workbook.Sheets[workbook.SheetNames[0]]; // Tomamos la primera hoja
+      const rows: any[] = XLSX.utils.sheet_to_json(sheet); // Convertimos filas a JSON
+
+      /**
+       * Mapeamos cada fila del Excel a un objeto compatible con nuestra API:
+       * mes | año | valor | fuente | fechaConsulta
+       */
       const nuevosDatos = rows.map(r => ({
         mes: Number(r.mes),
         anio: Number(r.anio),
@@ -57,6 +93,7 @@ export default function IpcManagementPage() {
         fechaConsulta: r.fecha_publicacion ?? new Date().toISOString(),
       }));
 
+      // Enviamos todos los registros a la API
       const res = await fetch('/api/rendiciones/ipc', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -64,12 +101,14 @@ export default function IpcManagementPage() {
       });
 
       const result = await res.json();
+
       if (result.success) {
         toast.success(`Archivo procesado y guardado: ${result.count} registros`);
-        fetchIpcData();
+        fetchIpcData(); // Volvemos a cargar la tabla
       } else {
         toast.error('Error guardando en BD: ' + result.error);
       }
+
     } catch (err: any) {
       toast.error('Error al leer archivo Excel');
       setError(err.message || 'Error desconocido');
@@ -78,32 +117,56 @@ export default function IpcManagementPage() {
     }
   };
 
+  // ============================================================
+  // 📌 ELIMINAR UN REGISTRO DE IPC
+  // ============================================================
   const handleDelete = async (id: number) => {
-  if (!confirm('¿Estás seguro de eliminar este dato de IPC?')) return;
-  try {
-    // enviamos el id por query string
-    const res = await fetch(`/api/rendiciones/ipc?id=${id}`, { method: 'DELETE' });
-    const result = await res.json();
 
-    if (!res.ok || !result.success) throw new Error(result.error || 'No se pudo eliminar');
+    if (!confirm('¿Estás seguro de eliminar este dato de IPC?')) return;
 
-    toast.success('Dato de IPC eliminado');
-    fetchIpcData();
-  } catch (err: any) {
-    toast.error(err.message || 'Error desconocido');
-  }
-};
+    try {
+      // Enviamos el id por query string para eliminarlo
+      const res = await fetch(`/api/rendiciones/ipc?id=${id}`, {
+        method: 'DELETE'
+      });
 
+      const result = await res.json();
 
-  // ✅ Función para formatear correctamente los valores
-  const formatValor = (valor: number | string | null) => {
-    if (valor === null || valor === undefined) return 'N/A';
-    const num = typeof valor === 'string' ? parseFloat(valor) : valor;
-    return isNaN(num) ? 'N/A' : num.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      if (!res.ok || !result.success)
+        throw new Error(result.error || 'No se pudo eliminar');
+
+      toast.success('Dato de IPC eliminado');
+      fetchIpcData();
+
+    } catch (err: any) {
+      toast.error(err.message || 'Error desconocido');
+    }
   };
 
+  // ============================================================
+  // 📌 Formatear número del IPC con decimales
+  // ============================================================
+  const formatValor = (valor: number | string | null) => {
+    if (valor === null || valor === undefined) return 'N/A';
+
+    // Si viene como string decimal, lo convertimos
+    const num = typeof valor === 'string' ? parseFloat(valor) : valor;
+
+    return isNaN(num)
+      ? 'N/A'
+      : num.toLocaleString('es-ES', {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2
+        });
+  };
+
+  // Años disponibles para el selector de filtro
   const years = Array.from(new Set(ipcData.map(d => d.anio))).sort((a, b) => b - a);
-  const filteredData = filterYear ? ipcData.filter(d => d.anio === filterYear) : ipcData;
+
+  // Si el usuario selecciona un año, filtramos, si no mostramos todo
+  const filteredData = filterYear
+    ? ipcData.filter(d => d.anio === filterYear)
+    : ipcData;
 
   return (
     <div className="min-h-screen bg-gray-50">

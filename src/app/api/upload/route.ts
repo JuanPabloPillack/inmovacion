@@ -9,7 +9,7 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// Evita que Next.js intente parsear automáticamente el body
+// Evita que Next.js intente parsear automáticamente el body, porque eso rompe el upload.
 export const config = {
   api: {
     bodyParser: false,
@@ -33,8 +33,8 @@ export async function POST(req: Request) {
     // Subir a Cloudinary
     const uploadRes = await new Promise<any>((resolve, reject) => {
       const stream = cloudinary.uploader.upload_stream(
-        { folder: "inmuebles", resource_type: "image" },
-        (error, result) => {
+        { folder: "inmuebles", resource_type: "image" }, //folder: "inmuebles" → las imágenes se guardan en esa carpeta.
+        (error, result) => {                             //resource_type: "image" → el archivo se tratará como imagen.
           if (error) reject(error);
           else resolve(result);
         }
