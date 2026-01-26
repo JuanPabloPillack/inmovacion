@@ -251,6 +251,10 @@ model Template {
   createdById     String
   createdBy       User     @relation("CreatedTemplates", fields: [createdById], references: [id], onDelete: Restrict)
 
+  // ✅ ÍNDICES OPTIMIZADOS
+  @@index([nombre])
+  @@index([tipo])
+  @@index([createdAt])
   @@map("templates")
 }
 
@@ -281,9 +285,20 @@ model Contrato {
   updatedById String
   updatedBy   User @relation("UpdatedContracts", fields: [updatedById], references: [id], onDelete: Restrict)
 
+  // ✅ ÍNDICES CRÍTICOS PARA PERFORMANCE
+  @@index([nombre])
+  @@index([tipo_contrato])
+  @@index([activo])
+  @@index([firmado])
+  @@index([fecha_inicio])
+  @@index([fecha_fin])
+  @@index([id_cliente_1])
+  @@index([id_cliente_2])
+  @@index([id_inmueble])
+  @@index([id_template])
+  @@index([createdAt])
   @@map("contratos")
 }
-
 model Rendicion {
   id_rendicion Int        @id @default(autoincrement())
   id_inmueble  Int

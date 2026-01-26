@@ -1,7 +1,7 @@
 //src/app/(protected)/contratos/page.tsx
 
 'use client';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { FileText, PlusCircle, AlertCircle, Download, Trash2, Calendar, DollarSign, User, Home, Search, ArrowLeft, Filter, X, Edit3, Eye, CheckCircle, XCircle, MoreVertical } from 'lucide-react';
 import Combobox from '@/components/ui/combobox';
 import Header from '@/components/ui/Header';
@@ -90,11 +90,7 @@ const showNotification = (
     return { cliente1: 'Cliente 1', cliente2: 'Cliente 2' };
   };
 
-  useEffect(() => {
-    fetchClientes();
-    fetchInmuebles();
-    fetchTemplates();
-  }, []);
+
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -117,43 +113,72 @@ useEffect(() => {
   return () => document.removeEventListener('mousedown', handleClickOutside);
 }, [openMenuId]);
 
-  const fetchClientes = async () => {
-    try {
-      const res = await fetch('/api/clientes');
-      if (!res.ok) throw new Error('Error al cargar clientes');
-      const data = await res.json();
-      setClientes(data);
-    } catch (err) {
-      setError('No se pudieron cargar los clientes');
-    }
-  };
+// ✅ OPTIMIZACIÓN: Cargar datos iniciales en paralelo (UNA SOLA VEZ)
+  useEffect(() => {
+    const fetchInitialData = async () => {
+      try {
+        setLoading(true);
+        
+        const [clientesRes, inmueblesRes, templatesRes] = await Promise.all([
+          fetch('/api/clientes'),
+          fetch('/api/inmuebles'),
+          fetch('/api/templates?pageSize=100')
+        ]);
 
-  const fetchInmuebles = async () => {
-    try {
-      const res = await fetch('/api/inmuebles');
-      if (!res.ok) throw new Error('Error al cargar inmuebles');
-      const data = await res.json();
-      setInmuebles(data);
-    } catch (err) {
-      setError('No se pudieron cargar los inmuebles');
-    }
-  };
+        if (!clientesRes.ok || !inmueblesRes.ok || !templatesRes.ok) {
+          throw new Error('Error al cargar datos');
+        }
 
-  const fetchTemplates = async () => {
-    try {
-      const res = await fetch('/api/templates?pageSize=1000');
-      if (!res.ok) throw new Error('Error al cargar templates');
-      const data = await res.json();
-      setTemplates(data.templates || []);
-    } catch (err) {
-      setError('No se pudieron cargar los templates');
-    }
-  };
+        const [clientesData, inmueblesData, templatesData] = await Promise.all([
+          clientesRes.json(),
+          inmueblesRes.json(),
+          templatesRes.json()
+        ]);
 
-  const fetchContratos = async () => {
+        setClientes(clientesData);
+        setInmuebles(inmueblesData);
+        setTemplates(templatesData.templates || []);
+      } catch (err) {
+        setError('No se pudieron cargar los datos iniciales');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchInitialData();
+  }, []); // ← Solo se ejecuta UNA VEZ
+
+  // ✅ OPTIMIZACIÓN: Memoizar opciones para evitar recalcular
+  const clienteOptions = useMemo(
+    () => clientes.map(c => ({
+      value: c.id_cliente,
+      label: `${c.nombre} ${c.apellido}`
+    })),
+    [clientes]
+  );
+
+  const inmuebleOptions = useMemo(
+    () => inmuebles.map(i => ({
+      value: i.id_inmueble,
+      label: i.titulo
+    })),
+    [inmuebles]
+  );
+
+  const templateOptions = useMemo(
+    () => templates.map(t => ({
+      value: t.id,
+      label: t.nombre
+    })),
+    [templates]
+  );
+
+  // ✅ OPTIMIZACIÓN: fetchContratos con useCallback
+  const fetchContratos = useCallback(async () => {
     try {
       setLoading(true);
       const params = new URLSearchParams();
+      
       if (search) params.append('search', search);
       if (fechaDesde) params.append('fechaDesde', fechaDesde);
       if (fechaHasta) params.append('fechaHasta', fechaHasta);
@@ -169,7 +194,9 @@ useEffect(() => {
 
       const url = `/api/contracts?${params.toString()}`;
       const res = await fetch(url);
+      
       if (!res.ok) throw new Error('Error al cargar contratos');
+      
       const { contratos, total } = await res.json();
       setContratos(contratos);
       setTotal(total);
@@ -178,7 +205,20 @@ useEffect(() => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [
+    search,
+    fechaDesde,
+    fechaHasta,
+    tipoContrato,
+    id_cliente_1,
+    id_cliente_2,
+    id_inmueble,
+    id_template,
+    firmado,
+    activo,
+    page,
+    pageSize
+  ]);
 
   const handleAction = (id: number, nombre: string, action: 'desactivar' | 'activar' | 'eliminar' | 'firmar' | 'desfirmar') => {
     setItemToAction({ id, nombre });
@@ -258,9 +298,6 @@ const confirmAction = async () => {
 
   const hasActiveFilters = search || fechaDesde || fechaHasta || tipoContrato || id_cliente_1 || id_cliente_2 || id_inmueble || id_template || firmado !== undefined || activo !== undefined;
 
- const clienteOptions = clientes.map(c => ({ value: c.id_cliente, label: `${c.nombre} ${c.apellido}` }));
-  const inmuebleOptions = inmuebles.map(i => ({ value: i.id_inmueble, label: i.titulo }));
-  const templateOptions = templates.map(t => ({ value: t.id, label: t.nombre }));
 
   const { cliente1: labelCliente1, cliente2: labelCliente2 } = getClienteLabels(tipoContrato);
 

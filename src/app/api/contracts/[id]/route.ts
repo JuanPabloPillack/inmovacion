@@ -51,12 +51,14 @@ const patchSchema = z.object({
   message: 'Se debe proporcionar al menos un campo: firmado o activo',
 });
 
-// ==================== GET ====================
+
+// ==================== GET OPTIMIZADO ====================
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const numId = Number(id);
   if (isNaN(numId)) return NextResponse.json({ error: 'ID inválido' }, { status: 400 });
 
+  // ✅ OPTIMIZACIÓN: Select solo campos necesarios
   const contrato = await db.contrato.findUnique({
     where: { id_contrato: numId },
     select: {
@@ -76,10 +78,34 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       firmado: true,
       createdAt: true,
       updatedAt: true,
-      cliente_1: { select: { nombre: true, apellido: true } },
-      cliente_2: { select: { nombre: true, apellido: true } },
-      inmueble: { select: { titulo: true } },
-      template: { select: { nombre: true } },
+      // Solo campos necesarios de las relaciones
+      cliente_1: { 
+        select: { 
+          id_cliente: true,
+          nombre: true, 
+          apellido: true 
+        } 
+      },
+      cliente_2: { 
+        select: { 
+          id_cliente: true,
+          nombre: true, 
+          apellido: true 
+        } 
+      },
+      inmueble: { 
+        select: { 
+          id_inmueble: true,
+          titulo: true 
+        } 
+      },
+      template: { 
+        select: { 
+          id: true,
+          nombre: true,
+          camposVariables: true
+        } 
+      },
     },
   });
 
