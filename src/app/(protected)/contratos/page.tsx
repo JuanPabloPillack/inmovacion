@@ -5,8 +5,8 @@ import { useState, useEffect, useRef } from 'react';
 import { FileText, PlusCircle, AlertCircle, Download, Trash2, Calendar, DollarSign, User, Home, Search, ArrowLeft, Filter, X, Edit3, Eye, CheckCircle, XCircle, MoreVertical } from 'lucide-react';
 import Combobox from '@/components/ui/combobox';
 import Header from '@/components/ui/Header';
-
-interface Cliente { id_cliente: number; nombre: string; }
+import Modal from '@/components/ui/Modal';
+interface Cliente { id_cliente: number; nombre: string; apellido: string; }
 interface Inmueble { id_inmueble: number; titulo: string; }
 interface Template { id: number; nombre: string; }
 interface UserInfo { id: string; name: string; }
@@ -15,8 +15,8 @@ interface Contrato {
   id_contrato: number;
   nombre: string;
   tipo_contrato: 'ALQUILER_LOCACION' | 'COMPRA_VENTA';
-  cliente_1: { id_cliente: number; nombre: string };
-  cliente_2: { id_cliente: number; nombre: string };
+  cliente_1: { id_cliente: number; nombre: string; apellido: string; };
+  cliente_2: { id_cliente: number; nombre: string; apellido: string; };
   inmueble: { id_inmueble: number; titulo: string };
   template: { id: number; nombre: string };
   valores: { [key: string]: string };
@@ -58,6 +58,28 @@ function Contratos() {
   const [showFilters, setShowFilters] = useState(false);
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
   const menuRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
+
+  // Estado para notificaciones
+const [notification, setNotification] = useState<{
+  isOpen: boolean;
+  variant: 'success' | 'error' | 'warning' | 'info';
+  title: string;
+  message: string;
+}>({
+  isOpen: false,
+  variant: 'success',
+  title: '',
+  message: '',
+});
+
+// Función helper para mostrar notificaciones
+const showNotification = (
+  variant: 'success' | 'error' | 'warning' | 'info',
+  title: string,
+  message: string
+) => {
+  setNotification({ isOpen: true, variant, title, message });
+};
 
   const getClienteLabels = (tipo: 'ALQUILER_LOCACION' | 'COMPRA_VENTA' | '') => {
     if (tipo === 'ALQUILER_LOCACION') {
@@ -165,36 +187,56 @@ useEffect(() => {
     setOpenMenuId(null);
   };
 
-  const confirmAction = async () => {
-    if (!itemToAction) return;
-    try {
-      if (modalAction === 'desactivar' || modalAction === 'activar' || modalAction === 'firmar' || modalAction === 'desfirmar') {
-        const res = await fetch(`/api/contracts/${itemToAction.id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            activo: modalAction === 'activar' ? true : modalAction === 'desactivar' ? false : undefined,
-            firmado: modalAction === 'firmar' ? true : modalAction === 'desfirmar' ? false : undefined,
-          }),
-        });
-        if (!res.ok) throw new Error(`Error al ${modalAction === 'desactivar' ? 'desactivar' : modalAction === 'activar' ? 'activar' : modalAction === 'firmar' ? 'marcar como firmado' : 'desmarcar como firmado'} el contrato`);
-      } else if (modalAction === 'eliminar') {
-        const res = await fetch(`/api/contracts/${itemToAction.id}`, {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-        });
-        if (!res.ok) throw new Error('Error al eliminar permanentemente el contrato');
+const confirmAction = async () => {
+  if (!itemToAction) return;
+  
+  try {
+    if (modalAction === 'desactivar' || modalAction === 'activar' || modalAction === 'firmar' || modalAction === 'desfirmar') {
+      const res = await fetch(`/api/contracts/${itemToAction.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          activo: modalAction === 'activar' ? true : modalAction === 'desactivar' ? false : undefined,
+          firmado: modalAction === 'firmar' ? true : modalAction === 'desfirmar' ? false : undefined,
+        }),
+      });
+      
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Error en la operación');
       }
-      setError(null);
-      fetchContratos();
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setModalOpen(false);
-      setItemToAction(null);
+      
+      // Mostrar notificación de éxito
+      showNotification(
+        'success',
+        '¡Operación exitosa!',
+        `Contrato ${modalAction === 'activar' ? 'activado' : modalAction === 'desactivar' ? 'desactivado' : modalAction === 'firmar' ? 'marcado como firmado' : 'desmarcado como firmado'} correctamente.`
+      );
+      
+    } else if (modalAction === 'eliminar') {
+      const res = await fetch(`/api/contracts/${itemToAction.id}`, {
+        method: 'DELETE',
+      });
+      
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Error al eliminar');
+      }
+      
+      showNotification('success', '¡Eliminado!', 'Contrato eliminado permanentemente.');
     }
-  };
-
+    
+    setError(null);
+    fetchContratos();
+    
+  } catch (err: any) {
+    showNotification('error', 'Error', err.message || 'Ocurrió un error inesperado');
+    setError(err.message);
+  } finally {
+    setModalOpen(false);
+    setItemToAction(null);
+  }
+};
   const closeModal = () => {
     setModalOpen(false);
     setItemToAction(null);
@@ -216,7 +258,7 @@ useEffect(() => {
 
   const hasActiveFilters = search || fechaDesde || fechaHasta || tipoContrato || id_cliente_1 || id_cliente_2 || id_inmueble || id_template || firmado !== undefined || activo !== undefined;
 
-  const clienteOptions = clientes.map(c => ({ value: c.id_cliente, label: c.nombre }));
+ const clienteOptions = clientes.map(c => ({ value: c.id_cliente, label: `${c.nombre} ${c.apellido}` }));
   const inmuebleOptions = inmuebles.map(i => ({ value: i.id_inmueble, label: i.titulo }));
   const templateOptions = templates.map(t => ({ value: t.id, label: t.nombre }));
 
@@ -593,13 +635,23 @@ useEffect(() => {
                                       <Eye className="w-4 h-4" />
                                       Vista Previa
                                     </a>
-                                    <a
-                                      href={`/contratos/editar/${contrato.id_contrato}`}
-                                      className="flex items-center gap-2 px-4 py-2 text-sm text-[#686363] hover:bg-[#10b981] hover:text-white transition-colors"
-                                    >
-                                      <Edit3 className="w-4 h-4" />
-                                      Editar
-                                    </a>
+{contrato.firmado ? (
+  <div 
+    className="flex items-center gap-2 px-4 py-2 text-sm text-gray-400 cursor-not-allowed opacity-60"
+  >
+    <Edit3 className="w-4 h-4" />
+    Editar
+
+  </div>
+) : (
+  <a
+    href={`/contratos/editar/${contrato.id_contrato}`}
+    className="flex items-center gap-2 px-4 py-2 text-sm text-[#686363] hover:bg-[#10b981] hover:text-white transition-colors"
+  >
+    <Edit3 className="w-4 h-4" />
+    Editar
+  </a>
+)}
                                     <a
                                       href={contrato.archivoPath}
                                       download
@@ -623,6 +675,7 @@ useEffect(() => {
                                     >
                                       <XCircle className="w-4 h-4" />
                                       Desactivar
+                                      
                                     </button>
                                   </>
                                 )}
@@ -670,11 +723,11 @@ useEffect(() => {
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                             <div className="p-4 rounded-lg bg-gradient-to-br from-[#63bae9]/5 to-[#63bae9]/0 border border-[#63bae9]/10">
                               <p className="text-xs font-bold text-[#63bae9] uppercase mb-1">{cliente1}</p>
-                              <p className="text-base font-bold text-[#686363]">{contrato.cliente_1.nombre}</p>
+                              <p className="text-base font-bold text-[#686363]">{contrato.cliente_1.nombre} {contrato.cliente_1.apellido}</p>
                             </div>
                             <div className="p-4 rounded-lg bg-gradient-to-br from-[#63bae9]/5 to-[#63bae9]/0 border border-[#63bae9]/10">
                               <p className="text-xs font-bold text-[#63bae9] uppercase mb-1">{cliente2}</p>
-                              <p className="text-base font-bold text-[#686363]">{contrato.cliente_2.nombre}</p>
+                              <p className="text-base font-bold text-[#686363]">{contrato.cliente_2.nombre} {contrato.cliente_2.apellido}</p>
                             </div>
                           </div>
                         </div>
@@ -815,51 +868,46 @@ useEffect(() => {
           </div>
         </div>
 
-        {modalOpen && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 animate-in zoom-in-95 duration-200">
-              <div className="flex items-center gap-4 mb-4">
-                <div className="w-12 h-12 rounded-xl bg-red-100 flex items-center justify-center">
-                  <AlertCircle className="w-6 h-6 text-red-600" />
-                </div>
-                <h3 className="text-xl font-bold text-[#686363]">
-                  {modalAction === 'desactivar' ? '¿Desactivar contrato?' :
-                   modalAction === 'activar' ? '¿Activar contrato?' :
-                   modalAction === 'eliminar' ? '¿Eliminar permanentemente?' :
-                   modalAction === 'firmar' ? '¿Marcar como firmado?' : '¿Desmarcar como firmado?'}
-                </h3>
-              </div>
-              <p className="text-[#969696] mb-6">
-                ¿Estás seguro de que quieres {modalAction === 'desactivar' ? 'desactivar' :
-                                         modalAction === 'activar' ? 'activar' :
-                                         modalAction === 'eliminar' ? 'eliminar permanentemente' :
-                                         modalAction === 'firmar' ? 'marcar como firmado' : 'desmarcar como firmado'}
-                el contrato <span className="font-bold text-[#686363]">"{itemToAction?.nombre}"</span>?
-                {modalAction === 'eliminar' && ' Esta acción no se puede deshacer.'}
-              </p>
-              <div className="flex gap-3">
-                <button
-                  onClick={closeModal}
-                  className="flex-1 px-4 py-3 rounded-xl border-2 border-gray-200 font-semibold text-[#686363] hover:bg-gray-50 transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={confirmAction}
-                  className={`flex-1 px-4 py-3 rounded-xl font-semibold text-white transition-all hover:shadow-lg hover:scale-105 active:scale-95 ${
-                    modalAction === 'activar' || modalAction === 'firmar' ? 'bg-green-500 hover:bg-green-600' :
-                    'bg-red-500 hover:bg-red-600'
-                  }`}
-                >
-                  {modalAction === 'desactivar' ? 'Desactivar' :
-                   modalAction === 'activar' ? 'Activar' :
-                   modalAction === 'eliminar' ? 'Eliminar' :
-                   modalAction === 'firmar' ? 'Marcar Firmado' : 'Desmarcar Firmado'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Modal de confirmación */}
+<Modal
+  isOpen={modalOpen}
+  onClose={closeModal}
+  onConfirm={confirmAction}
+  title={
+    modalAction === 'desactivar' ? '¿Desactivar contrato?' :
+    modalAction === 'activar' ? '¿Activar contrato?' :
+    modalAction === 'eliminar' ? '¿Eliminar permanentemente?' :
+    modalAction === 'firmar' ? '¿Marcar como firmado?' :
+    '¿Desmarcar como firmado?'
+  }
+  message={
+    `¿Estás seguro de que quieres ${
+      modalAction === 'desactivar' ? 'desactivar' :
+      modalAction === 'activar' ? 'activar' :
+      modalAction === 'eliminar' ? 'eliminar permanentemente' :
+      modalAction === 'firmar' ? 'marcar como firmado' : 'desmarcar como firmado'
+    } el contrato "${itemToAction?.nombre}"?${
+      modalAction === 'eliminar' ? ' Esta acción no se puede deshacer.' : ''
+    }`
+  }
+  variant={modalAction === 'eliminar' || modalAction === 'desactivar' ? 'danger' : 'warning'}
+  confirmText={
+    modalAction === 'desactivar' ? 'Desactivar' :
+    modalAction === 'activar' ? 'Activar' :
+    modalAction === 'eliminar' ? 'Eliminar' :
+    modalAction === 'firmar' ? 'Marcar Firmado' : 'Desmarcar Firmado'
+  }
+/>
+
+{/* Modal de notificación */}
+<Modal
+  isOpen={notification.isOpen}
+  onClose={() => setNotification(prev => ({ ...prev, isOpen: false }))}
+  title={notification.title}
+  message={notification.message}
+  variant={notification.variant}
+  autoClose={3000}
+/>
       </main>
     </div>
   );

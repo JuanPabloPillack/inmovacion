@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { FileText, Upload, Trash2, AlertCircle, Check, ArrowLeft, Tag, Download, Search, Calendar } from 'lucide-react';
 import Header from '@/components/ui/Header';
-import ConfirmationModal from '@/components/ui/confirmation-modal';
+import Modal from '@/components/ui/Modal';
 
 interface Template {
   id: number;
@@ -35,6 +35,28 @@ function TemplatePage() {
   const [page, setPage] = useState(1);
   const [pageSize] = useState(10);
   const [total, setTotal] = useState(0);
+
+  // Estado para notificaciones
+const [notification, setNotification] = useState<{
+  isOpen: boolean;
+  variant: 'success' | 'error' | 'warning' | 'info';
+  title: string;
+  message: string;
+}>({
+  isOpen: false,
+  variant: 'success',
+  title: '',
+  message: '',
+});
+
+// Función helper para mostrar notificaciones
+const showNotification = (
+  variant: 'success' | 'error' | 'warning' | 'info',
+  title: string,
+  message: string
+) => {
+  setNotification({ isOpen: true, variant, title, message });
+};
 
   useEffect(() => {
     setPage(1); // Resetear a la primera página al cambiar la búsqueda o filtros
@@ -73,74 +95,77 @@ function TemplatePage() {
     fetchTemplates();
   };
 
-  const handleUpload = async () => {
-    if (!nombre || !tipo || !file) {
-      setError('Por favor, ingresa un nombre, selecciona un tipo y selecciona un archivo .docx');
-      return;
-    }
+const handleUpload = async () => {
+  if (!nombre || !tipo || !file) {
+    showNotification('warning', 'Datos incompletos', 'Por favor, ingresa un nombre, selecciona un tipo y selecciona un archivo .docx');
+    return;
+  }
 
-    const formData = new FormData();
-    formData.append('nombre', nombre);
-    formData.append('tipo', tipo);
-    formData.append('file', file);
+  const formData = new FormData();
+  formData.append('nombre', nombre);
+  formData.append('tipo', tipo);
+  formData.append('file', file);
 
-    try {
-      setLoading(true);
-      setError(null);
-      const res = await fetch('/api/templates', {
-        method: 'POST',
-        body: formData,
-      });
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.error || 'Error al subir el template');
-      }
-      const data = await res.json();
-      setCampos(data.campos || []);
-      setNombre('');
-      setTipo('');
-      setFile(null);
-      setSuccessMessage('Template subido exitosamente');
-      setTimeout(() => setSuccessMessage(null), 5000);
-      setPage(1); // Resetear a la primera página después de subir
-      fetchTemplates();
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
+  try {
+    setLoading(true);
+    setError(null);
+    const res = await fetch('/api/templates', {
+      method: 'POST',
+      body: formData,
+    });
+    if (!res.ok) {
+      const errorData = await res.json();
+      throw new Error(errorData.error || 'Error al subir el template');
     }
-  };
+    const data = await res.json();
+    setCampos(data.campos || []);
+    setNombre('');
+    setTipo('');
+    setFile(null);
+    showNotification('success', '¡Éxito!', 'Template subido exitosamente');
+    setSuccessMessage('Template subido exitosamente');
+    setTimeout(() => setSuccessMessage(null), 5000);
+    setPage(1);
+    fetchTemplates();
+  } catch (err: any) {
+    showNotification('error', 'Error', err.message);
+    setError(err.message);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleDelete = (id: number, nombre: string) => {
     setItemToDelete({ id, nombre });
     setDeleteModalOpen(true);
   };
 
-  const confirmDelete = async () => {
-    if (!itemToDelete) return;
+const confirmDelete = async () => {
+  if (!itemToDelete) return;
 
-    try {
-      setLoading(true);
-      const res = await fetch('/api/templates', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: itemToDelete.id }),
-      });
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.error || 'Error al eliminar el template');
-      }
-      setSuccessMessage('Template eliminado exitosamente');
-      setTimeout(() => setSuccessMessage(null), 5000);
-      fetchTemplates(); // Refrescar con filtros y página actual
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-      setDeleteModalOpen(false);
-      setItemToDelete(null);
+  try {
+    setLoading(true);
+    const res = await fetch('/api/templates', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: itemToDelete.id }),
+    });
+    if (!res.ok) {
+      const errorData = await res.json();
+      throw new Error(errorData.error || 'Error al eliminar el template');
     }
-  };
+    
+    showNotification('success', '¡Eliminado!', 'Template eliminado exitosamente');
+    fetchTemplates();
+  } catch (err: any) {
+    showNotification('error', 'Error', err.message);
+    setError(err.message);
+  } finally {
+    setLoading(false);
+    setDeleteModalOpen(false);
+    setItemToDelete(null);
+  }
+};
 
   const closeModal = () => {
     setDeleteModalOpen(false);
@@ -630,17 +655,27 @@ function TemplatePage() {
           </div>
         </div>
 
-        {/* Modal de confirmación */}
-        <ConfirmationModal
-          isOpen={deleteModalOpen}
-          onClose={closeModal}
-          onConfirm={confirmDelete}
-          title="¿Eliminar Plantilla?"
-          message={itemToDelete ? `¿Estás seguro de que quieres eliminar la plantilla "${itemToDelete.nombre}"? Esta acción no se puede deshacer.` : ''}
-          confirmText="Eliminar"
-          cancelText="Cancelar"
-          variant="danger"
-        />
+       {/* Modal de confirmación */}
+<Modal
+  isOpen={deleteModalOpen}
+  onClose={closeModal}
+  onConfirm={confirmDelete}
+  title="¿Eliminar Plantilla?"
+  message={itemToDelete ? `¿Estás seguro de que quieres eliminar la plantilla "${itemToDelete.nombre}"? Esta acción no se puede deshacer.` : ''}
+  confirmText="Eliminar"
+  cancelText="Cancelar"
+  variant="danger"
+/>
+
+{/* Modal de notificación */}
+<Modal
+  isOpen={notification.isOpen}
+  onClose={() => setNotification(prev => ({ ...prev, isOpen: false }))}
+  title={notification.title}
+  message={notification.message}
+  variant={notification.variant}
+  autoClose={3000}
+/>
       </main>
     </div>
   );

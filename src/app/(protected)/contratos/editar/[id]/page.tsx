@@ -6,6 +6,7 @@ import { useRouter, useParams } from 'next/navigation';
 import Header from '@/components/ui/Header';
 import Combobox from '@/components/ui/combobox';
 import { z } from 'zod';
+import Modal from '@/components/ui/Modal';
 
 interface Cliente {
   id_cliente: number;
@@ -132,8 +133,44 @@ export default function EditContract() {
   const [formErrors, setFormErrors] = useState<{ [key: string]: string }>({});
   const [hasUserEditedMonto, setHasUserEditedMonto] = useState(false);
   const router = useRouter();
+  
   const params = useParams();
   const id = params.id;
+
+    // Estado para modal de confirmación antes de guardar cambios
+  const [confirmModalOpen, setConfirmModalOpen] = useState(false);
+
+  // Estado para notificaciones (éxito, error, warning, etc.)
+  const [notification, setNotification] = useState<{
+    isOpen: boolean;
+    variant: 'success' | 'error' | 'warning' | 'info' | 'danger';
+    title: string;
+    message: string;
+    autoClose?: number;
+  }>({
+    isOpen: false,
+    variant: 'success',
+    title: '',
+    message: '',
+  });
+
+  // Helper para mostrar notificaciones
+  const showNotification = (
+    variant: typeof notification.variant,
+    title: string,
+    message: string,
+    autoClose: number = 4000
+  ) => {
+    setNotification({ isOpen: true, variant, title, message, autoClose });
+  };
+
+  // Cierra la notificación
+  const closeNotification = () => {
+    setNotification(prev => ({ ...prev, isOpen: false }));
+  };
+
+  // Guardamos los datos validados para usarlos al confirmar
+  const [contractData, setContractData] = useState<any | null>(null);
 
   // Stabilize selected objects using useMemo
   const stableSelectedLocador = useMemo(() => selectedLocador, [selectedLocador]);
@@ -442,8 +479,8 @@ useEffect(() => {
 
   
    // Manejar envío del formulario
-  const handleSubmit = async () => {
-    const data: any = {
+    const handleSubmit = async () => {
+    const data = {
       nombre,
       tipo_contrato: tipoContrato as 'ALQUILER_LOCACION' | 'COMPRA_VENTA',
       id_locador: tipoContrato === 'ALQUILER_LOCACION' ? id_locador : undefined,
@@ -455,64 +492,99 @@ useEffect(() => {
       valores,
       fecha_inicio,
       fecha_fin,
-      monto,
+      monto, // la API espera number
     };
 
+    // 1. Validación con Zod
     const result = contractSchema.safeParse(data);
     if (!result.success) {
       const errors: { [key: string]: string } = {};
       result.error.issues.forEach((issue) => {
-        const path = issue.path[0];
-        if (typeof path === 'string' || typeof path === 'number') {
-          errors[path.toString()] = issue.message;
-        }
+        const path = issue.path[0]?.toString();
+        if (path) errors[path] = issue.message;
       });
-      setFormErrors((prev) => ({ ...prev, ...errors }));
-      setError(result.error.issues[0].message);
+      setFormErrors(prev => ({ ...prev, ...errors }));
+
+      const firstError = result.error.issues[0]?.message || 'Revisá los campos obligatorios';
+      showNotification('error', 'Formulario incompleto o inválido', firstError);
       return;
     }
 
+    // 2. Validación extra de monto máximo
     const montoNum = parseFloat(monto);
     if (montoNum > 999999999.99) {
-      setFormErrors((prev) => ({ ...prev, monto: 'El monto es demasiado grande' }));
-      setError('El monto es demasiado grande. Máximo permitido: 999,999,999.99');
+      setFormErrors(prev => ({ ...prev, monto: 'El monto es demasiado grande' }));
+      showNotification('error', 'Monto inválido', 'El monto excede el máximo permitido (999.999.999,99)');
       return;
     }
 
-    if (Object.keys(valores).length === 0) {
-      setFormErrors((prev) => ({ ...prev, valores: 'Selecciona una plantilla con campos variables' }));
-      setError('Debe haber al menos un campo variable definido');
+    // 3. Validación de campos variables vacíos
+    if (Object.values(valores).some(v => !v.trim())) {
+      showNotification('warning', 'Campos incompletos', 'Completá todos los campos variables antes de guardar');
       return;
     }
 
-    if (Object.values(valores).some((v) => !v)) {
-      setFormErrors((prev) => ({ ...prev, valores: 'Completa todos los campos variables' }));
-      setError('Por favor, completa todos los campos variables');
-      return;
-    }
+    // Todo OK → guardamos datos y mostramos confirmación
+    setContractData(data);
+    setConfirmModalOpen(true);
+  };
+
+  // Esta función se ejecuta SOLO cuando el usuario confirma
+  const confirmUpdate = async () => {
+    setConfirmModalOpen(false);
+
+    if (!contractData) return;
 
     try {
       setLoading(true);
-      setError(null);
       setFormErrors({});
+      setError(null);
+
       const res = await fetch(`/api/contracts/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
+        body: JSON.stringify(contractData),
       });
 
       if (!res.ok) {
         const errorData = await res.json();
-        throw new Error(errorData.error || 'Error al actualizar contrato');
+        let userMessage = errorData.error || 'No se pudo actualizar el contrato';
+
+        if (userMessage.includes('no encontrado')) {
+          userMessage = 'El contrato no existe o fue eliminado.';
+        } else if (userMessage.includes('plantilla')) {
+          userMessage = 'Hubo un problema con la plantilla seleccionada.';
+        }
+
+        throw new Error(userMessage);
       }
 
       const responseData = await res.json();
-      window.location.href = responseData.downloadUrl;
-      router.push('/contratos');
+
+      showNotification(
+        'success',
+        '¡Contrato actualizado!',
+        `Los cambios en "${nombre}" se guardaron correctamente.\nPuedes descargar la versión actualizada ahora.`,
+        5000
+      );
+
+      // Redirigir después de mostrar éxito
+      setTimeout(() => {
+        if (responseData.downloadUrl) {
+          window.location.href = responseData.downloadUrl;
+        }
+        router.push('/contratos');
+      }, 2500);
+
     } catch (err: any) {
-      setError(err.message || 'Error al actualizar el contrato');
+      showNotification(
+        'error',
+        'Error al actualizar',
+        err.message || 'Ocurrió un problema inesperado. Intenta nuevamente.'
+      );
     } finally {
       setLoading(false);
+      setContractData(null); // limpiamos
     }
   };
 
@@ -531,16 +603,16 @@ useEffect(() => {
     { id: 4, name: 'Template', completed: !!id_template },
   ];
 
-  if (loading && !contrato) {
-    return (
-      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#f8f9fa' }}>
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-gray-200 border-t-[#63bae9] rounded-full animate-spin mb-4"></div>
-          <p className="text-lg font-semibold text-[#686363]">Cargando contrato...</p>
-        </div>
+if (loading && !contrato) {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-[#f8f9fa]">
+      <div className="flex flex-col items-center gap-4">
+        <div className="w-16 h-16 border-4 border-gray-200 border-t-[#63bae9] rounded-full animate-spin"></div>
+        <p className="text-lg font-semibold text-[#686363]">Cargando contrato...</p>
       </div>
-    );
-  }
+    </div>
+  );
+}
 
   // CONTRATO FIRMADO O INACTIVO → pantalla bloqueada
 
@@ -1226,6 +1298,31 @@ if (contrato && (contrato.firmado || !contrato.activo)) {
           </div>
         </div>
       </main>
+              {/* Modal de confirmación antes de guardar cambios */}
+        {confirmModalOpen && (
+          <Modal
+            isOpen={confirmModalOpen}
+            onClose={() => setConfirmModalOpen(false)}
+            onConfirm={confirmUpdate}
+            title="¿Guardar cambios?"
+            message={`Vas a actualizar el contrato "${nombre}" (${tipoContrato === 'ALQUILER_LOCACION' ? 'Alquiler/Locación' : 'Compra/Venta'}). Se generará una nueva versión del archivo.\n\n¿Confirmar?`}
+            variant="warning"
+            confirmText="Guardar cambios"
+            cancelText="Cancelar"
+          />
+        )}
+
+        {/* Modal de notificación (éxito, error, etc.) */}
+        {notification.isOpen && (
+          <Modal
+            isOpen={notification.isOpen}
+            onClose={closeNotification}
+            title={notification.title}
+            message={notification.message}
+            variant={notification.variant}
+            autoClose={notification.autoClose}
+          />
+        )}
     </div>
   );
 }

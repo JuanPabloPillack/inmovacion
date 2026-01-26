@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import Header from '@/components/ui/Header';
 import Combobox from '@/components/ui/combobox';
 import { z } from 'zod';
+import Modal from '@/components/ui/Modal';
 
 interface Cliente {
   id_cliente: number;
@@ -123,6 +124,40 @@ export default function NewContract() {
   const [selectedInmueble, setSelectedInmueble] = useState<Inmueble | null>(null);
   const [formErrors, setFormErrors] = useState<{ [key: string]: string }>({});
   const router = useRouter();
+  // 1. Estado solo para el modal de confirmación (antes de crear)
+  const [confirmModalOpen, setConfirmModalOpen] = useState(false);
+
+  // 2. Estado separado para notificaciones (éxito, error, warning)
+  const [notification, setNotification] = useState<{
+    isOpen: boolean;
+    variant: 'success' | 'error' | 'warning' | 'info' | 'danger';
+    title: string;
+    message: string;
+    autoClose?: number;
+  }>({
+    isOpen: false,
+    variant: 'success',
+    title: '',
+    message: '',
+  });
+
+  // Helper para mostrar notificaciones (éxito, error, etc.)
+  const showNotification = (
+    variant: typeof notification.variant,
+    title: string,
+    message: string,
+    autoClose: number = 4000
+  ) => {
+    setNotification({ isOpen: true, variant, title, message, autoClose });
+  };
+
+  // Cierra la notificación
+  const closeNotification = () => {
+    setNotification(prev => ({ ...prev, isOpen: false }));
+  };
+
+    // Guardamos los datos validados para usarlos al confirmar
+  const [contractData, setContractData] = useState<Contrato | null>(null);
   const [hasUserEditedMonto, setHasUserEditedMonto] = useState(false);
 
   useEffect(() => {
@@ -356,7 +391,7 @@ useEffect(() => {
     return { ...rest, ...newErrors };
   });
 }, [fecha_inicio, fecha_fin, monto]);
-    const handleSubmit = async () => {
+  const handleSubmit = async () => {
     const data: Contrato = {
       nombre,
       tipo_contrato: tipoContrato as 'ALQUILER_LOCACION' | 'COMPRA_VENTA',
@@ -372,52 +407,91 @@ useEffect(() => {
       monto,
     };
 
+    // 1. Validación Zod
     const result = contractSchema.safeParse(data);
     if (!result.success) {
       const errors: { [key: string]: string } = {};
       result.error.issues.forEach((issue) => {
-        const path = issue.path[0];
-        if (typeof path === 'string' || typeof path === 'number') {
-          errors[path.toString()] = issue.message;
-        }
+        const path = issue.path[0]?.toString();
+        if (path) errors[path] = issue.message;
       });
-      setFormErrors((prev) => ({ ...prev, ...errors }));
-      setError(result.error.issues[0].message);
+      setFormErrors(prev => ({ ...prev, ...errors }));
+
+      const firstError = result.error.issues[0]?.message || 'Por favor revisa los campos obligatorios';
+      showNotification('error', 'Formulario incompleto o inválido', firstError);
       return;
     }
 
+    // 2. Validación monto máximo
     const montoNum = parseFloat(monto);
     if (montoNum > 999999999.99) {
-      setFormErrors((prev) => ({ ...prev, monto: 'El monto es demasiado grande' }));
-      setError('El monto es demasiado grande. Máximo permitido: 999,999,999.99');
+      setFormErrors(prev => ({ ...prev, monto: 'El monto es demasiado grande' }));
+      showNotification('error', 'Monto inválido', 'El monto excede el máximo permitido (999.999.999,99)');
       return;
     }
 
-    if (Object.values(valores).some((v) => !v)) {
-      setFormErrors((prev) => ({ ...prev, valores: 'Completa todos los campos variables' }));
-      setError('Por favor, completa todos los campos variables');
+    // 3. Validación campos variables vacíos
+    if (Object.values(valores).some(v => !v.trim())) {
+      showNotification('warning', 'Campos incompletos', 'Por favor completa todos los campos variables antes de continuar');
       return;
     }
+
+    // 4. Mostrar modal de confirmación
+    setContractData(data);           // ← Guardamos data en estado
+    setConfirmModalOpen(true);       // ← Abrimos confirmación
+  };
+
+  // 5. Esta función se ejecuta SOLO cuando el usuario confirma la creación
+  const confirmCreate = async () => {
+    setConfirmModalOpen(false);
 
     try {
       setLoading(true);
-      setError(null);
       setFormErrors({});
+
       const res = await fetch('/api/contracts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
+        body: JSON.stringify(contractData),
       });
+
       if (!res.ok) {
         const errorData = await res.json();
-        throw new Error(errorData.error || 'Error al crear contrato');
+        let userMessage = errorData.error || 'No se pudo crear el contrato';
+
+        // Mensajes más descriptivos y amigables
+        if (userMessage.includes('template no encontrado')) {
+          userMessage = 'La plantilla seleccionada no existe o fue eliminada. Selecciona otra.';
+        } else if (userMessage.includes('tipo de plantilla no coincide')) {
+          userMessage = 'El tipo de plantilla no coincide con el tipo de contrato.';
+        } else if (userMessage.includes('Error al guardar') || userMessage.includes('storage')) {
+          userMessage = 'Problema al guardar el archivo en el almacenamiento. Intenta nuevamente.';
+        }
+
+        throw new Error(userMessage);
       }
+
       const responseData = await res.json();
 
-      window.location.href = responseData.downloadUrl;
-      router.push('/contratos');
+      showNotification(
+        'success',
+        '¡Contrato creado con éxito!',
+        `El contrato "${nombre}" fue generado correctamente.\nPuedes descargarlo ahora o verlo en la lista de contratos.`,
+        5000
+      );
+
+      // Redirigir después de mostrar el éxito
+      setTimeout(() => {
+        window.location.href = responseData.downloadUrl;
+        router.push('/contratos');
+      }, 2500);
+
     } catch (err: any) {
-      setError(err.message || 'Error al crear el contrato');
+      showNotification(
+        'error',
+        'Error al crear el contrato',
+        err.message || 'Ocurrió un problema inesperado. Intenta nuevamente.'
+      );
     } finally {
       setLoading(false);
     }
@@ -1045,6 +1119,31 @@ useEffect(() => {
           </div>
         </div>
       </main>
+              {/* Modal de confirmación antes de crear */}
+        {confirmModalOpen && (
+          <Modal
+            isOpen={confirmModalOpen}
+            onClose={() => setConfirmModalOpen(false)}
+            onConfirm={confirmCreate}
+            title="¿Crear el contrato?"
+            message={`Vas a generar el contrato "${nombre}" (${tipoContrato === 'ALQUILER_LOCACION' ? 'Alquiler/Locación' : 'Compra/Venta'}). Esta acción generará un archivo .docx en el almacenamiento.\n\n¿Confirmar creación?`}
+            variant="warning"
+            confirmText="Crear contrato"
+            cancelText="Cancelar"
+          />
+        )}
+
+        {/* Modal de notificación (éxito, error, etc.) */}
+        {notification.isOpen && (
+          <Modal
+            isOpen={notification.isOpen}
+            onClose={closeNotification}
+            title={notification.title}
+            message={notification.message}
+            variant={notification.variant}
+            autoClose={notification.autoClose}
+          />
+        )}
     </div>
   );
 }
