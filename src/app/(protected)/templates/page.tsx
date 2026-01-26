@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { FileText, Upload, Trash2, AlertCircle, Check, ArrowLeft, Tag, Download, Search, Calendar } from 'lucide-react';
 import Header from '@/components/ui/Header';
-import ConfirmationModal from '@/components/ui/confirmation-modal';
+import ConfirmationModal from '@/components/ui/Modal';
 
 interface Template {
   id: number;

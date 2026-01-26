@@ -7,8 +7,17 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 
+//Loading
+import Loading from "@/components/ui/Loading";
+
 // Icono
 import { Home } from "lucide-react";
+import { Building, ArrowLeft, CheckCircle, AlertCircle } from "lucide-react"
+
+//Alertas
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
+
+import { Button } from "@/components/ui/button"
 
 // Componentes propios
 import Header from "@/components/ui/Header";
@@ -37,7 +46,11 @@ export default function EditarInmueblePage() {
   const [inmueble, setInmueble] = useState<InmuebleEdit | null>(null);
 
   // Para mostrar loading mientras se obtiene el inmueble
-  const [loading, setLoading] = useState(true);
+const [loading, setLoading] = useState(true)
+const [errorMessage, setErrorMessage] = useState<string | null>(null)
+const [successMessage, setSuccessMessage] = useState<string | null>(null)
+
+
 
   // --------------------------------------------------------
   // 1. FETCH para traer los datos del inmueble a editar
@@ -78,12 +91,14 @@ export default function EditarInmueblePage() {
         };
 
         setInmueble(inmuebleData);
-      } catch (err: any) {
-        console.error("❌ Error fetch inmueble:", err);
-        alert(err.message || "No se pudo cargar el inmueble");
-      } finally {
-        setLoading(false);
-      }
+      }  catch (err: any) {
+      console.error("❌ Error fetch inmueble:", err)
+      setErrorMessage(err.message || "No se pudo cargar el inmueble")
+      setInmueble(null)
+    } finally {
+      setLoading(false)
+    }
+
     };
 
     if (id) fetchInmueble();
@@ -187,14 +202,27 @@ export default function EditarInmueblePage() {
         throw new Error(errorData.error || "Error al actualizar inmueble");
       }
 
-      const updatedData = await res.json();
-      console.log("🔄 Frontend - Response PUT:", updatedData);
+      let updatedData = null;
+    try {
+      const text = await res.text();
+      updatedData = text ? JSON.parse(text) : null;
+    } catch {
+      updatedData = null;
+    }
 
-      alert("✅ Inmueble actualizado correctamente");
-      router.push("/propiedades");
+    console.log("🔄 Frontend - Response PUT:", updatedData);
+
+
+      setSuccessMessage("Los cambios se guardaron correctamente.")
+
+    setTimeout(() => {
+      router.push("/propiedades")
+    }, 1200)
+
     } catch (err: any) {
       console.error("❌ Error handleUpdate:", err);
-      alert(err.message || "Error al actualizar inmueble");
+      setErrorMessage(err.message || "No se pudo actualizar el inmueble")
+
     }
   };
 
@@ -207,46 +235,97 @@ export default function EditarInmueblePage() {
   // 4. Render
   // --------------------------------------------------------
 
-  if (loading)
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#63bae9] mx-auto mb-4"></div>
-          <p className="text-gray-600">Cargando inmueble...</p>
-        </div>
-      </div>
-    );
-
-  if (!inmueble)
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <p className="text-red-500">Inmueble no encontrado.</p>
-          <button onClick={handleCancel} className="mt-4 px-4 py-2 bg-gray-500 text-white rounded">
-            Volver
-          </button>
-        </div>
-      </div>
-    );
-
+  if (loading) {
   return (
-    <div className="min-h-screen" style={{ backgroundColor: "#f8f9fa" }}>
-      <Header />
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-5xl mx-auto px-8 py-8 flex items-center gap-4">
-          <div className="p-3 rounded-xl bg-[#e8f6fc]">
-            <Home className="w-7 h-7 text-[#63bae9]" />
-          </div>
-          <div>
-            <h1 className="text-3xl font-bold text-gray-700">Modificar Inmueble</h1>
-            <p className="text-sm mt-1 text-gray-500">
-              Edita la información del inmueble seleccionado
-            </p>
-          </div>
-        </div>
-      </header>
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <Loading
+        message="Cargando propiedad..."
+        size="lg"
+      />
+    </div>
+  );
+}
 
-      <main className="max-w-5xl mx-auto px-8 py-10">
+
+
+ return (
+  <div className="min-h-screen" style={{ backgroundColor: "#f8f9fa" }}>
+    <Header />
+
+    {/* Header de la página */}
+    <header className="bg-white shadow-sm border-b">
+      <div className="max-w-5xl mx-auto px-8 py-8 flex items-center gap-4">
+        <div className="p-3 rounded-xl bg-[#e8f6fc]">
+          <Home className="w-7 h-7 text-[#63bae9]" />
+        </div>
+        <div>
+          <h1 className="text-3xl font-bold text-gray-700">
+            Modificar Inmueble
+          </h1>
+          <p className="text-sm mt-1 text-gray-500">
+            Edita la información del inmueble seleccionado
+          </p>
+        </div>
+      </div>
+    </header>
+
+    <main className="max-w-5xl mx-auto px-8 py-10">
+      {/* ✅ ALERTA DE ÉXITO */}
+      {successMessage && (
+        <Alert className="mb-6 max-w-2xl mx-auto shadow-lg border-[#63bae9]/20 bg-[#63bae9]/10">
+          <CheckCircle className="h-4 w-4 text-[#63bae9]" />
+          <AlertDescription className="text-[#686363] text-sm">
+            {successMessage}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* ❌ ALERTA DE ERROR */}
+     {errorMessage && (
+      <Alert
+        variant="destructive"
+        className="
+          mb-6 max-w-2xl mx-auto shadow-lg border-red-200 bg-red-50/50
+          flex flex-col items-center text-center
+        "
+      >
+        <AlertCircle className="h-5 w-5 text-red-600 mb-2" />
+
+        <AlertDescription className="text-red-800 text-sm max-w-md">
+          {errorMessage}
+        </AlertDescription>
+
+        <div className="mt-6 flex flex-col sm:flex-row justify-center items-center gap-4 w-full">
+          <Button
+            onClick={() => setErrorMessage(null)}
+            className="h-12 bg-gradient-to-r from-[#63bae9] to-[#63bae9]/90 
+                      hover:from-[#63bae9]/90 hover:to-[#63bae9]/80 
+                      text-white font-medium rounded-xl shadow-lg 
+                      hover:shadow-xl transition-all duration-200 
+                      transform hover:scale-105"
+          >
+            Intentar nuevamente
+          </Button>
+
+          <Button
+            variant="outline"
+            onClick={handleCancel}
+            className="h-12 border-[#969696]/50 text-[#686363] 
+                      hover:bg-[#63bae9]/10 hover:text-[#63bae9] 
+                      rounded-xl font-medium text-sm 
+                      transition-all duration-200 
+                      transform hover:scale-105"
+          >
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Volver a propiedades
+          </Button>
+        </div>
+      </Alert>
+    )}
+
+
+      {/* 📝 FORMULARIO (solo si no hay error) */}
+      {!errorMessage && inmueble && (
         <div className="bg-white rounded-2xl shadow-sm border p-8">
           <FormularioInmueble
             initialData={inmueble}
@@ -255,7 +334,8 @@ export default function EditarInmueblePage() {
             onCancel={handleCancel}
           />
         </div>
-      </main>
-    </div>
-  );
+      )}
+    </main>
+  </div>
+);
 }

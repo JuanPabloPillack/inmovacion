@@ -19,7 +19,7 @@ import Header from "@/components/ui/Header"
 import { deactivateUser, deleteUser, activateUser } from "@/actions/user-actions"
 import type { User } from "../../../../types/user"
 import Loading from "@/components/ui/Loading"
-import ConfirmationModal from "@/components/ui/confirmation-modal"
+import ConfirmationModal from "@/components/ui/Modal"
 
 export default function UsersPage() {
   const { data: session, status } = useSession()

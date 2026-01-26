@@ -6,7 +6,7 @@ import { useState, useEffect } from 'react';
 import { DollarSign, PlusCircle, AlertCircle, Trash2 } from 'lucide-react';
 // Iconos SVG importados como componentes React.
 
-import ConfirmationModal from '@/components/ui/confirmation-modal';
+import ConfirmationModal from '@/components/ui/Modal';
 // Modal de confirmación para eliminar cobranzas.
 
 import Header from '@/components/ui/Header';

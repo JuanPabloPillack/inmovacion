@@ -24,7 +24,7 @@ import { getPagoById, deletePago } from "@/actions/pagos/pagos-actions";
 // Components
 import Header from "@/components/ui/Header";
 import Loading from "@/components/ui/Loading";
-import ConfirmationModal from "@/components/ui/confirmation-modal";
+import ConfirmationModal from "@/components/ui/Modal";
 
 export default function PagoDetallePage() {
   const router = useRouter();

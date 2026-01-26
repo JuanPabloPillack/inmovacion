@@ -31,7 +31,7 @@ import {
   Building 
 } from "lucide-react";
 import Header from "@/components/ui/Header";
-import ConfirmationModal from "@/components/ui/confirmation-modal";
+import ConfirmationModal from "@/components/ui/Modal";
 import { getUserById, updateUser } from "@/actions/user-actions";
 
 // Esquema de validación

@@ -25,7 +25,7 @@ import {
   Building 
 } from "lucide-react";
 import Header from "@/components/ui/Header";
-import ConfirmationModal from "@/components/ui/confirmation-modal";
+import ConfirmationModal from "@/components/ui/Modal";
 import { changePassword } from "@/actions/user-actions";
 import { registerSchema } from "@/lib/zod"; // Importa el esquema desde zod.ts
 

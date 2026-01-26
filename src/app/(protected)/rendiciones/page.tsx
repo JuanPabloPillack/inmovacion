@@ -7,7 +7,7 @@ import { useState, useEffect } from 'react';
 import { FileText, PlusCircle, Trash2, Pencil } from 'lucide-react';
 // 🔹 Iconos SVG usados en los botones y elementos visuales.
 
-import ConfirmationModal from '@/components/ui/confirmation-modal';
+import ConfirmationModal from '@/components/ui/Modal';
 import Header from '@/components/ui/Header';
 import toast, { Toaster } from 'react-hot-toast';
 // 🔹 toast = para mostrar notificaciones tipo “¡Éxito!” o “Error”.

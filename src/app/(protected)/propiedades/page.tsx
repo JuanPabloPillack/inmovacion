@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // src/app/(protected)/propiedades/page.tsx
 
 'use client';
@@ -13,9 +14,11 @@
  */
 
 import { useEffect, useState, useMemo } from 'react';
-import { Home, PlusCircle, AlertCircle, User, Calendar } from 'lucide-react';
+import { Home, PlusCircle, AlertCircle, User, Calendar, FileSignature } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert"
+
 
 import Header from '@/components/ui/Header';
 import InmuebleCard from '@/components/InmuebleCard';
@@ -25,6 +28,9 @@ import toast, { Toaster } from 'react-hot-toast';
 
 import type { InmuebleDTO } from '@/types/inmuebles';
 import type { FiltrosInmueble } from '@/types/filtros';
+import Loading from '@/components/ui/Loading';
+import Modal from "@/components/ui/Modal";
+
 
 // Tipado local que agrega la propiedad usada solo en UI.
 interface InmuebleLocal extends InmuebleDTO {
@@ -86,24 +92,19 @@ export default function PropiedadesPage() {
 
       const data: InmuebleDTO[] = await res.json();
 
-      // Si NO está logueado → mostrar solo activos
-      if (!isAuthenticated) {
-        const activeData = data.filter((i) => !(i.archivado ?? false));
-        setInmuebles(
-          activeData.map((i) => ({
-            ...i,
-            archivadoLocal: false,
-          }))
-        );
-      } else {
-        // Usuario logueado → ver todo
-        setInmuebles(
-          data.map((i) => ({
-            ...i,
-            archivadoLocal: i.archivado ?? false,
-          }))
-        );
-      }
+     setInmuebles(
+      data.map((i) => {
+        const esDisponible =
+          i.estado?.nombre?.toLowerCase() === 'disponible';
+
+        return {
+          ...i,
+          // 🔑 ÚNICA REGLA
+          archivadoLocal: !esDisponible,
+        };
+      })
+    );
+
     } catch (err) {
       console.error('❌ Error en fetchInmuebles:', err);
       setError('No se pudieron cargar los inmuebles');
@@ -171,35 +172,71 @@ export default function PropiedadesPage() {
     }
   };
 
-  // Eliminar inmueble
-  const handleEliminar = async (id: number) => {
-    if (!confirm('¿Estás seguro de eliminar esta propiedad?')) return;
+  // Eliminar inmueble (con Modal)
+  const handleEliminar = (id: number) => {
+    setModalConfig({
+      title: "Eliminar propiedad",
+      message:
+        "¿Estás seguro de que deseas eliminar esta propiedad? Esta acción no se puede deshacer.",
+      variant: "danger",
+      onConfirm: async () => {
+        try {
+          const res = await fetch(`/api/inmuebles/${id}`, {
+            method: "DELETE",
+          });
 
-    try {
-      const res = await fetch(`/api/inmuebles/${id}`, { method: 'DELETE' });
+          if (!res.ok) {
+            const errorText = await res.text();
 
-      if (!res.ok) {
-        const errorText = await res.text();
+            if (
+              errorText.includes("<!DOCTYPE") ||
+              errorText.includes("login") ||
+              res.status === 401
+            ) {
+              toast.error("Sesión requerida. Redirigiendo...");
+              router.push("/login");
+              return;
+            }
 
-        if (
-          errorText.includes('<!DOCTYPE') ||
-          errorText.includes('login') ||
-          res.status === 401
-        ) {
-          toast.error('Sesión requerida. Redirigiendo...');
-          router.push('/login');
-          return;
+            throw new Error("Error al eliminar la propiedad");
+          }
+
+          // Actualiza UI
+          setInmuebles((prev) =>
+            prev.filter((i) => i.id_inmueble !== id)
+          );
+
+          toast.success("Propiedad eliminada correctamente");
+          setModalOpen(false);
+
+        } catch (error: any) {
+          setModalConfig({
+            title: "Error",
+            message: error.message || "Error al eliminar la propiedad",
+            variant: "error",
+          });
+          setModalOpen(true);
         }
-        throw new Error();
-      }
+      },
+    });
 
-      setInmuebles((prev) => prev.filter((i) => i.id_inmueble !== id));
-      toast.success('Propiedad eliminada correctamente');
-
-    } catch {
-      toast.error('Error al eliminar la propiedad');
-    }
+    setModalOpen(true);
   };
+
+
+  // -----------------------------
+  // MODAL
+  // -----------------------------
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalConfig, setModalConfig] = useState<{
+    title: string;
+    message: string;
+    variant?: "success" | "error" | "warning" | "info" | "danger";
+    onConfirm?: () => void;
+  }>({
+    title: "",
+    message: "",
+  });
 
 
   // =====================================================================
@@ -276,13 +313,14 @@ export default function PropiedadesPage() {
   if (isLoadingAuth) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="inline-block w-12 h-12 border-4 border-gray-200 rounded-full animate-spin border-t-[#63bae9]" />
-          <p className="mt-4 text-lg font-medium text-gray-400">Cargando...</p>
-        </div>
+        <Loading
+          message="Cargando propiedades..."
+          size="lg"
+        />
       </div>
     );
   }
+
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -313,28 +351,51 @@ export default function PropiedadesPage() {
       {/* CONTENIDO */}
       <main className="max-w-7xl mx-auto px-6 py-8">
         {error && (
-          <div className="mb-6 p-4 rounded-xl flex items-start gap-3 shadow-sm bg-[#fef9e7] border-l-4 border-[#fcc238]">
-            <AlertCircle className="w-5 h-5 mt-0.5 text-yellow-500" />
-            <p className="font-medium text-gray-600">{error}</p>
-          </div>
-        )}
+        <Alert className="mb-6 bg-[#fef9e7] border-l-4 border-[#fcc238]">
+          <AlertCircle className="h-4 w-4 text-yellow-500" />
+          <AlertTitle>Error</AlertTitle>
+          <AlertDescription>
+            {error}
+          </AlertDescription>
+        </Alert>
+      )}
+
         {/* BOTÓN CREAR - Solo para usuarios logueados */}
         {isAuthenticated && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-            <button
-              onClick={handleCrear}
-              className="group p-6 rounded-xl font-medium text-white flex items-center gap-4 transition-all hover:shadow-lg hover:scale-[1.02] active:scale-[0.98] bg-[#63bae9]"
-            >
-              <div className="w-12 h-12 rounded-lg bg-white bg-opacity-20 flex items-center justify-center group-hover:rotate-12 transition-transform">
-                <PlusCircle className="w-6 h-6" />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+          <button
+            onClick={handleCrear}
+            className="group relative p-6 rounded-xl font-medium flex items-center gap-4 
+                      transition-all hover:shadow-lg hover:scale-[1.02] active:scale-[0.98]
+                      bg-[#63bae9] overflow-hidden"
+          >
+            {/* Overlay hover */}
+            <div className="absolute inset-0 bg-gradient-to-r from-white/0 to-white/25 
+                            opacity-0 group-hover:opacity-100 transition-opacity"></div>
+
+            {/* Contenido */}
+            <div className="relative flex items-center gap-4">
+              {/* Cuadrado blanco */}
+              <div className="w-14 h-14 rounded-xl bg-white flex items-center justify-center 
+                              group-hover:rotate-12 transition-transform duration-300 shadow-md">
+                <FileSignature className="w-7 h-7 text-[#63bae9]" strokeWidth={2} />
               </div>
-              <div>
-                <div className="text-lg font-semibold">Registrar Propiedad</div>
-                <div className="text-sm opacity-90">Agrega un nuevo inmueble</div>
+
+              {/* Texto */}
+              <div className="flex-1 text-left text-white">
+                <div className="text-lg font-bold mb-1">
+                  Registrar Propiedad
+                </div>
+                <div className="text-sm opacity-90">
+                  Agrega un nuevo inmueble
+                </div>
               </div>
-            </button>
-          </div>
-        )}
+            </div>
+          </button>
+        </div>
+      )}
+
+
         {/* FILTROS */}
         <Filtros
           filtros={filtros}
@@ -346,19 +407,28 @@ export default function PropiedadesPage() {
         />
         {/* LISTADO ACTIVOS */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 mt-8">
-          <div className="p-6 border-b border-gray-200">
+          <div className="p-6 border-b border-gray-200 flex items-center justify-between">
             <h2 className="text-2xl font-semibold text-gray-700">
               Inmuebles Activos
             </h2>
+
+            {/* Contador */}
+            <div className="flex items-center gap-3 px-4 py-2 rounded-lg bg-[#ecfdf5]">
+              <div className="w-2 h-2 rounded-full animate-pulse bg-[#22c55e]" />
+              <span className="text-sm font-medium text-gray-600">
+                {activos.length} {activos.length === 1 ? 'activo' : 'activos'}
+              </span>
+            </div>
           </div>
+
           <div className="p-6">
-            {(loading || isLoadingAuth) ? (
-              <div className="text-center py-16">
-                <div className="inline-block w-12 h-12 border-4 border-gray-200 rounded-full animate-spin border-t-[#63bae9]" />
-                <p className="mt-4 text-lg font-medium text-gray-400">
-                  Cargando inmuebles...
-                </p>
-              </div>
+          {loading && activos.length === 0 ? (
+            <div className="text-center py-20">
+              <div className="inline-block w-16 h-16 border-4 border-gray-200 border-t-[#63bae9] rounded-full animate-spin mb-4"></div>
+              <p className="text-lg font-semibold text-[#969696]">
+                Cargando inmuebles...
+              </p>
+            </div>
             ) : activos.length === 0 ? (
               <div className="text-center py-16">
                 <h3 className="text-xl font-semibold mb-2 text-gray-700">
@@ -372,19 +442,22 @@ export default function PropiedadesPage() {
                     key={i.id_inmueble}
                     className="group border-2 border-gray-200 rounded-xl p-5 hover:shadow-lg transition-all relative border-l-4 border-l-[#63bae9]"
                   >
-                    {/* Tags */}
-                    <div className="mb-3 flex flex-wrap items-center gap-2">
-                      {i.estado?.nombre && (
-                        <span className="px-3 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-700">
-                          {i.estado.nombre}
-                        </span>
-                      )}
-                      {i.operacion?.nombre && (
-                        <span className="px-3 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-700">
-                          {i.operacion.nombre}
-                        </span>
-                      )}
-                    </div>
+                    {/* Tags - solo usuarios logueados */}
+                    {isAuthenticated && (
+                      <div className="mb-3 flex flex-wrap items-center gap-2">
+                        {i.estado?.nombre && (
+                          <span className="px-3 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-700">
+                            {i.estado.nombre}
+                          </span>
+                        )}
+                        {i.operacion?.nombre && (
+                          <span className="px-3 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-700">
+                            {i.operacion.nombre}
+                          </span>
+                        )}
+                      </div>
+                    )}
+
                     <InmuebleCard inmueble={i} />
                     {/* ← Info básica de creación/modificación (solo para logueados) */}
                     {isAuthenticated && (
@@ -496,11 +569,20 @@ export default function PropiedadesPage() {
         {/* ARCHIVADOS - Solo para usuarios logueados */}
         {isAuthenticated && (
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 mt-10">
-            <div className="p-6 border-b border-gray-200">
+            <div className="p-6 border-b border-gray-200 flex items-center justify-between">
               <h2 className="text-2xl font-semibold text-gray-700">
                 Inmuebles Archivados
               </h2>
+
+              {/* Contador */}
+              <div className="flex items-center gap-3 px-4 py-2 rounded-lg bg-[#fef2f2]">
+                <div className="w-2 h-2 rounded-full animate-pulse bg-[#ef4444]" />
+                <span className="text-sm font-medium text-gray-600">
+                  {archivados.length} {archivados.length === 1 ? 'archivado' : 'archivados'}
+                </span>
+              </div>
             </div>
+
             <div className="p-6">
               {archivados.length === 0 ? (
                 <p className="text-center text-gray-500">
@@ -636,6 +718,17 @@ export default function PropiedadesPage() {
           </div>
         )}
       </main>
+
+      {/* MODAL GLOBAL */}
+    <Modal
+      isOpen={modalOpen}
+      onClose={() => setModalOpen(false)}
+      title={modalConfig.title}
+      message={modalConfig.message}
+      variant={modalConfig.variant}
+      onConfirm={modalConfig.onConfirm}
+    />
+
     </div>
   );
 }

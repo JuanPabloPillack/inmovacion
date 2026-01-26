@@ -24,7 +24,7 @@ import { getProveedorById, softDeleteProveedor } from "@/actions/proveedores/pro
 // Components
 import Header from "@/components/ui/Header";
 import Loading from "@/components/ui/Loading";
-import ConfirmationModal from "@/components/ui/confirmation-modal";
+import ConfirmationModal from "@/components/ui/Modal";
 
 export default function ProveedorDetallePage() {
   const router = useRouter();
