@@ -114,10 +114,14 @@ export default function PropiedadesPage() {
   };
 
   // Ejecuta el fetch cuando la sesión está lista
+  const [initialized, setInitialized] = useState(false);
+
   useEffect(() => {
-    if (status === 'loading') return;
+    if (status === 'loading' || initialized) return;
     fetchInmuebles();
-  }, [status]);
+    setInitialized(true);
+  }, [status, initialized]);
+
 
 
   // =====================================================================
@@ -206,8 +210,13 @@ export default function PropiedadesPage() {
             prev.filter((i) => i.id_inmueble !== id)
           );
 
-          toast.success("Propiedad eliminada correctamente");
-          setModalOpen(false);
+          setModalConfig({
+            title: "Propiedad eliminada",
+            message: "La propiedad se eliminó correctamente.",
+            variant: "success",
+            onConfirm: () => setModalOpen(false),
+          });
+          setModalOpen(true);
 
         } catch (error: any) {
           setModalConfig({
@@ -243,28 +252,37 @@ export default function PropiedadesPage() {
   // ============================ FILTRADO ================================
   // =====================================================================
 
-  const inmueblesFiltrados = inmuebles.filter((i) => {
-    if (filtros.operacionId && i.id_operacion !== filtros.operacionId) return false;
-    if (filtros.estadoId && i.id_estado !== filtros.estadoId) return false;
-    if (filtros.tipoId && i.id_tipo_inmueble !== filtros.tipoId) return false;
+  const inmueblesFiltrados = useMemo(() => {
+    return inmuebles.filter((i) => {
+      if (filtros.operacionId && i.id_operacion !== filtros.operacionId) return false;
+      if (filtros.estadoId && i.id_estado !== filtros.estadoId) return false;
+      if (filtros.tipoId && i.id_tipo_inmueble !== filtros.tipoId) return false;
 
-    // Precio mínimo
-    if (filtros.precioMin) {
-      const min = Number(filtros.precioMin);
-      if (i.precio == null || i.precio < min) return false;
-    }
+      if (filtros.precioMin) {
+        const min = Number(filtros.precioMin);
+        if (i.precio == null || i.precio < min) return false;
+      }
 
-    // Precio máximo
-    if (filtros.precioMax) {
-      const max = Number(filtros.precioMax);
-      if (i.precio == null || i.precio > max) return false;
-    }
+      if (filtros.precioMax) {
+        const max = Number(filtros.precioMax);
+        if (i.precio == null || i.precio > max) return false;
+      }
 
-    return true;
-  });
+      return true;
+    });
+  }, [inmuebles, filtros]);
 
-  const activos = inmueblesFiltrados.filter((i) => !i.archivadoLocal);
-  const archivados = inmueblesFiltrados.filter((i) => i.archivadoLocal);
+
+  const activos = useMemo(
+    () => inmueblesFiltrados.filter((i) => !i.archivadoLocal),
+    [inmueblesFiltrados]
+  );
+
+  const archivados = useMemo(
+    () => inmueblesFiltrados.filter((i) => i.archivadoLocal),
+    [inmueblesFiltrados]
+  );
+
 
 
   // =====================================================================

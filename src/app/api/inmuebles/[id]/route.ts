@@ -1,4 +1,3 @@
-// src/app/api/inmuebles/[id]/route.ts
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
@@ -22,7 +21,6 @@ const toDecimalOrUndefined = (v: any): Prisma.Decimal | undefined =>
 const normalize = (v: any) =>
   v === "" || v === null ? undefined : v;
 
-
 /* ============================= GET ============================= */
 export async function GET(
   _req: Request,
@@ -43,7 +41,11 @@ export async function GET(
         estado: true,
         operacion: true,
         cliente: true,
-        ubicacion: { include: { barrio: { include: { localidad: true } } } },
+        ubicacion: {
+          include: {
+            barrio: { include: { localidad: true } },
+          },
+        },
         imagenes: true,
         createdBy: { select: { id: true, name: true, email: true } },
         updatedBy: { select: { id: true, name: true, email: true } },
@@ -76,10 +78,10 @@ export async function GET(
       detalles: inmueble.detalles ?? undefined,
       archivado: Boolean(inmueble.archivado),
 
-      precio: inmueble.precio != null ? Number(inmueble.precio) : null,
+      precio: inmueble.precio !== null ? Number(inmueble.precio) : null,
       superficie_total: Number(inmueble.superficie_total),
       superficie_cubierta:
-        inmueble.superficie_cubierta != null
+        inmueble.superficie_cubierta !== null
           ? Number(inmueble.superficie_cubierta)
           : null,
 
@@ -110,48 +112,23 @@ export async function GET(
             provincia: inmueble.ubicacion.provincia,
             id_barrio: inmueble.ubicacion.id_barrio,
             barrio: inmueble.ubicacion.barrio
-        ? {
-            id_barrio: inmueble.ubicacion.barrio.id_barrio,
-            nombre: inmueble.ubicacion.barrio.nombre,
-            id_localidad: inmueble.ubicacion.barrio.id_localidad,
-            localidad: {
-              id_localidad:
-                inmueble.ubicacion.barrio.localidad.id_localidad,
-              nombre:
-                inmueble.ubicacion.barrio.localidad.nombre,
-            },
-          }
-        : null,
-
+              ? {
+                  id_barrio: inmueble.ubicacion.barrio.id_barrio,
+                  nombre: inmueble.ubicacion.barrio.nombre,
+                  id_localidad: inmueble.ubicacion.barrio.id_localidad,
+                  localidad: {
+                    id_localidad:
+                      inmueble.ubicacion.barrio.localidad.id_localidad,
+                    nombre:
+                      inmueble.ubicacion.barrio.localidad.nombre,
+                  },
+                }
+              : null,
           }
         : undefined,
-
-      estadoNombre: inmueble.estado?.nombre.toLowerCase() as
-        | "venta"
-        | "alquiler",
 
       createdAt: inmueble.createdAt?.toISOString(),
       updatedAt: inmueble.updatedAt?.toISOString(),
-
-      createdBy: inmueble.createdBy
-        ? {
-            id_usuario: String(inmueble.createdBy.id),
-            nombre:
-              inmueble.createdBy.name ||
-              inmueble.createdBy.email ||
-              "Usuario desconocido",
-          }
-        : undefined,
-
-      updatedBy: inmueble.updatedBy
-        ? {
-            id_usuario: String(inmueble.updatedBy.id),
-            nombre:
-              inmueble.updatedBy.name ||
-              inmueble.updatedBy.email ||
-              "Usuario desconocido",
-          }
-        : undefined,
     };
 
     return NextResponse.json(dto);
@@ -170,22 +147,106 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth();
-
   if (!session?.user?.id) {
     return NextResponse.json({ error: "No autenticado" }, { status: 401 });
   }
 
   const userId = session.user.id;
+  const { id } = await params;
+  const numId = Number(id);
 
-  await db.user.upsert({
-    where: { id: userId },
-    update: {},
-    create: {
-      id: userId,
-      name: session.user.name ?? "Usuario",
-      email: session.user.email!,
-    },
-  });
+  if (isNaN(numId)) {
+    return NextResponse.json({ error: "ID inválido" }, { status: 400 });
+  }
+
+  const body = await req.json();
+
+  try {
+    const result = await db.$transaction(async (tx) => {
+      /* ---------------- Inmueble ---------------- */
+      const inmueble = await tx.inmueble.update({
+        where: { id_inmueble: numId },
+        data: {
+          titulo: normalize(body.titulo),
+          detalles: normalize(body.detalles),
+
+          superficie_total: toDecimalOrUndefined(body.superficie_total),
+          superficie_cubierta: toDecimalOrUndefined(body.superficie_cubierta),
+          precio: toDecimalOrUndefined(body.precio),
+
+          cantidad_ambientes: toNumberOrUndefined(body.cantidad_ambientes),
+          cantidad_banos: toNumberOrUndefined(body.cantidad_banos),
+          cantidad_dormitorios: toNumberOrUndefined(body.cantidad_dormitorios),
+          cantidad_cocheras: toNumberOrUndefined(body.cantidad_cocheras),
+          cantidad_pisos: toNumberOrUndefined(body.cantidad_pisos),
+          antiguedad: toNumberOrUndefined(body.antiguedad),
+
+          id_tipo_inmueble: toNumberOrUndefined(body.id_tipo_inmueble),
+          id_estado: toNumberOrUndefined(body.id_estado),
+          id_operacion: toNumberOrUndefined(body.id_operacion),
+          id_cliente: toNumberOrUndefined(body.id_cliente),
+
+          updatedById: userId,
+        },
+      });
+
+      /* ---------------- Ubicación ---------------- */
+      if (
+        body.direccion ||
+        body.ciudad ||
+        body.provincia ||
+        body.id_barrio
+      ) {
+        await tx.ubicacion.update({
+          where: { id_ubicacion: inmueble.id_ubicacion },
+          data: {
+            direccion: normalize(body.direccion),
+            ciudad: normalize(body.ciudad),
+            provincia: normalize(body.provincia),
+            id_barrio: toNumberOrUndefined(body.id_barrio),
+          },
+        });
+      }
+
+      /* ---------------- Imágenes ---------------- */
+      if (Array.isArray(body.imagenes)) {
+        await tx.inmuebleImagen.deleteMany({
+          where: { inmuebleId: numId },
+        });
+
+        if (body.imagenes.length > 0) {
+          await tx.inmuebleImagen.createMany({
+            data: body.imagenes.map((img: any) => ({
+              url: img.url,
+              principal: Boolean(img.principal),
+              inmuebleId: numId,
+            })),
+          });
+        }
+      }
+
+      return inmueble;
+    });
+
+    return NextResponse.json(result);
+  } catch (error) {
+    console.error("❌ Error PUT /api/inmuebles/[id]:", error);
+    return NextResponse.json(
+      { error: "Error al actualizar inmueble" },
+      { status: 500 }
+    );
+  }
+}
+
+/* ============================= DELETE ============================= */
+export async function DELETE(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  }
 
   const { id } = await params;
   const numId = Number(id);
@@ -194,254 +255,20 @@ export async function PUT(
     return NextResponse.json({ error: "ID inválido" }, { status: 400 });
   }
 
-  const existente = await db.inmueble.findUnique({
-    where: { id_inmueble: numId },
-  });
-
-  if (!existente) {
-    return NextResponse.json(
-      { error: "Inmueble no encontrado" },
-      { status: 404 }
-    );
-  }
-
-  
-let payload: any = {};
-try {
-  const raw = await req.json();
-
-  payload = {
-    ...raw,
-    titulo: normalize(raw.titulo),
-    detalles: normalize(raw.detalles),
-    superficie_total: normalize(raw.superficie_total),
-    superficie_cubierta: normalize(raw.superficie_cubierta),
-    precio: normalize(raw.precio),
-    cantidad_ambientes: normalize(raw.cantidad_ambientes),
-    cantidad_banos: normalize(raw.cantidad_banos),
-    cantidad_dormitorios: normalize(raw.cantidad_dormitorios),
-    cantidad_cocheras: normalize(raw.cantidad_cocheras),
-    cantidad_pisos: normalize(raw.cantidad_pisos),
-    antiguedad: normalize(raw.antiguedad),
-    direccion: normalize(raw.direccion),
-    ciudad: normalize(raw.ciudad),
-    provincia: normalize(raw.provincia),
-    id_barrio: normalize(raw.id_barrio),
-    id_cliente: normalize(raw.id_cliente),
-    id_tipo_inmueble: normalize(raw.id_tipo_inmueble),
-    id_operacion: normalize(raw.id_operacion),
-    id_estado: normalize(raw.id_estado),
-  };
-} catch {}
-
-
-  if (!payload || Object.keys(payload).length === 0) {
-    return NextResponse.json(
-      { error: "No hay datos para actualizar" },
-      { status: 400 }
-    );
-  }
-
-  /* -------- VALIDACIONES NUMÉRICAS -------- */
-  if (
-    payload.superficie_total !== undefined &&
-    Number(payload.superficie_total) <= 0
-  ) {
-    return NextResponse.json(
-      { error: "La superficie total debe ser mayor a 0" },
-      { status: 400 }
-    );
-  }
-
-  if (
-    payload.superficie_cubierta !== undefined &&
-    payload.superficie_total !== undefined &&
-    Number(payload.superficie_cubierta) > Number(payload.superficie_total)
-  ) {
-    return NextResponse.json(
-      { error: "La superficie cubierta no puede ser mayor a la total" },
-      { status: 400 }
-    );
-  }
-
-  if (payload.precio !== undefined && Number(payload.precio) < 0) {
-    return NextResponse.json(
-      { error: "El precio no puede ser negativo" },
-      { status: 400 }
-    );
-  }
-
-  /* -------- VALIDAR RELACIONES -------- */
-  if (payload.id_cliente) {
-    const cliente = await db.cliente.findUnique({
-      where: { id_cliente: Number(payload.id_cliente) },
-    });
-    if (!cliente)
-      return NextResponse.json({ error: "Cliente inválido" }, { status: 400 });
-  }
-
-  if (payload.id_tipo_inmueble) {
-    const tipo = await db.tipo_inmueble.findUnique({
-      where: { id_tipo_inmueble: Number(payload.id_tipo_inmueble) },
-    });
-    if (!tipo)
-      return NextResponse.json(
-        { error: "Tipo de inmueble inválido" },
-        { status: 400 }
-      );
-  }
-
-  if (payload.id_operacion) {
-    const op = await db.operacion.findUnique({
-      where: { id_operacion: Number(payload.id_operacion) },
-    });
-    if (!op)
-      return NextResponse.json(
-        { error: "Operación inválida" },
-        { status: 400 }
-      );
-  }
-
-  if (payload.id_barrio !== undefined) {
-    const barrio = await db.barrio.findUnique({
-      where: { id_barrio: Number(payload.id_barrio) },
-    });
-    if (!barrio)
-      return NextResponse.json({ error: "Barrio inválido" }, { status: 400 });
-  }
-
-  /* -------- IMÁGENES -------- */
-  if (Array.isArray(payload.imagenes)) {
-    const principales = payload.imagenes.filter((i: any) => i.principal);
-    if (principales.length > 1) {
-      return NextResponse.json(
-        { error: "Solo puede haber una imagen principal" },
-        { status: 400 }
-      );
-    }
-    if (payload.imagenes.length > 0 && principales.length === 0) {
-      payload.imagenes[0].principal = true;
-    }
-  }
-
-  /* -------- ESTADO / ARCHIVADO -------- */
-  let archivadoFinal: boolean | undefined;
-  let estadoFinalId: number | undefined;
-
-  if (typeof payload.archivado === "boolean") {
-    archivadoFinal = payload.archivado;
-    if (payload.archivado === false) {
-      const estadoDisponible = await db.estado.findFirst({
-        where: { nombre: "Disponible" },
-      });
-      if (!estadoDisponible) {
-        return NextResponse.json(
-          { error: "No existe el estado 'Disponible'" },
-          { status: 500 }
-        );
-      }
-      estadoFinalId = estadoDisponible.id_estado;
-    }
-  } else if (payload.id_estado) {
-    const estadoDb = await db.estado.findUnique({
-      where: { id_estado: Number(payload.id_estado) },
-    });
-    if (!estadoDb) {
-      return NextResponse.json({ error: "Estado inválido" }, { status: 400 });
-    }
-    archivadoFinal = estadoDb.nombre.toLowerCase() !== "disponible";
-    estadoFinalId = estadoDb.id_estado;
-  }
-
   try {
-    const data: Prisma.InmuebleUpdateInput = {
-      titulo: payload.titulo ?? undefined,
-      superficie_total: toDecimalOrUndefined(payload.superficie_total),
-      superficie_cubierta: toDecimalOrUndefined(payload.superficie_cubierta),
-      cantidad_ambientes: toNumberOrUndefined(payload.cantidad_ambientes),
-      cantidad_banos: toNumberOrUndefined(payload.cantidad_banos),
-      cantidad_dormitorios: toNumberOrUndefined(payload.cantidad_dormitorios),
-      cantidad_cocheras: toNumberOrUndefined(payload.cantidad_cocheras),
-      cantidad_pisos: toNumberOrUndefined(payload.cantidad_pisos),
-      antiguedad: toNumberOrUndefined(payload.antiguedad),
-      precio: toDecimalOrUndefined(payload.precio),
-      detalles: payload.detalles ?? undefined,
-
-      updatedBy: { connect: { id: userId } },
-
-      ...(archivadoFinal !== undefined && { archivado: archivadoFinal }),
-      ...(estadoFinalId && {
-        estado: { connect: { id_estado: estadoFinalId } },
-      }),
-
-      foto:
-        payload.imagenes?.find((i: any) => i.principal)?.url ?? undefined,
-
-      tipo_inmueble: payload.id_tipo_inmueble
-        ? { connect: { id_tipo_inmueble: Number(payload.id_tipo_inmueble) } }
-        : undefined,
-
-      cliente: payload.id_cliente
-        ? { connect: { id_cliente: Number(payload.id_cliente) } }
-        : undefined,
-
-      operacion: payload.id_operacion
-        ? { connect: { id_operacion: Number(payload.id_operacion) } }
-        : undefined,
-    };
-
-    if (
-      payload.id_barrio !== undefined ||
-      payload.direccion ||
-      payload.ciudad ||
-      payload.provincia
-    ) {
-      data.ubicacion = {
-        update: {
-          direccion: payload.direccion ?? undefined,
-          ciudad: payload.ciudad ?? undefined,
-          provincia: payload.provincia ?? undefined,
-          id_barrio: toNumberOrUndefined(payload.id_barrio),
-        },
-      };
-    }
-
-    if (Array.isArray(payload.imagenes)) {
-      await db.inmuebleImagen.deleteMany({
-        where: { inmuebleId: numId },
-      });
-
-      if (payload.imagenes.length > 0) {
-        await db.inmuebleImagen.createMany({
-          data: payload.imagenes.map((img: any) => ({
-            url: img.url,
-            inmuebleId: numId,
-            principal: Boolean(img.principal),
-          })),
-        });
-      }
-    }
-
-    const actualizado = await db.inmueble.update({
-      where: { id_inmueble: numId },
-      data,
-      include: {
-        tipo_inmueble: true,
-        estado: true,
-        cliente: true,
-        operacion: true,
-        ubicacion: true,
-        imagenes: true,
-        createdBy: { select: { id: true, name: true, email: true } },
-        updatedBy: { select: { id: true, name: true, email: true } },
-      },
+    await db.inmuebleImagen.deleteMany({
+      where: { inmuebleId: numId },
     });
 
-    return NextResponse.json(actualizado);
+    await db.inmueble.delete({
+      where: { id_inmueble: numId },
+    });
+
+    return new NextResponse(null, { status: 204 });
   } catch (error) {
-    console.error("❌ Error PUT /api/inmuebles/[id]:", error);
+    console.error("❌ Error DELETE /api/inmuebles/[id]:", error);
     return NextResponse.json(
-      { error: "Error al actualizar inmueble", detalle: String(error) },
+      { error: "Error al eliminar inmueble" },
       { status: 500 }
     );
   }

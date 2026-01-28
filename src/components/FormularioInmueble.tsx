@@ -3,7 +3,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client"; // Esto indica a Next.js que el componente es del lado del cliente (usa hooks).
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation"; // Para redirecciones sin recargar página.
 import {
   Building2,
@@ -100,10 +100,13 @@ const [modalConfig, setModalConfig] = useState<{
   // -----------------------------------------------------------
   //               CARGA DE DATOS INICIALES
   // -----------------------------------------------------------
+  const [initialized, setInitialized] = useState(false);
+
   useEffect(() => {
+    if (initialized) return;
+
     const loadData = async () => {
       try {
-        // Se ejecutan las 4 llamadas en paralelo con Promise.all
         const [propRaw, tRaw, eRaw, oRaw] = await Promise.all([
           fetch("/api/clientes/propietarios").then((r) => r.json()),
           fetch("/api/tipos_inmueble").then((r) => r.json()),
@@ -111,13 +114,13 @@ const [modalConfig, setModalConfig] = useState<{
           fetch("/api/operaciones").then((r) => r.json()),
         ]);
 
-        console.log("DEBUG propietarios desde API:", propRaw);
-
-        // Cada endpoint puede devolver array directo o { data: [] }
         setClientes(Array.isArray(propRaw) ? propRaw : []);
         setTipos(Array.isArray(tRaw) ? tRaw : tRaw.data || []);
         setEstados(Array.isArray(eRaw) ? eRaw : eRaw.data || []);
         setOperaciones(Array.isArray(oRaw) ? oRaw : oRaw.data || []);
+
+        // 👇 clave
+        setInitialized(true);
       } catch (err) {
         console.error("Error cargando datos:", err);
       }
@@ -125,7 +128,6 @@ const [modalConfig, setModalConfig] = useState<{
 
     loadData();
 
-    // Si estamos editando, cargamos imágenes iniciales
     if (initialData?.imagenes?.length) {
       setImagenes(
         initialData.imagenes.map((img) => ({
@@ -134,7 +136,8 @@ const [modalConfig, setModalConfig] = useState<{
         }))
       );
     }
-  }, [initialData]);
+  }, [initialized, initialData]);
+
 
   // -----------------------------------------------------------
   //                   MANEJO DE IMÁGENES
@@ -185,6 +188,41 @@ const [modalConfig, setModalConfig] = useState<{
       prev.map((img, i) => ({ ...img, principal: i === index }))
     );
   };
+useEffect(() => {
+  if (initialized) return;
+
+  const loadData = async () => {
+    try {
+      const [propRaw, tRaw, eRaw, oRaw] = await Promise.all([
+        fetch("/api/clientes/propietarios").then((r) => r.json()),
+        fetch("/api/tipos_inmueble").then((r) => r.json()),
+        fetch("/api/estados").then((r) => r.json()),
+        fetch("/api/operaciones").then((r) => r.json()),
+      ]);
+
+      setClientes(Array.isArray(propRaw) ? propRaw : []);
+      setTipos(Array.isArray(tRaw) ? tRaw : tRaw.data || []);
+      setEstados(Array.isArray(eRaw) ? eRaw : eRaw.data || []);
+      setOperaciones(Array.isArray(oRaw) ? oRaw : oRaw.data || []);
+
+      // 👇 clave
+      setInitialized(true);
+    } catch (err) {
+      console.error("Error cargando datos:", err);
+    }
+  };
+
+  loadData();
+
+  if (initialData?.imagenes?.length) {
+    setImagenes(
+      initialData.imagenes.map((img) => ({
+        url: img.url,
+        principal: img.principal,
+      }))
+    );
+    }
+  }, [initialized, initialData]);
 
   // -----------------------------------------------------------
   //                     VALIDACIONES
@@ -381,12 +419,15 @@ const ejecutarSubmit = async () => {
 
     // ✅ Éxito
     setModalConfig({
-      title: "Inmueble guardado",
-      message: "El inmueble se guardó correctamente.",
+      title: initialData ? "Inmueble modificado" : "Inmueble creado",
+      message: initialData
+        ? "Los cambios se guardaron correctamente."
+        : "El inmueble se creó correctamente.",
       variant: "success",
       onConfirm: () => router.push("/propiedades"),
     });
     setModalOpen(true);
+
 
   } catch (error: any) {
     console.error("Error:", error);

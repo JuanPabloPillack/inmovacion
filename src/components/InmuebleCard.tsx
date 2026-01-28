@@ -1,7 +1,7 @@
 // src/components/InmuebleCard.tsx
 "use client";
 import Image from "next/image";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import type { InmuebleDTO } from "@/types/inmuebles";
 import type { FiltrosInmueble } from "@/types/filtros";
 import {
@@ -15,6 +15,7 @@ import {
   Clock,
   Home,
 } from "lucide-react";
+
 
 interface Props {
   inmueble: InmuebleDTO;
@@ -30,12 +31,24 @@ export default function InmuebleCard({ inmueble, filtrosAplicados }: Props) {
   }, [inmueble.imagenes]);
 
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
-  const images = orderedImages.map((img) => img.url);
+  const images = orderedImages
+    .slice(0, 10) // ⬅️ máximo 10 imágenes en el card
+    .map((img) => img.url);
 
-  const handlePrev = () =>
-    setCurrentImageIndex((prev) => (prev > 0 ? prev - 1 : images.length - 1));
-  const handleNext = () =>
-    setCurrentImageIndex((prev) => (prev < images.length - 1 ? prev + 1 : 0));
+    const hasImages = images.length > 0;
+
+
+  const handlePrev = useCallback(() => {
+  setCurrentImageIndex((prev) =>
+    prev > 0 ? prev - 1 : images.length - 1
+  );
+  }, [images.length]);
+
+  const handleNext = useCallback(() => {
+    setCurrentImageIndex((prev) =>
+      prev < images.length - 1 ? prev + 1 : 0
+    );
+  }, [images.length]);
 
   const precioFormatted = inmueble.precio
     ? new Intl.NumberFormat("es-AR", {
@@ -65,6 +78,14 @@ export default function InmuebleCard({ inmueble, filtrosAplicados }: Props) {
     return cantidad === 1 ? singular : plural;
   };
 
+  useEffect(() => {
+    images.forEach((src) => {
+      const img = new window.Image();
+      img.src = src;
+    });
+  }, [images]);
+
+
   return (
     <div
       className="
@@ -77,19 +98,15 @@ export default function InmuebleCard({ inmueble, filtrosAplicados }: Props) {
         {/* IMAGEN – lado izquierdo, más grande */}
         <div className="relative h-72 lg:h-auto overflow-hidden">
           <Image
-            src={
-              images[currentImageIndex] ||
-              inmueble.fotoPrincipal ||
-              "/placeholder-large.jpg"
-            }
+            src={images[currentImageIndex] || inmueble.fotoPrincipal || "/placeholder-large.jpg"}
             alt={inmueble.titulo || "Propiedad inmobiliaria"}
             fill
-            className="
-              object-cover transition-transform duration-700 
-              group-hover:scale-[1.06]
-            "
+            priority={currentImageIndex === 0}
+            loading={currentImageIndex === 0 ? "eager" : "lazy"}
+            className="object-cover transition-transform duration-700 group-hover:scale-[1.06]"
             sizes="(max-width: 1024px) 100vw, 55vw"
           />
+
 
           {/* Overlay + controles galería */}
           <div
@@ -100,7 +117,7 @@ export default function InmuebleCard({ inmueble, filtrosAplicados }: Props) {
             "
           />
 
-          {images.length > 1 && (
+          {hasImages && images.length > 1 && (
             <>
               <button
                 onClick={handlePrev}
