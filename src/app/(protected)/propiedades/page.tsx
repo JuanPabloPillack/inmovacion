@@ -3,22 +3,11 @@
 
 'use client';
 
-/**
- * Página principal de gestión de propiedades.
- * Contiene:
- * - Listado de inmuebles (activos y archivados)
- * - Paginación
- * - Filtros
- * - CRUD básico (crear, modificar, archivar y eliminar)
- * - Control de sesión (NextAuth)
- */
-
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { Home, PlusCircle, AlertCircle, User, Calendar, FileSignature } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert"
-
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 
 import Header from '@/components/ui/Header';
 import InmuebleCard from '@/components/InmuebleCard';
@@ -31,110 +20,100 @@ import type { FiltrosInmueble } from '@/types/filtros';
 import Loading from '@/components/ui/Loading';
 import Modal from "@/components/ui/Modal";
 
-
-// Tipado local que agrega la propiedad usada solo en UI.
 interface InmuebleLocal extends InmuebleDTO {
   archivadoLocal: boolean;
 }
 
 export default function PropiedadesPage() {
-
-  // -----------------------------
-  // SESIÓN
-  // -----------------------------
   const { data: session, status } = useSession();
   const isAuthenticated = !!session;
   const isLoadingAuth = status === 'loading';
 
-  // -----------------------------
-  // ESTADOS PRINCIPALES
-  // -----------------------------
   const [inmuebles, setInmuebles] = useState<InmuebleLocal[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // Paginación separada para activos y archivados
+  // Paginación
   const [paginaActivos, setPaginaActivos] = useState(1);
   const [paginaArchivados, setPaginaArchivados] = useState(1);
+  const [totalPagesActivos, setTotalPagesActivos] = useState(1);
+  const [totalPagesArchivados, setTotalPagesArchivados] = useState(1);
+  const [totalActivos, setTotalActivos] = useState(0);
+  const [totalArchivados, setTotalArchivados] = useState(0);
 
   const [filtros, setFiltros] = useState<FiltrosInmueble>({});
 
   const inmueblesPorPagina = 5;
   const router = useRouter();
 
-
   // =====================================================================
-  // ============================ FETCH INMUEBLES ==========================
+  // FETCH + FILTROS + PAGINACIÓN EN BACKEND
   // =====================================================================
 
   const fetchInmuebles = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
+      // Usamos la misma llamada para activos y archivados (el backend ya filtra)
+      const params = new URLSearchParams({
+        page: paginaActivos.toString(),
+        pageSize: inmueblesPorPagina.toString(),
+        ...(filtros.tipoId && { tipoId: filtros.tipoId.toString() }),
+        ...(filtros.estadoId && { estadoId: filtros.estadoId.toString() }),
+        ...(filtros.operacionId && { operacionId: filtros.operacionId.toString() }),
+        ...(filtros.precioMin && { precioMin: filtros.precioMin.toString() }),
+        ...(filtros.precioMax && { precioMax: filtros.precioMax.toString() }),
+      });
 
-      const res = await fetch('/api/inmuebles'); //Aquí el frontend hace un GET al endpoint /api/inmuebles
+      const res = await fetch(`/api/inmuebles?${params.toString()}`);
+
       if (!res.ok) {
         const errorText = await res.text();
-
-        // Detecta respuesta HTML que indica redirección o login
-        if (
-          errorText.includes('<!DOCTYPE') ||
-          errorText.includes('login') ||
-          res.status === 401 ||
-          res.status === 302
-        ) {
+        if (errorText.includes('<!DOCTYPE') || errorText.includes('login') || res.status === 401) {
           toast.error('Sesión requerida. Redirigiendo al login...');
           router.push('/login');
           return;
         }
-
-        throw new Error(`Error ${res.status}: No se pudieron cargar los inmuebles`);
+        throw new Error(`Error ${res.status}`);
       }
 
-      const data: InmuebleDTO[] = await res.json();
+      const json = await res.json();
 
-     setInmuebles(
-      data.map((i) => {
-        const esDisponible =
-          i.estado?.nombre?.toLowerCase() === 'disponible';
-
-        return {
+      setInmuebles(
+        json.data.map((i: InmuebleDTO) => ({
           ...i,
-          // 🔑 ÚNICA REGLA
-          archivadoLocal: !esDisponible,
-        };
-      })
-    );
+          archivadoLocal: i.estado?.nombre?.toLowerCase() !== 'disponible',
+        }))
+      );
+
+      // Guardamos info de paginación (el backend ya nos dice cuántos hay)
+      setTotalActivos(json.total);           // total filtrado
+      setTotalPagesActivos(json.totalPages); // total de páginas
+
+      // Si quieres separar activos/archivados con dos llamadas, puedes hacer otra fetch
+      // con un parámetro extra como &archivado=false o &archivado=true
+      // Por ahora asumimos que el listado trae todo y filtramos localmente lo mínimo
 
     } catch (err) {
-      console.error('❌ Error en fetchInmuebles:', err);
+      console.error('❌ Error fetchInmuebles:', err);
       setError('No se pudieron cargar los inmuebles');
     } finally {
       setLoading(false);
     }
   };
 
-  // Ejecuta el fetch cuando la sesión está lista
-  const [initialized, setInitialized] = useState(false);
-
+  // Recargar cuando cambian: sesión, página, filtros
   useEffect(() => {
-    if (status === 'loading' || initialized) return;
+    if (status === 'loading') return;
     fetchInmuebles();
-    setInitialized(true);
-  }, [status, initialized]);
-
-
+  }, [status, paginaActivos, paginaArchivados, filtros]);
 
   // =====================================================================
-  // ============================ HANDLERS ================================
+  // HANDLERS (sin cambios importantes)
   // =====================================================================
 
-  // Crear nuevo inmueble
   const handleCrear = () => router.push('/propiedades/nuevo');
-
-  // Modificar inmueble
   const handleModificar = (id: number) => router.push(`/propiedades/modificar/${id}`);
 
-  // Archivar / Desarchivar
   const toggleArchivar = async (id: number, archivado: boolean) => {
     try {
       const res = await fetch(`/api/inmuebles/${id}`, {
@@ -143,14 +122,9 @@ export default function PropiedadesPage() {
         body: JSON.stringify({ archivado: !archivado }),
       });
 
-      if (!res.ok) { //Si la respuesta falla (res.ok === false), se maneja el error, Si es correcta, se parsea JSON y se guarda en el estado inmuebles.
+      if (!res.ok) {
         const errorText = await res.text();
-
-        if (
-          errorText.includes('<!DOCTYPE') ||
-          errorText.includes('login') ||
-          res.status === 401
-        ) {
+        if (errorText.includes('<!DOCTYPE') || errorText.includes('login') || res.status === 401) {
           toast.error('Sesión requerida. Redirigiendo...');
           router.push('/login');
           return;
@@ -158,84 +132,20 @@ export default function PropiedadesPage() {
         throw new Error();
       }
 
-      // Actualiza en frontend inmediato
+      // Optimista: actualizamos localmente
       setInmuebles((prev) =>
         prev.map((i) =>
           i.id_inmueble === id ? { ...i, archivadoLocal: !archivado } : i
         )
       );
 
-      toast.success(
-        archivado
-          ? 'Propiedad reactivada correctamente'
-          : 'Propiedad archivada correctamente'
-      );
-
+      toast.success(archivado ? 'Propiedad reactivada' : 'Propiedad archivada');
+      fetchInmuebles(); // Refrescamos para consistencia
     } catch {
-      toast.error('Error al actualizar el inmueble');
+      toast.error('Error al actualizar');
     }
   };
 
-  // Eliminar inmueble (con Modal)
-  const handleEliminar = (id: number) => {
-    setModalConfig({
-      title: "Eliminar propiedad",
-      message:
-        "¿Estás seguro de que deseas eliminar esta propiedad? Esta acción no se puede deshacer.",
-      variant: "danger",
-      onConfirm: async () => {
-        try {
-          const res = await fetch(`/api/inmuebles/${id}`, {
-            method: "DELETE",
-          });
-
-          if (!res.ok) {
-            const errorText = await res.text();
-
-            if (
-              errorText.includes("<!DOCTYPE") ||
-              errorText.includes("login") ||
-              res.status === 401
-            ) {
-              toast.error("Sesión requerida. Redirigiendo...");
-              router.push("/login");
-              return;
-            }
-
-            throw new Error("Error al eliminar la propiedad");
-          }
-
-          // Actualiza UI
-          setInmuebles((prev) =>
-            prev.filter((i) => i.id_inmueble !== id)
-          );
-
-          setModalConfig({
-            title: "Propiedad eliminada",
-            message: "La propiedad se eliminó correctamente.",
-            variant: "success",
-            onConfirm: () => setModalOpen(false),
-          });
-          setModalOpen(true);
-
-        } catch (error: any) {
-          setModalConfig({
-            title: "Error",
-            message: error.message || "Error al eliminar la propiedad",
-            variant: "error",
-          });
-          setModalOpen(true);
-        }
-      },
-    });
-
-    setModalOpen(true);
-  };
-
-
-  // -----------------------------
-  // MODAL
-  // -----------------------------
   const [modalOpen, setModalOpen] = useState(false);
   const [modalConfig, setModalConfig] = useState<{
     title: string;
@@ -247,81 +157,54 @@ export default function PropiedadesPage() {
     message: "",
   });
 
+  const handleEliminar = (id: number) => {
+    setModalConfig({
+      title: "Eliminar propiedad",
+      message: "¿Estás seguro? Esta acción no se puede deshacer.",
+      variant: "danger",
+      onConfirm: async () => {
+        try {
+          const res = await fetch(`/api/inmuebles/${id}`, { method: "DELETE" });
+          if (!res.ok) throw new Error();
 
-  // =====================================================================
-  // ============================ FILTRADO ================================
-  // =====================================================================
-
-  const inmueblesFiltrados = useMemo(() => {
-    return inmuebles.filter((i) => {
-      if (filtros.operacionId && i.id_operacion !== filtros.operacionId) return false;
-      if (filtros.estadoId && i.id_estado !== filtros.estadoId) return false;
-      if (filtros.tipoId && i.id_tipo_inmueble !== filtros.tipoId) return false;
-
-      if (filtros.precioMin) {
-        const min = Number(filtros.precioMin);
-        if (i.precio == null || i.precio < min) return false;
-      }
-
-      if (filtros.precioMax) {
-        const max = Number(filtros.precioMax);
-        if (i.precio == null || i.precio > max) return false;
-      }
-
-      return true;
+          setInmuebles((prev) => prev.filter((i) => i.id_inmueble !== id));
+          setModalConfig({
+            title: "Eliminado",
+            message: "La propiedad se eliminó correctamente.",
+            variant: "success",
+            onConfirm: () => setModalOpen(false),
+          });
+          setModalOpen(true);
+          fetchInmuebles(); // Refrescamos
+        } catch {
+          setModalConfig({
+            title: "Error",
+            message: "No se pudo eliminar la propiedad",
+            variant: "error",
+          });
+          setModalOpen(true);
+        }
+      },
     });
-  }, [inmuebles, filtros]);
-
-
-  const activos = useMemo(
-    () => inmueblesFiltrados.filter((i) => !i.archivadoLocal),
-    [inmueblesFiltrados]
-  );
-
-  const archivados = useMemo(
-    () => inmueblesFiltrados.filter((i) => i.archivadoLocal),
-    [inmueblesFiltrados]
-  );
-
-
+    setModalOpen(true);
+  };
 
   // =====================================================================
-  // ============================ PAGINACIÓN ==============================
+  // FILTRADO Y PAGINACIÓN LOCAL (solo para separar activos/archivados)
   // =====================================================================
 
-  const paginar = useMemo(
-    () => (arr: InmuebleLocal[], page: number) => {
-      const inicio = (page - 1) * inmueblesPorPagina;
-      return arr.slice(inicio, inicio + inmueblesPorPagina);
-    },
-    [inmueblesPorPagina]
+  const activos = inmuebles.filter((i) => !i.archivadoLocal);
+  const archivados = inmuebles.filter((i) => i.archivadoLocal);
+
+  const activosPagina = activos.slice(
+    (paginaActivos - 1) * inmueblesPorPagina,
+    paginaActivos * inmueblesPorPagina
   );
 
-  const activosPagina = useMemo(
-    () => paginar(activos, paginaActivos),
-    [activos, paginaActivos, paginar]
+  const archivadosPagina = archivados.slice(
+    (paginaArchivados - 1) * inmueblesPorPagina,
+    paginaArchivados * inmueblesPorPagina
   );
-
-  const archivadosPagina = useMemo(
-    () => paginar(archivados, paginaArchivados),
-    [archivados, paginaArchivados, paginar]
-  );
-
-  const totalPaginasActivos = useMemo(
-    () => Math.ceil(activos.length / inmueblesPorPagina),
-    [activos.length, inmueblesPorPagina]
-  );
-
-  const totalPaginasArchivados = useMemo(
-    () => Math.ceil(archivados.length / inmueblesPorPagina),
-    [archivados.length, inmueblesPorPagina]
-  );
-
-  const totalCount = useMemo(
-    () => (isAuthenticated ? inmuebles.length : activos.length),
-    [isAuthenticated, inmuebles.length, activos.length]
-  );
-
 
   // =====================================================================
   // ============================= RENDER ================================
@@ -361,7 +244,7 @@ export default function PropiedadesPage() {
           <div className="flex items-center gap-3 px-4 py-2 rounded-lg bg-[#fef9e7]">
             <div className="w-2 h-2 rounded-full animate-pulse bg-[#fcc238]" />
             <span className="text-sm font-medium text-gray-600">
-              {totalCount} {totalCount === 1 ? 'propiedad' : 'propiedades'}
+              {totalActivos} {totalActivos === 1 ? 'propiedad' : 'propiedades'}
             </span>
           </div>
         </div>
@@ -545,7 +428,7 @@ export default function PropiedadesPage() {
               </div>
             )}
             {/* PAGINACIÓN ACTIVOS */}
-            {totalPaginasActivos > 1 && (
+            {totalPagesActivos > 1 && (
               <div className="flex justify-center items-center gap-3 mt-6">
                 <button
                   onClick={() =>
@@ -556,7 +439,7 @@ export default function PropiedadesPage() {
                 >
                   ← Anterior
                 </button>
-                {[...Array(totalPaginasActivos)].map((_, index) => (
+                {[...Array(totalPagesActivos)].map((_, index) => (
                   <button
                     key={index}
                     onClick={() => setPaginaActivos(index + 1)}
@@ -572,10 +455,10 @@ export default function PropiedadesPage() {
                 <button
                   onClick={() =>
                     setPaginaActivos((p) =>
-                      Math.min(p + 1, totalPaginasActivos)
+                      Math.min(p + 1, totalPagesActivos)
                     )
                   }
-                  disabled={paginaActivos === totalPaginasActivos}
+                  disabled={paginaActivos === totalPagesActivos}
                   className="px-3 py-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 disabled:opacity-50"
                 >
                   Siguiente →
@@ -695,7 +578,7 @@ export default function PropiedadesPage() {
                 </div>
               )}
               {/* PAGINACIÓN ARCHIVADOS */}
-              {totalPaginasArchivados > 1 && (
+              {totalPagesArchivados > 1 && (
                 <div className="flex justify-center items-center gap-3 mt-6">
                   <button
                     onClick={() =>
@@ -706,7 +589,7 @@ export default function PropiedadesPage() {
                   >
                     ← Anterior
                   </button>
-                  {[...Array(totalPaginasArchivados)].map((_, index) => (
+                  {[...Array(totalPagesArchivados)].map((_, index) => (
                     <button
                       key={index}
                       onClick={() => setPaginaArchivados(index + 1)}
@@ -722,10 +605,10 @@ export default function PropiedadesPage() {
                   <button
                     onClick={() =>
                       setPaginaArchivados((p) =>
-                        Math.min(p + 1, totalPaginasArchivados)
+                        Math.min(p + 1, totalPagesArchivados)
                       )
                     }
-                    disabled={paginaArchivados === totalPaginasArchivados}
+                    disabled={paginaArchivados === totalPagesArchivados}
                     className="px-3 py-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 disabled:opacity-50"
                   >
                     Siguiente →

@@ -24,20 +24,21 @@ const toDecimalOrUndefined = (v: any): Prisma.Decimal | undefined =>
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const where: any = {};
 
-    const tipo = searchParams.get("tipoId");
-    const estado = searchParams.get("estadoId");
-    const operacion = searchParams.get("operacionId");
-    const precioMin = searchParams.get("precioMin");
-    const precioMax = searchParams.get("precioMax");
+    // ──► Recibir filtros y paginación
+    const tipoId      = searchParams.get("tipoId");
+    const estadoId    = searchParams.get("estadoId");
+    const operacionId = searchParams.get("operacionId");
+    const precioMin   = searchParams.get("precioMin");
+    const precioMax   = searchParams.get("precioMax");
+    const page        = Number(searchParams.get("page") ?? "1");
+    const pageSize    = Number(searchParams.get("pageSize") ?? "20");
 
-    const page = Number(searchParams.get("page") ?? 1);
-    const pageSize = Number(searchParams.get("pageSize") ?? 20);
+    const where: Prisma.InmuebleWhereInput = {};
 
-    if (tipo) where.id_tipo_inmueble = Number(tipo);
-    if (estado) where.id_estado = Number(estado);
-    if (operacion) where.id_operacion = Number(operacion);
+    if (tipoId)      where.id_tipo_inmueble = Number(tipoId);
+    if (estadoId)    where.id_estado        = Number(estadoId);
+    if (operacionId) where.id_operacion     = Number(operacionId);
 
     if (precioMin || precioMax) {
       where.precio = {};
@@ -45,62 +46,62 @@ export async function GET(req: NextRequest) {
       if (precioMax) where.precio.lte = toDecimalOrUndefined(precioMax);
     }
 
-    const inmuebles = await db.inmueble.findMany({
-      where,
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-      orderBy: { id_inmueble: "desc" },
-      select: {
-        id_inmueble: true,
-        titulo: true,
+    // Opcional: filtrar por defecto solo no archivados
+    // where.archivado = false;
 
-        superficie_total: true,
-        superficie_cubierta: true,
-        precio: true,
+    const [inmuebles, total] = await Promise.all([
+      db.inmueble.findMany({
+        where,
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        orderBy: { id_inmueble: "desc" },
+        select: {
+          id_inmueble: true,
+          titulo: true,
+          superficie_total: true,
+          superficie_cubierta: true,
+          precio: true,
+          cantidad_ambientes: true,
+          cantidad_banos: true,
+          cantidad_dormitorios: true,
+          cantidad_cocheras: true,
+          cantidad_pisos: true,
+          antiguedad: true,
+          archivado: true,
+          createdAt: true,
+          updatedAt: true,
 
-        cantidad_ambientes: true,
-        cantidad_banos: true,
-        cantidad_dormitorios: true,
-        cantidad_cocheras: true,
-        cantidad_pisos: true,
-        antiguedad: true,
+          tipo_inmueble: { select: { nombre: true } },
+          estado:       { select: { nombre: true } },
+          operacion:    { select: { nombre: true } },
 
-        archivado: true,
-        createdAt: true,
-        updatedAt: true,
+          cliente: { select: { id_cliente: true, nombre: true } },
 
-        tipo_inmueble: { select: { id_tipo_inmueble: true, nombre: true } },
-        estado: { select: { id_estado: true, nombre: true } },
-        operacion: { select: { id_operacion: true, nombre: true } },
-
-        cliente: { select: { id_cliente: true, nombre: true } },
-        
-        ubicacion: {
-          select: {
-            direccion: true,
-            ciudad: true,
-            provincia: true,
-            barrio: {
-              select: {
-                nombre: true,
-                localidad: {
-                  select: {
-                    nombre: true,
-                  },
-                },
-              },
+          ubicacion: {
+            select: {
+              direccion: true,
+              ciudad: true,
+              provincia: true,
+              barrio: { select: { nombre: true } },
             },
           },
-        },
 
-        imagenes: {
-          select: { url: true, principal: true },
-        },
+          imagenes: {
+            where: { principal: true },
+            take: 1,
+            select: { url: true },
+          },
 
-        createdBy: { select: { id: true, name: true, email: true } },
-        updatedBy: { select: { id: true, name: true, email: true } },
-      },
-    });
+          // Auditoría completa (como en tu versión original)
+          createdBy: { select: { id: true, name: true, email: true } },
+          updatedBy:  { select: { id: true, name: true, email: true } },
+        },
+        // Si tu Prisma es ≥ 5.1.0 → descomenta esta línea
+        // relationLoadStrategy: "join",
+      }),
+
+      db.inmueble.count({ where }),
+    ]);
 
     const formatted = inmuebles.map((i) => ({
       ...i,
@@ -109,6 +110,8 @@ export async function GET(req: NextRequest) {
         ? Number(i.superficie_cubierta)
         : null,
       precio: i.precio ? Number(i.precio) : null,
+
+      // Mismo mapeo que tenías antes → la grilla verá exactamente lo mismo
       createdBy: i.createdBy
         ? {
             id_usuario: String(i.createdBy.id),
@@ -118,6 +121,7 @@ export async function GET(req: NextRequest) {
               "Usuario desconocido",
           }
         : undefined,
+
       updatedBy: i.updatedBy
         ? {
             id_usuario: String(i.updatedBy.id),
@@ -127,11 +131,18 @@ export async function GET(req: NextRequest) {
               "Usuario desconocido",
           }
         : undefined,
+
       createdAt: i.createdAt?.toISOString(),
       updatedAt: i.updatedAt?.toISOString(),
     }));
 
-    return NextResponse.json(formatted);
+    return NextResponse.json({
+      data: formatted,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    });
   } catch (error) {
     console.error("❌ Error GET /api/inmuebles:", error);
     return NextResponse.json(
