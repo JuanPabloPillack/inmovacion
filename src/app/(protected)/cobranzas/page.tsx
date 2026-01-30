@@ -1,9 +1,11 @@
+// src/app/(protected)/cobranzas/page.tsx
+
 'use client'; 
 // Indica que este archivo se ejecuta del lado del cliente (React).
 // Es necesario para usar hooks como useState o useEffect.
 
 import { useState, useEffect } from 'react';
-import { DollarSign, PlusCircle, AlertCircle, Trash2 } from 'lucide-react';
+import { DollarSign, PlusCircle, AlertCircle, Trash2, FileSignature  } from 'lucide-react';
 // Iconos SVG importados como componentes React.
 
 import ConfirmationModal from '@/components/ui/Modal';
@@ -17,6 +19,11 @@ import toast, { Toaster } from 'react-hot-toast';
 
 import { useRouter } from "next/navigation";
 // Hook de Next.js para navegación del lado del cliente.
+
+import Loading from '@/components/ui/Loading';
+
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
+import Modal from "@/components/ui/Modal";
 
 
 // ---------------------------
@@ -32,6 +39,7 @@ interface UserInfo {
 interface Cliente {
   id_cliente: number;
   nombre: string;
+  apellido: string;
 }
 // Representa un cliente. Se usa en filtros y relaciones.
 
@@ -75,6 +83,24 @@ export default function CobranzasPage() {
   // Control del modal de eliminación
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<Cobranza | null>(null);
+
+  const handleCrear = () => router.push('/cobranzas/alta');
+
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalConfig, setModalConfig] = useState<{
+    title: string;
+    message: string;
+    variant?: "success" | "error" | "warning" | "info" | "danger";
+    onConfirm?: () => void;
+  }>({
+    title: "",
+    message: "",
+  });
+
+  //clientes
+  const [clienteSearch, setClienteSearch] = useState('');
+  const [showClienteDropdown, setShowClienteDropdown] = useState(false);
+
 
 
   // ---------------------------
@@ -191,9 +217,44 @@ export default function CobranzasPage() {
   // FUNCIÓN: abrir modal para eliminar
   // ========================================
   const handleDelete = (cobranza: Cobranza) => {
-    setItemToDelete(cobranza);
-    setDeleteModalOpen(true);
+    setModalConfig({
+      title: "Eliminar cobranza",
+      message: "¿Estás seguro? Esta acción no se puede deshacer.",
+      variant: "danger",
+      onConfirm: async () => {
+        try {
+          const res = await fetch(`/api/cobranzas/${cobranza.id_cobranza}`, {
+            method: "DELETE",
+          });
+
+          if (!res.ok) throw new Error();
+
+          setCobranzas((prev) =>
+            prev.filter((c) => c.id_cobranza !== cobranza.id_cobranza)
+          );
+
+          setModalConfig({
+            title: "Eliminada",
+            message: "La cobranza se eliminó correctamente.",
+            variant: "success",
+            onConfirm: () => setModalOpen(false),
+          });
+
+          setModalOpen(true);
+        } catch {
+          setModalConfig({
+            title: "Error",
+            message: "No se pudo eliminar la cobranza.",
+            variant: "error",
+          });
+          setModalOpen(true);
+        }
+      },
+    });
+
+    setModalOpen(true);
   };
+
 
 
   // ========================================
@@ -215,11 +276,29 @@ export default function CobranzasPage() {
 
     } catch {
       toast.error('Error al eliminar la cobranza');
+      fetchCobranzas(); // ← Refresca y muestra loading
     } finally {
       setDeleteModalOpen(false);
       setItemToDelete(null);
     }
   };
+
+  if (loading && cobranzas.length === 0) {
+  return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <Loading
+        message="Cargando cobranzas..."
+        size="lg"
+      />
+    </div>
+  );
+}
+
+  const clientesFiltrados = clientes.filter(c => {
+    const fullName = `${c.nombre} ${c.apellido}`.toLowerCase();
+    return fullName.includes(clienteSearch.toLowerCase());
+  });
+
 
 
   return (
@@ -240,28 +319,53 @@ export default function CobranzasPage() {
           </div>
 
           <div className="px-4 py-2 rounded-lg bg-[#fef9e7] text-sm font-medium text-gray-600">
-            {total} registros
+            {total} cobranza{total !== 1 ? 's' : ''}
           </div>
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-6 py-8">
+        {error && (
+          <Alert className="mb-6 bg-[#fef9e7] border-l-4 border-[#fcc238]">
+            <AlertCircle className="h-4 w-4 text-yellow-500" />
+            <AlertTitle>Error</AlertTitle>
+            <AlertDescription>
+              {error}
+            </AlertDescription>
+          </Alert>
+        )}
 
         {/* BOTÓN CREAR */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-          <a
-            href="/cobranzas/alta"
-            className="group p-6 rounded-xl font-medium text-white flex items-center gap-4 transition-all hover:shadow-lg hover:scale-[1.02] active:scale-[0.98]"
-            style={{ backgroundColor: '#63bae9' }}
+         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+          <button
+            onClick={handleCrear}
+            className="group relative p-6 rounded-xl font-medium flex items-center gap-4 
+                      transition-all hover:shadow-lg hover:scale-[1.02] active:scale-[0.98]
+                      bg-[#63bae9] overflow-hidden"
           >
-            <div className="w-12 h-12 rounded-lg bg-white bg-opacity-20 flex items-center justify-center group-hover:rotate-12 transition-transform">
-              <PlusCircle className="w-6 h-6" />
+            {/* Overlay hover */}
+            <div className="absolute inset-0 bg-gradient-to-r from-white/0 to-white/25 
+                            opacity-0 group-hover:opacity-100 transition-opacity"></div>
+
+            {/* Contenido */}
+            <div className="relative flex items-center gap-4">
+              {/* Cuadrado blanco */}
+              <div className="w-14 h-14 rounded-xl bg-white flex items-center justify-center 
+                              group-hover:rotate-12 transition-transform duration-300 shadow-md">
+                <FileSignature className="w-7 h-7 text-[#63bae9]" strokeWidth={2} />
+              </div>
+
+              {/* Texto */}
+              <div className="flex-1 text-left text-white">
+                <div className="text-lg font-bold mb-1">
+                  Registrar Cobranza
+                </div>
+                <div className="text-sm opacity-90">
+                  Agrega una nueva cobranza
+                </div>
+              </div>
             </div>
-            <div className="text-left">
-              <div className="text-lg font-semibold">Crear Nueva Cobranza</div>
-              <div className="text-sm opacity-90">Registrar una nueva cobranza</div>
-            </div>
-          </a>
+          </button>
         </div>
 
         {/* FILTROS */}
@@ -273,35 +377,78 @@ export default function CobranzasPage() {
             <select
               className="border rounded-lg p-3 shadow-sm focus:ring-2 focus:ring-[#63bae9]"
               value={filterYear}
-              onChange={(e) => setFilterYear(e.target.value)}
+              onChange={(e) => {
+                setFilterYear(e.target.value);
+                setPage(1); // reset de paginación al filtrar
+              }}
             >
-              <option value="">📅 Año (opcional)</option>
-              {Array.from({ length: 6 }, (_, i) => 2020 + i).map(y => (
-                <option key={y} value={y}>{y}</option>
-              ))}
+              <option value="">Año</option>
+
+              {Array.from(
+                { length: new Date().getFullYear() - 2020 + 1 },
+                (_, i) => {
+                  const year = 2020 + i;
+                  return (
+                    <option key={year} value={year}>
+                      {year}
+                    </option>
+                  );
+                }
+              )}
             </select>
+
 
             <select
               className="border rounded-lg p-3 shadow-sm focus:ring-2 focus:ring-[#63bae9]"
               value={filterMonth}
               onChange={(e) => setFilterMonth(e.target.value)}
             >
-              <option value="">🗓️ Mes (opcional)</option>
+              <option value="">Mes</option>
               {[...Array(12)].map((_, i) => (
                 <option key={i+1} value={i+1}>{i+1}</option>
               ))}
             </select>
 
-            <select
-              className="border rounded-lg p-3 shadow-sm focus:ring-2 focus:ring-[#63bae9]"
-              value={filterCliente}
-              onChange={(e) => setFilterCliente(e.target.value)}
-            >
-              <option value="">👤 Cliente (opcional)</option>
-              {clientes.map(c => (
-                <option key={c.id_cliente} value={c.id_cliente}>{c.nombre}</option>
-              ))}
-            </select>
+            {/* FILTRO CLIENTE QUE SE AUTOCOMPLETA */}
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Cliente (nombre o apellido)"
+                className="w-full border rounded-lg p-3 shadow-sm focus:ring-2 focus:ring-[#63bae9]"
+                value={clienteSearch}
+                onChange={(e) => {
+                  setClienteSearch(e.target.value);
+                  setShowClienteDropdown(true);
+                  setPage(1);
+                }}
+                onFocus={() => setShowClienteDropdown(true)}
+              />
+
+              {showClienteDropdown && clienteSearch && (
+                <div className="absolute z-20 mt-1 w-full bg-white border rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                  {clientesFiltrados.length === 0 ? (
+                    <div className="p-3 text-sm text-gray-500">
+                      No hay coincidencias
+                    </div>
+                  ) : (
+                    clientesFiltrados.map(c => (
+                      <button
+                        key={c.id_cliente}
+                        type="button"
+                        className="w-full text-left px-4 py-2 hover:bg-[#f0f9ff]"
+                        onClick={() => {
+                          setFilterCliente(String(c.id_cliente)); // 👈 lo que usa la API
+                          setClienteSearch(`${c.apellido}, ${c.nombre}`); // 👈 lo visible
+                          setShowClienteDropdown(false);
+                        }}
+                      >
+                        {c.apellido}, {c.nombre}
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
 
           </div>
         </div>
@@ -314,9 +461,7 @@ export default function CobranzasPage() {
           </div>
 
           <div className="p-6">
-            {loading ? (
-              <p>Cargando...</p>
-            ) : cobranzas.length === 0 ? (
+            {cobranzas.length === 0 ? (
               <p className="text-center py-16">No hay cobranzas</p>
             ) : (
               <div className="grid gap-4">
@@ -331,7 +476,9 @@ export default function CobranzasPage() {
                       <button
                         onClick={() => toggleActiva(c)}
                         className={`absolute top-4 right-4 px-3 py-1 rounded-full text-sm font-semibold ${
-                          c.activa ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600'
+                          c.activa
+                            ? 'bg-green-100 text-green-700'
+                            : 'bg-gray-200 text-gray-600'
                         }`}
                       >
                         {c.activa ? 'Activa' : 'Inactiva'}
@@ -363,26 +510,40 @@ export default function CobranzasPage() {
                       {/* 🆕 HISTORIAL */}
                       <div className="mt-4 p-3 bg-gray-50 rounded-lg border text-sm text-gray-600">
                         {c.createdBy && (
-                          <p>Creado por: <span className="font-medium">{c.createdBy.name}</span></p>
+                          <p>
+                            Creado por:{' '}
+                            <span className="font-medium">{c.createdBy.name}</span>
+                          </p>
                         )}
 
                         {c.updatedBy && (
-                          <p>Actualizado por: <span className="font-medium">{c.updatedBy.name}</span></p>
+                          <p>
+                            Actualizado por:{' '}
+                            <span className="font-medium">{c.updatedBy.name}</span>
+                          </p>
                         )}
 
                         {c.createdAt && (
-                          <p>Fecha de creación: {new Date(c.createdAt).toLocaleString()}</p>
+                          <p>
+                            Fecha de creación:{' '}
+                            {new Date(c.createdAt).toLocaleString()}
+                          </p>
                         )}
 
                         {c.updatedAt && (
-                          <p>Última actualización: {new Date(c.updatedAt).toLocaleString()}</p>
+                          <p>
+                            Última actualización:{' '}
+                            {new Date(c.updatedAt).toLocaleString()}
+                          </p>
                         )}
                       </div>
 
                       {/* ACCIONES */}
                       <div className="mt-4 flex items-center justify-end gap-4">
                         <button
-                          onClick={() => router.push(`/cobranzas/modificar/${c.id_cobranza}`)}
+                          onClick={() =>
+                            router.push(`/cobranzas/modificar/${c.id_cobranza}`)
+                          }
                           className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-100 text-blue-700 hover:bg-blue-200 transition"
                         >
                           ✏️ Modificar
@@ -424,12 +585,13 @@ export default function CobranzasPage() {
 
       </main>
 
-      <ConfirmationModal
-        isOpen={deleteModalOpen}
-        onClose={() => setDeleteModalOpen(false)}
-        onConfirm={confirmDelete}
-        title="Eliminar Cobranza"
-        message="¿Estás seguro de que deseas eliminar esta cobranza? Esta acción no se puede deshacer."
+      <Modal
+        isOpen={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title={modalConfig.title}
+        message={modalConfig.message}
+        variant={modalConfig.variant}
+        onConfirm={modalConfig.onConfirm}
       />
     </div>
   );

@@ -1,15 +1,15 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
-import { useState, useEffect } from 'react';
-import { TrendingUp, AlertCircle, Check, ArrowLeft, Upload, Trash2 } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { TrendingUp, ArrowLeft, Upload, Trash2, FileSpreadsheet, Loader2, AlertCircle } from 'lucide-react';
 import Header from '@/components/ui/Header';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
+import Loading from '@/components/ui/Loading'; // ← Asegúrate de que la ruta sea correcta
 
 /**
  * Interface que representa un registro de IPC almacenado en BD.
- * "valor" puede venir como número o como string decimal desde la API.
  */
 interface IpcData {
   id: number;
@@ -21,70 +21,94 @@ interface IpcData {
 }
 
 export default function IpcManagementPage() {
-  
-  // Estado donde guardamos todos los datos de IPC obtenidos de la API
   const [ipcData, setIpcData] = useState<IpcData[]>([]);
-
-  // Manejo de errores
   const [error, setError] = useState<string | null>(null);
-
-  // Loading general mientras se cargan o procesan datos
-  const [loading, setLoading] = useState(false);
-
-  // Filtro por año para la tabla
+  const [loading, setLoading] = useState(true); // Inicia en true para mostrar loading al refrescar
   const [filterYear, setFilterYear] = useState<number | null>(null);
 
-  /**
-   * useEffect que solo se ejecuta una vez al cargar la página.
-   * Llama a la función que obtiene los datos de IPC desde "/api/rendiciones/ipc"
-   */
+  // Estados para la subida mejorada
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     fetchIpcData();
   }, []);
 
-  /**
-   * Función que hace el fetch a la API y actualiza ipcData con los resultados.
-   */
   const fetchIpcData = async () => {
     setLoading(true);
-
     try {
       const res = await fetch('/api/rendiciones/ipc');
       if (!res.ok) throw new Error('No se pudieron cargar los datos de IPC');
-
-      // La API responde { datos: [...] }
       const { datos } = await res.json();
       setIpcData(datos || []);
-
     } catch (e: any) {
       setError(e.message);
+      toast.error('Error al cargar datos de IPC');
     } finally {
       setLoading(false);
     }
   };
 
   // ============================================================
-  // 📌 SUBIR ARCHIVO EXCEL Y PROCESARLO AUTOMÁTICAMENTE
+  // 📌 SUBIDA MEJORADA: Drag & Drop + Vista previa + Validación
   // ============================================================
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] ?? null;
+    if (!validateFile(file)) return;
+    setSelectedFile(file);
+  };
 
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files[0] ?? null;
+    if (!validateFile(file)) return;
+    setSelectedFile(file);
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = () => {
+    setIsDragging(false);
+  };
+
+  const validateFile = (file: File | null): boolean => {
+    if (!file) return false;
+
+    const validTypes = [
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.ms-excel',
+    ];
+    const maxSize = 10 * 1024 * 1024; // 10MB
+
+    if (!validTypes.includes(file.type)) {
+      toast.error('Solo se permiten archivos .xlsx o .xls');
+      return false;
+    }
+
+    if (file.size > maxSize) {
+      toast.error('El archivo es demasiado grande (máximo 10MB)');
+      return false;
+    }
+
+    return true;
+  };
+
+  const handleUpload = async () => {
+    if (!selectedFile) return;
 
     setLoading(true);
 
     try {
-      // Convertimos el archivo a ArrayBuffer para que XLSX pueda leerlo
-      const data = await file.arrayBuffer();
+      const data = await selectedFile.arrayBuffer();
+      const workbook = XLSX.read(data);
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows: any[] = XLSX.utils.sheet_to_json(sheet);
 
-      const workbook = XLSX.read(data); // Leemos el archivo
-      const sheet = workbook.Sheets[workbook.SheetNames[0]]; // Tomamos la primera hoja
-      const rows: any[] = XLSX.utils.sheet_to_json(sheet); // Convertimos filas a JSON
-
-      /**
-       * Mapeamos cada fila del Excel a un objeto compatible con nuestra API:
-       * mes | año | valor | fuente | fechaConsulta
-       */
       const nuevosDatos = rows.map(r => ({
         mes: Number(r.mes),
         anio: Number(r.anio),
@@ -93,7 +117,6 @@ export default function IpcManagementPage() {
         fechaConsulta: r.fecha_publicacion ?? new Date().toISOString(),
       }));
 
-      // Enviamos todos los registros a la API
       const res = await fetch('/api/rendiciones/ipc', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -103,15 +126,15 @@ export default function IpcManagementPage() {
       const result = await res.json();
 
       if (result.success) {
-        toast.success(`Archivo procesado y guardado: ${result.count} registros`);
-        fetchIpcData(); // Volvemos a cargar la tabla
+        toast.success(`¡Éxito! ${result.count || nuevosDatos.length} registros cargados`);
+        setSelectedFile(null);
+        fetchIpcData(); // ← también muestra loading al refrescar después de subir
       } else {
-        toast.error('Error guardando en BD: ' + result.error);
+        toast.error(result.error || 'Error al guardar en la base de datos');
       }
-
     } catch (err: any) {
-      toast.error('Error al leer archivo Excel');
-      setError(err.message || 'Error desconocido');
+      toast.error('Error al procesar el archivo Excel');
+      console.error(err);
     } finally {
       setLoading(false);
     }
@@ -121,23 +144,21 @@ export default function IpcManagementPage() {
   // 📌 ELIMINAR UN REGISTRO DE IPC
   // ============================================================
   const handleDelete = async (id: number) => {
-
     if (!confirm('¿Estás seguro de eliminar este dato de IPC?')) return;
 
     try {
-      // Enviamos el id por query string para eliminarlo
       const res = await fetch(`/api/rendiciones/ipc?id=${id}`, {
-        method: 'DELETE'
+        method: 'DELETE',
       });
 
       const result = await res.json();
 
-      if (!res.ok || !result.success)
+      if (!res.ok || !result.success) {
         throw new Error(result.error || 'No se pudo eliminar');
+      }
 
       toast.success('Dato de IPC eliminado');
-      fetchIpcData();
-
+      fetchIpcData(); // ← también muestra loading al refrescar después de eliminar
     } catch (err: any) {
       toast.error(err.message || 'Error desconocido');
     }
@@ -149,43 +170,52 @@ export default function IpcManagementPage() {
   const formatValor = (valor: number | string | null) => {
     if (valor === null || valor === undefined) return 'N/A';
 
-    // Si viene como string decimal, lo convertimos
     const num = typeof valor === 'string' ? parseFloat(valor) : valor;
 
     return isNaN(num)
       ? 'N/A'
       : num.toLocaleString('es-ES', {
           minimumFractionDigits: 2,
-          maximumFractionDigits: 2
+          maximumFractionDigits: 2,
         });
   };
 
-  // Años disponibles para el selector de filtro
   const years = Array.from(new Set(ipcData.map(d => d.anio))).sort((a, b) => b - a);
 
-  // Si el usuario selecciona un año, filtramos, si no mostramos todo
   const filteredData = filterYear
     ? ipcData.filter(d => d.anio === filterYear)
     : ipcData;
 
+  // Mientras carga inicialmente (refresco de página)
+  if (loading && ipcData.length === 0) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <Loading
+          message="Cargando datos de IPC ..."
+          size="lg"
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       <Header />
+
       <header className="bg-white border-b border-gray-200 shadow-sm">
         <div className="max-w-7xl mx-auto px-6 py-6 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ backgroundColor: '#fcc238' }}>
+            <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-[#fcc238]">
               <TrendingUp className="w-7 h-7 text-white" />
             </div>
             <div>
-              <h1 className="text-3xl font-bold" style={{ color: '#686363' }}>Gestión de IPC</h1>
-              <p className="text-sm mt-1" style={{ color: '#969696' }}>Sube y administra los datos del IPC anual</p>
+              <h1 className="text-3xl font-bold text-[#686363]">Gestión de IPC</h1>
+              <p className="text-sm mt-1 text-[#969696]">Sube y administra los datos del IPC anual</p>
             </div>
           </div>
           <a
             href="/rendiciones"
-            className="flex items-center gap-2 px-4 py-2 rounded-lg border-2 transition-all hover:shadow-md"
-            style={{ borderColor: '#63bae9', color: '#63bae9' }}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg border-2 border-[#63bae9] text-[#63bae9] hover:bg-[#63bae9]/10 transition-all"
           >
             <ArrowLeft className="w-4 h-4" />
             <span className="text-sm font-medium">Volver a Rendiciones</span>
@@ -194,60 +224,161 @@ export default function IpcManagementPage() {
       </header>
 
       <main className="max-w-7xl mx-auto px-6 py-8 space-y-8">
-        {/* Upload Excel */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#fcc238' }}>
-              <Upload className="w-5 h-5 text-white" />
+        {/* === SUBIDA MEJORADA === */}
+        <div className="bg-white rounded-2xl shadow-md border border-gray-200 overflow-hidden">
+          <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-[#63bae9]/5 to-transparent">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-[#fcc238] flex items-center justify-center">
+                <Upload className="w-5 h-5 text-white" />
+              </div>
+              <h2 className="text-xl font-semibold text-[#686363]">Subir archivo Excel anual</h2>
             </div>
-            <h2 className="text-xl font-semibold" style={{ color: '#686363' }}>Subir archivo Excel anual</h2>
+            <p className="mt-1 text-sm text-gray-500">
+              Arrastra y suelta tu archivo .xlsx o .xls aquí (máximo 10MB)
+            </p>
           </div>
-          <input
-            type="file"
-            accept=".xlsx, .xls"
-            onChange={handleFileUpload}
-            disabled={loading}
-            className="border border-gray-300 rounded-lg px-4 py-2 w-full"
-          />
+
+          <div className="p-8">
+            <div
+              onDrop={handleDrop}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onClick={() => fileInputRef.current?.click()}
+              className={`
+                border-2 border-dashed rounded-2xl p-12 text-center cursor-pointer transition-all duration-300
+                ${isDragging
+                  ? 'border-[#63bae9] bg-[#63bae9]/5 ring-2 ring-[#63bae9]/30'
+                  : 'border-gray-300 hover:border-[#63bae9] hover:bg-gray-50'
+                }
+              `}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsx,.xls"
+                onChange={handleFileChange}
+                className="hidden"
+              />
+
+              {!selectedFile ? (
+                <div className="space-y-4">
+                  <Upload className="w-16 h-16 mx-auto text-[#63bae9] opacity-80" />
+                  <div>
+                    <p className="text-xl font-medium text-gray-800">
+                      Arrastra tu archivo aquí o haz clic para seleccionar
+                    </p>
+                    <p className="text-sm text-gray-500 mt-2">
+                      Solo archivos Excel (.xlsx / .xls) – Máximo 10MB
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-4">
+                  <div className="w-20 h-20 rounded-xl bg-[#fcc238]/10 flex items-center justify-center">
+                    <FileSpreadsheet className="w-12 h-12 text-[#fcc238]" />
+                  </div>
+                  <div className="text-center max-w-xs">
+                    <p className="font-semibold text-gray-800 truncate">
+                      {selectedFile.name}
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-8 flex justify-center">
+              <button
+                onClick={handleUpload}
+                disabled={!selectedFile || loading}
+                className={`
+                  inline-flex items-center gap-3 px-10 py-5 rounded-xl font-bold text-white text-lg
+                  transition-all duration-300 shadow-lg
+                  ${!selectedFile || loading
+                    ? 'bg-gray-400 cursor-not-allowed'
+                    : 'bg-[#fcc238] hover:bg-[#e0b02f] hover:shadow-xl active:scale-95'
+                  }
+                `}
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-6 h-6 animate-spin" />
+                    Procesando archivo...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-6 h-6" />
+                    Subir y procesar
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* Filtro por año */}
-        <div className="flex gap-3 items-center">
-          <label htmlFor="filterYear" className="font-medium text-gray-700">Filtrar por año:</label>
+        <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
+          <label htmlFor="filterYear" className="font-medium text-gray-700 text-lg">
+            Filtrar por año:
+          </label>
           <select
             id="filterYear"
             value={filterYear || ''}
             onChange={e => setFilterYear(e.target.value ? Number(e.target.value) : null)}
-            className="border border-gray-300 rounded-lg px-3 py-2"
+            className="border border-gray-300 rounded-lg px-4 py-3 text-gray-700 focus:ring-2 focus:ring-[#63bae9] focus:border-[#63bae9] min-w-[180px]"
           >
-            <option value="">Todos</option>
+            <option value="">Todos los años</option>
             {years.map(y => (
               <option key={y} value={y}>{y}</option>
             ))}
           </select>
         </div>
 
-        {/* Lista IPC */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h2 className="text-2xl font-semibold mb-4" style={{ color: '#686363' }}>Datos de IPC</h2>
-          {filteredData.length === 0 ? (
-            <p className="text-gray-500">No hay datos cargados aún.</p>
+        {/* Lista de datos */}
+        <div className="bg-white rounded-2xl shadow-md border border-gray-200 p-6">
+          <h2 className="text-2xl font-semibold mb-6 text-[#686363]">
+            Datos de IPC {filterYear ? `(${filterYear})` : ''}
+          </h2>
+
+          {error && (
+            <div className="text-center py-8 text-red-600">
+              <AlertCircle className="w-10 h-10 mx-auto mb-4" />
+              <p>{error}</p>
+            </div>
+          )}
+
+          {filteredData.length === 0 && !loading ? (
+            <div className="text-center py-12 text-gray-500">
+              No hay datos de IPC cargados aún {filterYear ? `para el año ${filterYear}` : ''}.
+            </div>
           ) : (
-            <div className="grid gap-4">
+            <div className="space-y-4">
               {filteredData.map(d => (
-                <div key={d.id} className="group border-2 border-gray-200 rounded-xl p-5 flex justify-between items-center hover:shadow-lg transition-all" style={{ borderLeftWidth: '6px', borderLeftColor: '#63bae9' }}>
-                  <div>
-                    <h3 className="font-bold text-gray-700">{new Date(0, d.mes - 1).toLocaleString('es-AR', { month: 'long' })} {d.anio}</h3>
-                    <p>Valor: {formatValor(d.valor)}</p>
-                    <p>Fuente: {d.fuente}</p>
-                    <p>Consultado: {new Date(d.fechaConsulta).toLocaleDateString('es-ES')}</p>
+                <div
+                  key={d.id}
+                  className="group border border-gray-200 rounded-xl p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 hover:shadow-lg transition-all duration-300"
+                  style={{ borderLeft: '6px solid #63bae9' }}
+                >
+                  <div className="space-y-1 flex-1">
+                    <h3 className="font-bold text-lg text-gray-800">
+                      {new Date(0, d.mes - 1).toLocaleString('es-AR', { month: 'long' })} {d.anio}
+                    </h3>
+                    <p className="text-gray-700">
+                      Valor: <span className="font-semibold">{formatValor(d.valor)}</span>
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      Fuente: {d.fuente} • Consultado: {new Date(d.fechaConsulta).toLocaleDateString('es-ES')}
+                    </p>
                   </div>
+
                   <button
                     onClick={() => handleDelete(d.id)}
-                    className="px-4 py-2 rounded-lg text-white font-medium"
-                    style={{ backgroundColor: '#fcc238' }}
+                    className="px-5 py-2.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors flex items-center gap-2 font-medium"
                   >
                     <Trash2 className="w-5 h-5" />
+                    Eliminar
                   </button>
                 </div>
               ))}

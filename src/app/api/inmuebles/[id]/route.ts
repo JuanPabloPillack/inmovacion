@@ -1,3 +1,5 @@
+
+// src/app/api/inmuebles/[id]/route.ts
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
@@ -105,27 +107,31 @@ export async function GET(
       cliente: inmueble.cliente,
 
       ubicacion: inmueble.ubicacion
-        ? {
-            id_ubicacion: inmueble.ubicacion.id_ubicacion,
-            direccion: inmueble.ubicacion.direccion,
-            ciudad: inmueble.ubicacion.ciudad,
-            provincia: inmueble.ubicacion.provincia,
-            id_barrio: inmueble.ubicacion.id_barrio,
-            barrio: inmueble.ubicacion.barrio
-              ? {
-                  id_barrio: inmueble.ubicacion.barrio.id_barrio,
-                  nombre: inmueble.ubicacion.barrio.nombre,
-                  id_localidad: inmueble.ubicacion.barrio.id_localidad,
-                  localidad: {
-                    id_localidad:
-                      inmueble.ubicacion.barrio.localidad.id_localidad,
-                    nombre:
-                      inmueble.ubicacion.barrio.localidad.nombre,
-                  },
-                }
-              : null,
-          }
-        : undefined,
+    ? {
+        id_ubicacion: inmueble.ubicacion.id_ubicacion,
+        direccion: inmueble.ubicacion.direccion,
+        ciudad: inmueble.ubicacion.ciudad,
+        provincia: inmueble.ubicacion.provincia,
+        id_barrio: inmueble.ubicacion.id_barrio,
+
+        barrio:
+          inmueble.ubicacion.barrio &&
+          inmueble.ubicacion.barrio.localidad
+            ? {
+                id_barrio: inmueble.ubicacion.barrio.id_barrio,
+                nombre: inmueble.ubicacion.barrio.nombre,
+                id_localidad:
+                  inmueble.ubicacion.barrio.localidad.id_localidad,
+                localidad: {
+                  id_localidad:
+                    inmueble.ubicacion.barrio.localidad.id_localidad,
+                  nombre:
+                    inmueble.ubicacion.barrio.localidad.nombre,
+                },
+              }
+            : undefined,
+      }
+    : undefined,
 
       createdAt: inmueble.createdAt?.toISOString(),
       updatedAt: inmueble.updatedAt?.toISOString(),

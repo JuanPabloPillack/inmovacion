@@ -77,12 +77,21 @@ export async function GET(req: NextRequest) {
 
           cliente: { select: { id_cliente: true, nombre: true } },
 
-          ubicacion: {
+         ubicacion: {
             select: {
               direccion: true,
               ciudad: true,
               provincia: true,
-              barrio: { select: { nombre: true } },
+              barrio: {
+                select: {
+                  nombre: true,
+                  localidad: {
+                    select: {
+                      nombre: true,
+                    },
+                  },
+                },
+              },
             },
           },
 

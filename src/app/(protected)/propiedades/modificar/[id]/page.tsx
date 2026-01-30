@@ -26,6 +26,9 @@ import FormularioInmueble from "@/components/FormularioInmueble";
 // Tipos
 import type { InmuebleEdit } from "@/types/inmuebles";
 
+import Modal from "@/components/ui/Modal";
+
+
 // Tipo para manejar imágenes en el frontend
 interface ImagenData {
   url: string;
@@ -46,10 +49,18 @@ export default function EditarInmueblePage() {
   const [inmueble, setInmueble] = useState<InmuebleEdit | null>(null);
 
   // Para mostrar loading mientras se obtiene el inmueble
-const [loading, setLoading] = useState(true)
-const [errorMessage, setErrorMessage] = useState<string | null>(null)
-const [successMessage, setSuccessMessage] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
 
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalConfig, setModalConfig] = useState<{
+    title: string;
+    message: string;
+    variant?: "success" | "error" | "warning" | "info" | "danger";
+    onConfirm?: () => void;
+  }>({
+    title: "",
+    message: "",
+  });
 
 
   // --------------------------------------------------------
@@ -91,13 +102,24 @@ const [successMessage, setSuccessMessage] = useState<string | null>(null)
         };
 
         setInmueble(inmuebleData);
-      }  catch (err: any) {
+      } catch (err: any) {
       console.error("❌ Error fetch inmueble:", err)
-      setErrorMessage(err.message || "No se pudo cargar el inmueble")
-      setInmueble(null)
+
+      setModalConfig({
+        title: "Error",
+        message: err.message || "No se pudo cargar el inmueble",
+        variant: "error",
+        onConfirm: () => {
+          setModalOpen(false);
+          router.push("/propiedades");
+        },
+      });
+      setModalOpen(true);
+
+      setInmueble(null);
     } finally {
-      setLoading(false)
-    }
+          setLoading(false)
+        }
 
     };
 
@@ -213,15 +235,25 @@ const [successMessage, setSuccessMessage] = useState<string | null>(null)
     console.log("🔄 Frontend - Response PUT:", updatedData);
 
 
-      setSuccessMessage("Los cambios se guardaron correctamente.")
-
-    setTimeout(() => {
-      router.push("/propiedades")
-    }, 1200)
+     setModalConfig({
+        title: "Inmueble actualizado",
+        message: "Los cambios se guardaron correctamente.",
+        variant: "success",
+        onConfirm: () => {
+          setModalOpen(false);
+          router.push("/propiedades");
+        },
+      });
+      setModalOpen(true);
 
     } catch (err: any) {
       console.error("❌ Error handleUpdate:", err);
-      setErrorMessage(err.message || "No se pudo actualizar el inmueble")
+      setModalConfig({
+        title: "Error",
+        message: err.message || "No se pudo actualizar el inmueble",
+        variant: "error",
+      });
+      setModalOpen(true);
 
     }
   };
@@ -248,7 +280,7 @@ const [successMessage, setSuccessMessage] = useState<string | null>(null)
 
 
 
- return (
+return (
   <div className="min-h-screen" style={{ backgroundColor: "#f8f9fa" }}>
     <Header />
 
@@ -270,62 +302,8 @@ const [successMessage, setSuccessMessage] = useState<string | null>(null)
     </header>
 
     <main className="max-w-5xl mx-auto px-8 py-10">
-      {/* ✅ ALERTA DE ÉXITO */}
-      {successMessage && (
-        <Alert className="mb-6 max-w-2xl mx-auto shadow-lg border-[#63bae9]/20 bg-[#63bae9]/10">
-          <CheckCircle className="h-4 w-4 text-[#63bae9]" />
-          <AlertDescription className="text-[#686363] text-sm">
-            {successMessage}
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {/* ❌ ALERTA DE ERROR */}
-     {errorMessage && (
-      <Alert
-        variant="destructive"
-        className="
-          mb-6 max-w-2xl mx-auto shadow-lg border-red-200 bg-red-50/50
-          flex flex-col items-center text-center
-        "
-      >
-        <AlertCircle className="h-5 w-5 text-red-600 mb-2" />
-
-        <AlertDescription className="text-red-800 text-sm max-w-md">
-          {errorMessage}
-        </AlertDescription>
-
-        <div className="mt-6 flex flex-col sm:flex-row justify-center items-center gap-4 w-full">
-          <Button
-            onClick={() => setErrorMessage(null)}
-            className="h-12 bg-gradient-to-r from-[#63bae9] to-[#63bae9]/90 
-                      hover:from-[#63bae9]/90 hover:to-[#63bae9]/80 
-                      text-white font-medium rounded-xl shadow-lg 
-                      hover:shadow-xl transition-all duration-200 
-                      transform hover:scale-105"
-          >
-            Intentar nuevamente
-          </Button>
-
-          <Button
-            variant="outline"
-            onClick={handleCancel}
-            className="h-12 border-[#969696]/50 text-[#686363] 
-                      hover:bg-[#63bae9]/10 hover:text-[#63bae9] 
-                      rounded-xl font-medium text-sm 
-                      transition-all duration-200 
-                      transform hover:scale-105"
-          >
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Volver a propiedades
-          </Button>
-        </div>
-      </Alert>
-    )}
-
-
-      {/* 📝 FORMULARIO (solo si no hay error) */}
-      {!errorMessage && inmueble && (
+      {/* 📝 FORMULARIO */}
+      {inmueble && (
         <div className="bg-white rounded-2xl shadow-sm border p-8">
           <FormularioInmueble
             initialData={inmueble}
@@ -336,6 +314,16 @@ const [successMessage, setSuccessMessage] = useState<string | null>(null)
         </div>
       )}
     </main>
+
+    {/* 🧩 MODAL DE ÉXITO / ERROR */}
+    <Modal
+      isOpen={modalOpen}
+      onClose={() => setModalOpen(false)}
+      title={modalConfig.title}
+      message={modalConfig.message}
+      variant={modalConfig.variant}
+      onConfirm={modalConfig.onConfirm}
+    />
   </div>
 );
 }
