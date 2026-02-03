@@ -1,3 +1,4 @@
+// src/app/(protected)/cobranzas/alta/page.tsx
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
@@ -8,13 +9,17 @@ import Header from '@/components/ui/Header';
 import Loading from '@/components/ui/Loading';
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import Modal from "@/components/ui/Modal";
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+
 
 // Tipos (sin cambios)
 interface Cliente {
   id_cliente: number;
   nombre: string;
   apellido: string;
-  tipo_cliente?: string;
+  tipoCliente?: {
+  nombre: string;
+ };
 }
 
 interface Contrato {
@@ -25,12 +30,20 @@ interface Contrato {
   };
 }
 
+interface CobranzaForm {
+  id_contrato: number;
+  monto: string;
+  fecha_cobranza: string;
+  medio_pago: string;
+  concepto: string;
+  observaciones: string;
+}
+
+
 export default function NuevaCobranzaPage() {
   const router = useRouter();
 
   // Estados principales
-  const [clientes, setClientes] = useState<Cliente[]>([]);
-  const [contratos, setContratos] = useState<Contrato[]>([]);
   const [selectedCliente, setSelectedCliente] = useState<number | ''>('');
   const [tipoCliente, setTipoCliente] = useState('');
 
@@ -38,21 +51,22 @@ export default function NuevaCobranzaPage() {
   const siguienteMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 9);
   const fechaDefault = siguienteMes.toISOString().split('T')[0];
 
-  const [cobranzas, setCobranzas] = useState([
-    {
-      id_contrato: '',
-      monto: '',
-      fecha_cobranza: fechaDefault,
-      medio_pago: '',
-      concepto: '',
-      observaciones: '',
-    },
-  ]);
+  const [cobranzas, setCobranzas] = useState<CobranzaForm[]>([
+  {
+    id_contrato: 0,
+    monto: '',
+    fecha_cobranza: fechaDefault,
+    medio_pago: '',
+    concepto: '',
+    observaciones: '',
+  },
+]);
 
   const [error, setError] = useState<string | null>(null);
   const [mensaje, setMensaje] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [isPageLoading, setIsPageLoading] = useState(true);
+
+  const queryClient = useQueryClient();
+
 
   // Modal
   const [modalOpen, setModalOpen] = useState(false);
@@ -69,48 +83,116 @@ export default function NuevaCobranzaPage() {
   const [clienteSearch, setClienteSearch] = useState('');
   const [showClienteDropdown, setShowClienteDropdown] = useState(false);
 
-  // Cargar clientes al montar
-  useEffect(() => {
-    const fetchClientes = async () => {
-      try {
-        const res = await fetch('/api/clientes');
-        const data = await res.json();
-        setClientes(Array.isArray(data) ? data : data.clientes || []);
-      } catch {
-        setError('Error al cargar los clientes.');
-      } finally {
-        setIsPageLoading(false);
+  const {
+    data: clientes = [],
+    isLoading: clientesLoading,
+  } = useQuery({
+    queryKey: ['clientes'],
+    queryFn: async () => {
+      const res = await fetch('/api/clientes');
+      if (!res.ok) throw new Error('Error al cargar clientes');
+      const data = await res.json();
+
+      return Array.isArray(data)
+        ? data
+        : Array.isArray(data?.data)
+          ? data.data
+          : Array.isArray(data?.clientes)
+            ? data.clientes
+            : [];
+    },
+  });
+
+  const {
+    data: contratos = [],
+    isLoading: contratosLoading,
+  } = useQuery({
+    queryKey: ['contratos', selectedCliente],
+    enabled: !!selectedCliente, // 👈 CLAVE
+    queryFn: async () => {
+      const res = await fetch(`/api/contracts?id_cliente=${selectedCliente}`);
+      if (!res.ok) throw new Error('Error al cargar contratos');
+      const data = await res.json();
+
+      return Array.isArray(data)
+        ? data
+        : Array.isArray(data?.data)
+          ? data.data
+          : Array.isArray(data?.contratos)
+            ? data.contratos
+            : [];
+    },
+  });
+
+  const crearCobranzaMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch('/api/cobranzas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id_cliente: selectedCliente,
+          cobranzas,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error || 'Error al guardar');
       }
-    };
 
-    fetchClientes();
-  }, []);
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cobranzas'] });
 
-  // Cargar contratos al cambiar cliente
+      setModalConfig({
+        title: "Cobranzas registradas",
+        message: "Las cobranzas se guardaron correctamente.",
+        variant: "success",
+        onConfirm: () => {
+          setModalOpen(false);
+          router.push('/cobranzas');
+        },
+      });
+
+      setModalOpen(true);
+
+      // Reset del formulario
+      setSelectedCliente('');
+      setTipoCliente('');
+      setCobranzas([
+        {
+          id_contrato: 0,
+          monto: '',
+          fecha_cobranza: fechaDefault,
+          medio_pago: '',
+          concepto: '',
+          observaciones: '',
+        },
+      ]);
+    },
+    onError: (error: any) => {
+      setModalConfig({
+        title: "Error al guardar",
+        message: error.message || "Ocurrió un error inesperado.",
+        variant: "error",
+      });
+      setModalOpen(true);
+    },
+  });
+
+
   useEffect(() => {
-    if (!selectedCliente) {
-      setContratos([]);
-      return;
-    }
-
-    const fetchContratos = async () => {
-      try {
-        const res = await fetch(`/api/contracts?id_cliente=${selectedCliente}`);
-        const data = await res.json();
-        setContratos(Array.isArray(data) ? data : data.contratos || []);
-      } catch {
-        setError('Error al cargar contratos del cliente.');
-        setContratos([]);
-      }
-    };
-
-    fetchContratos();
+    setCobranzas((prev) =>
+      prev.map((c) => ({ ...c, id_contrato: 0 }))
+    );
   }, [selectedCliente]);
+
 
   // Actualizar tipo de cliente
   useEffect(() => {
-    const cliente = clientes.find(c => c.id_cliente === selectedCliente);
-    setTipoCliente(cliente?.tipo_cliente || '');
+    const cliente = clientes.find((c: { id_cliente: string | number; }) => c.id_cliente === selectedCliente);
+    setTipoCliente(cliente?.tipoCliente?.nombre || '');
   }, [selectedCliente, clientes]);
 
   // Handlers
@@ -124,7 +206,7 @@ export default function NuevaCobranzaPage() {
     setCobranzas([
       ...cobranzas,
       {
-        id_contrato: '',
+        id_contrato: 0,
         monto: '',
         fecha_cobranza: fechaDefault,
         medio_pago: '',
@@ -171,67 +253,22 @@ export default function NuevaCobranzaPage() {
   };
 
   // Submit
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setMensaje(null);
 
     const err = validar();
-    if (err) return setError(err);
-
-    try {
-      setLoading(true);
-
-      const res = await fetch('/api/cobranzas', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id_cliente: selectedCliente,
-          cobranzas,
-        }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Error al guardar');
-
-      setModalConfig({
-        title: "Cobranzas registradas",
-        message: "Las cobranzas se guardaron correctamente.",
-        variant: "success",
-        onConfirm: () => {
-          setModalOpen(false);
-          router.push('/cobranzas');
-        },
-      });
-      setModalOpen(true);
-
-      // Reset
-      setSelectedCliente('');
-      setTipoCliente('');
-      setContratos([]);
-      setCobranzas([
-        {
-          id_contrato: '',
-          monto: '',
-          fecha_cobranza: fechaDefault,
-          medio_pago: '',
-          concepto: '',
-          observaciones: '',
-        },
-      ]);
-    } catch (e: any) {
-      setModalConfig({
-        title: "Error al guardar",
-        message: e.message || "Ocurrió un error inesperado.",
-        variant: "error",
-      });
-      setModalOpen(true);
-    } finally {
-      setLoading(false);
+    if (err) {
+      setError(err);
+      return;
     }
+
+    crearCobranzaMutation.mutate();
   };
 
-  if (isPageLoading) {
+
+  if (clientesLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <Loading message="Cargando datos para nueva cobranza..." size="lg" />
@@ -239,7 +276,8 @@ export default function NuevaCobranzaPage() {
     );
   }
 
-  const clientesFiltrados = clientes.filter((c) => {
+
+  const clientesFiltrados = clientes.filter((c: { nombre: any; apellido: any; }) => {
     const fullName = `${c.nombre} ${c.apellido}`.toLowerCase();
     return fullName.includes(clienteSearch.toLowerCase());
   });
@@ -311,7 +349,7 @@ export default function NuevaCobranzaPage() {
                           No hay coincidencias
                         </div>
                       ) : (
-                        clientesFiltrados.map((c) => (
+                        Array.isArray(clientesFiltrados) && clientesFiltrados.map((c) => (
                           <button
                             key={c.id_cliente}
                             type="button"
@@ -386,8 +424,10 @@ export default function NuevaCobranzaPage() {
                     className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#63bae9] focus:border-[#63bae9]"
                     required
                   >
-                    <option value="">Selecciona contrato</option>
-                    {contratos.map((ct) => (
+                    <option value={0} disabled hidden>
+                      Selecciona contrato
+                    </option>
+                    {Array.isArray(contratos) && contratos.map((ct) => (
                       <option key={ct.id_contrato} value={ct.id_contrato}>
                         {ct.nombre} {ct.inmueble ? `- ${ct.inmueble.titulo}` : ''}
                       </option>
@@ -513,10 +553,10 @@ export default function NuevaCobranzaPage() {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={crearCobranzaMutation.isPending}
               className="flex items-center gap-2 px-6 py-3 bg-[#fcc238] text-white rounded-xl font-bold hover:bg-[#e0b02f] transition shadow-md disabled:opacity-50"
             >
-              {loading ? (
+              {crearCobranzaMutation.isPending ? (
                 <>
                   <div className="w-5 h-5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
                   Guardando...

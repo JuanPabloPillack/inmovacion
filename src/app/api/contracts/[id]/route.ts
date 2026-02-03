@@ -28,11 +28,21 @@ const contractSchema = z.object({
     message: 'El monto debe ser un número positivo',
   }),
 }).refine((data) => {
+  const start = new Date(data.fecha_inicio);
+  const end = new Date(data.fecha_fin);
+  return !isNaN(start.getTime()) && !isNaN(end.getTime()) && end > start;
+}, {
+  message: 'La fecha de fin debe ser posterior a la de inicio',
+  path: ['fecha_fin'],
+}).refine((data) => {
   if (data.tipo_contrato === 'ALQUILER_LOCACION') {
     return !!data.id_locador && !!data.id_locatario && data.id_locador !== data.id_locatario;
   }
   return !!data.id_comprador && !!data.id_vendedor && data.id_comprador !== data.id_vendedor;
-}, { message: 'Deben especificarse dos clientes diferentes según el tipo de contrato' });
+}, {
+  message: 'Deben seleccionarse dos clientes diferentes',
+  path: ['id_locatario', 'id_vendedor'],
+});
 
 const patchSchema = z.object({
   firmado: z.boolean().optional(),
@@ -41,12 +51,14 @@ const patchSchema = z.object({
   message: 'Se debe proporcionar al menos un campo: firmado o activo',
 });
 
-// ==================== GET ====================
+
+// ==================== GET OPTIMIZADO ====================
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const numId = Number(id);
   if (isNaN(numId)) return NextResponse.json({ error: 'ID inválido' }, { status: 400 });
 
+  // ✅ OPTIMIZACIÓN: Select solo campos necesarios
   const contrato = await db.contrato.findUnique({
     where: { id_contrato: numId },
     select: {
@@ -66,10 +78,34 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       firmado: true,
       createdAt: true,
       updatedAt: true,
-      cliente_1: { select: { nombre: true, apellido: true } },
-      cliente_2: { select: { nombre: true, apellido: true } },
-      inmueble: { select: { titulo: true } },
-      template: { select: { nombre: true } },
+      // Solo campos necesarios de las relaciones
+      cliente_1: { 
+        select: { 
+          id_cliente: true,
+          nombre: true, 
+          apellido: true 
+        } 
+      },
+      cliente_2: { 
+        select: { 
+          id_cliente: true,
+          nombre: true, 
+          apellido: true 
+        } 
+      },
+      inmueble: { 
+        select: { 
+          id_inmueble: true,
+          titulo: true 
+        } 
+      },
+      template: { 
+        select: { 
+          id: true,
+          nombre: true,
+          camposVariables: true
+        } 
+      },
     },
   });
 
@@ -114,22 +150,24 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     doc.render(validated.valores);
     const buffer = doc.getZip().generate({ type: 'nodebuffer' });
 
-    // Subir nuevo contrato (reemplaza si existe)
-    const filename = `${Date.now()}-${validated.nombre.replace(/\s+/g, '_')}.docx`;
-    const pathInBucket = `${session.user.id}/${filename}`;
+   // Obtener el path existente del contrato anterior (para sobreescribir)
+if (!contrato.archivoPath) {
+  return NextResponse.json({ error: 'El contrato no tiene archivo asociado' }, { status: 400 });
+}
 
+const existingPath = new URL(contrato.archivoPath).pathname.replace(/^\/storage\/v1\/object\/public\/contracts\//, '');
+
+    // Subir el nuevo buffer al mismo path (sobreescribir)
     const { error: uploadError } = await supabaseServer.storage
       .from(CONTRACTS_BUCKET)
-      .upload(pathInBucket, buffer, {
+      .upload(existingPath, buffer, {
         contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         upsert: true,
       });
 
-    if (uploadError) return NextResponse.json({ error: 'Error al guardar contrato' }, { status: 500 });
+    if (uploadError) return NextResponse.json({ error: 'Error al actualizar el contrato' }, { status: 500 });
 
-    const { data: urlData } = supabaseServer.storage.from(CONTRACTS_BUCKET).getPublicUrl(pathInBucket);
-    const publicUrl = urlData.publicUrl;
-
+    // No cambiamos la URL pública, ya que el path es el mismo
     const id_cliente_1 = validated.tipo_contrato === 'ALQUILER_LOCACION' ? validated.id_locador! : validated.id_vendedor!;
     const id_cliente_2 = validated.tipo_contrato === 'ALQUILER_LOCACION' ? validated.id_locatario! : validated.id_comprador!;
 
@@ -143,7 +181,6 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         id_inmueble: validated.id_inmueble,
         id_template: validated.id_template,
         valores: validated.valores,
-        archivoPath: publicUrl,
         fecha_inicio: new Date(validated.fecha_inicio),
         fecha_fin: new Date(validated.fecha_fin),
         monto: parseFloat(validated.monto),
@@ -151,7 +188,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       },
     });
 
-    return NextResponse.json({ ...updated, downloadUrl: publicUrl });
+    return NextResponse.json({ ...updated, downloadUrl: contrato.archivoPath });
   } catch (error) {
     console.error('Error PUT contrato:', error);
     if (error instanceof z.ZodError) return NextResponse.json({ error: error.issues }, { status: 400 });

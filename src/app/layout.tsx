@@ -1,15 +1,15 @@
 // src/app/layout.tsx
-import "./globals.css"; 
-import { SessionProvider } from "next-auth/react";
+import "./globals.css";
 import type { ReactNode } from "react";
+import Providers from "./providers";
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="es">
       <body className="min-h-screen bg-gray-50 text-gray-900">
-        <SessionProvider>
+        <Providers>
           {children}
-        </SessionProvider>
+        </Providers>
       </body>
     </html>
   );

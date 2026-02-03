@@ -1,12 +1,14 @@
 //src/app/(protected)/contratos/page.tsx
 
 'use client';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { FileText, PlusCircle, AlertCircle, Download, Trash2, Calendar, DollarSign, User, Home, Search, ArrowLeft, Filter, X, Edit3, Eye, CheckCircle, XCircle, MoreVertical } from 'lucide-react';
 import Combobox from '@/components/ui/combobox';
 import Header from '@/components/ui/Header';
-
-interface Cliente { id_cliente: number; nombre: string; }
+import Modal from '@/components/ui/Modal';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useDebounce } from 'use-debounce';
+interface Cliente { id_cliente: number; nombre: string; apellido: string; }
 interface Inmueble { id_inmueble: number; titulo: string; }
 interface Template { id: number; nombre: string; }
 interface UserInfo { id: string; name: string; }
@@ -15,8 +17,8 @@ interface Contrato {
   id_contrato: number;
   nombre: string;
   tipo_contrato: 'ALQUILER_LOCACION' | 'COMPRA_VENTA';
-  cliente_1: { id_cliente: number; nombre: string };
-  cliente_2: { id_cliente: number; nombre: string };
+  cliente_1: { id_cliente: number; nombre: string; apellido: string; };
+  cliente_2: { id_cliente: number; nombre: string; apellido: string; };
   inmueble: { id_inmueble: number; titulo: string };
   template: { id: number; nombre: string };
   valores: { [key: string]: string };
@@ -33,16 +35,18 @@ interface Contrato {
 }
 
 function Contratos() {
-  const [contratos, setContratos] = useState<Contrato[]>([]);
-  const [clientes, setClientes] = useState<Cliente[]>([]);
-  const [inmuebles, setInmuebles] = useState<Inmueble[]>([]);
-  const [templates, setTemplates] = useState<Template[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+
+
+
+
+
+
+
   const [modalOpen, setModalOpen] = useState(false);
   const [modalAction, setModalAction] = useState<'desactivar' | 'activar' | 'eliminar' | 'firmar' | 'desfirmar'>('desactivar');
   const [itemToAction, setItemToAction] = useState<{ id: number; nombre: string } | null>(null);
   const [search, setSearch] = useState('');
+  const [debouncedSearch] = useDebounce(search, 400);
   const [fechaDesde, setFechaDesde] = useState('');
   const [fechaHasta, setFechaHasta] = useState('');
   const [tipoContrato, setTipoContrato] = useState<'ALQUILER_LOCACION' | 'COMPRA_VENTA' | ''>('');
@@ -54,10 +58,34 @@ function Contratos() {
   const [activo, setActivo] = useState<boolean | undefined>(undefined);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(10);
-  const [total, setTotal] = useState(0);
+
   const [showFilters, setShowFilters] = useState(false);
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
   const menuRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
+
+
+  const queryClient = useQueryClient();
+  // Estado para notificaciones
+const [notification, setNotification] = useState<{
+  isOpen: boolean;
+  variant: 'success' | 'error' | 'warning' | 'info';
+  title: string;
+  message: string;
+}>({
+  isOpen: false,
+  variant: 'success',
+  title: '',
+  message: '',
+});
+
+// Función helper para mostrar notificaciones
+const showNotification = (
+  variant: 'success' | 'error' | 'warning' | 'info',
+  title: string,
+  message: string
+) => {
+  setNotification({ isOpen: true, variant, title, message });
+};
 
   const getClienteLabels = (tipo: 'ALQUILER_LOCACION' | 'COMPRA_VENTA' | '') => {
     if (tipo === 'ALQUILER_LOCACION') {
@@ -68,19 +96,9 @@ function Contratos() {
     return { cliente1: 'Cliente 1', cliente2: 'Cliente 2' };
   };
 
-  useEffect(() => {
-    fetchClientes();
-    fetchInmuebles();
-    fetchTemplates();
-  }, []);
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setPage(1);
-      fetchContratos();
-    }, search ? 400 : 0);
-    return () => clearTimeout(timer);
-  }, [search, fechaDesde, fechaHasta, tipoContrato, id_cliente_1, id_cliente_2, id_inmueble, id_template, firmado, activo, page]);
+
+
 
 useEffect(() => {
   const handleClickOutside = (event: MouseEvent) => {
@@ -95,68 +113,148 @@ useEffect(() => {
   return () => document.removeEventListener('mousedown', handleClickOutside);
 }, [openMenuId]);
 
-  const fetchClientes = async () => {
-    try {
-      const res = await fetch('/api/clientes');
-      if (!res.ok) throw new Error('Error al cargar clientes');
-      const data = await res.json();
-      setClientes(data);
-    } catch (err) {
-      setError('No se pudieron cargar los clientes');
-    }
-  };
+// Queries para cargar datos
+const { data: clientes = [] } = useQuery({
+  queryKey: ['clientes'],
+  queryFn: async () => {
+    console.log('🔵 FETCHING CLIENTES desde API');
+    const res = await fetch('/api/clientes');
+    if (!res.ok) throw new Error('Error al cargar clientes');
+    return res.json();
+  },
+});
 
-  const fetchInmuebles = async () => {
-    try {
-      const res = await fetch('/api/inmuebles');
-      if (!res.ok) throw new Error('Error al cargar inmuebles');
-      const data = await res.json();
-      setInmuebles(data);
-    } catch (err) {
-      setError('No se pudieron cargar los inmuebles');
-    }
-  };
+const { data: inmuebles = [] } = useQuery({
+  queryKey: ['inmuebles'],
+  queryFn: async () => {
+    const res = await fetch('/api/inmuebles?pageSize=1000');
+    if (!res.ok) throw new Error('Error al cargar inmuebles');
+    const json = await res.json();
+    return json.data; 
+  },
+});
 
-  const fetchTemplates = async () => {
-    try {
-      const res = await fetch('/api/templates?pageSize=1000');
-      if (!res.ok) throw new Error('Error al cargar templates');
-      const data = await res.json();
-      setTemplates(data.templates || []);
-    } catch (err) {
-      setError('No se pudieron cargar los templates');
-    }
-  };
+const { data: templates = [] } = useQuery({
+  queryKey: ['templates'],
+  queryFn: async () => {
+    console.log('🟡 FETCHING TEMPLATES desde API');
+    const res = await fetch('/api/templates?pageSize=100');
+    if (!res.ok) throw new Error('Error al cargar templates');
+    const data = await res.json();
+    return data.templates || [];
+  },
+});
 
-  const fetchContratos = async () => {
-    try {
-      setLoading(true);
-      const params = new URLSearchParams();
-      if (search) params.append('search', search);
-      if (fechaDesde) params.append('fechaDesde', fechaDesde);
-      if (fechaHasta) params.append('fechaHasta', fechaHasta);
-      if (tipoContrato) params.append('tipo_contrato', tipoContrato);
-      if (id_cliente_1) params.append('id_cliente_1', id_cliente_1.toString());
-      if (id_cliente_2) params.append('id_cliente_2', id_cliente_2.toString());
-      if (id_inmueble) params.append('id_inmueble', id_inmueble.toString());
-      if (id_template) params.append('id_template', id_template.toString());
-      if (firmado !== undefined) params.append('firmado', firmado.toString());
-      if (activo !== undefined) params.append('activo', activo.toString());
-      params.append('page', page.toString());
-      params.append('pageSize', pageSize.toString());
+  // ✅ OPTIMIZACIÓN: Memoizar opciones para evitar recalcular
+  const clienteOptions = useMemo(
+  () => clientes.map((c: Cliente) => ({
+    value: c.id_cliente,
+    label: `${c.nombre} ${c.apellido}`
+  })),
+  [clientes]
+);
 
-      const url = `/api/contracts?${params.toString()}`;
-      const res = await fetch(url);
-      if (!res.ok) throw new Error('Error al cargar contratos');
-      const { contratos, total } = await res.json();
-      setContratos(contratos);
-      setTotal(total);
-    } catch (err) {
-      setError('No se pudieron cargar los contratos');
-    } finally {
-      setLoading(false);
+const inmuebleOptions = useMemo(
+  () => inmuebles.map((i: Inmueble) => ({
+    value: i.id_inmueble,
+    label: i.titulo
+  })),
+  [inmuebles]
+);
+
+const templateOptions = useMemo(
+  () => templates.map((t: Template) => ({
+    value: t.id,
+    label: t.nombre
+  })),
+  [templates]
+);
+
+// Query para cargar contratos con filtros
+const { 
+  data: contratosData, 
+  isLoading: loading,
+  error: errorQuery 
+} = useQuery({
+  queryKey: ['contratos', {
+    search: debouncedSearch, 
+    fechaDesde, 
+    fechaHasta, 
+    tipoContrato,
+    id_cliente_1, 
+    id_cliente_2, 
+    id_inmueble, 
+    id_template,
+    firmado, 
+    activo, 
+    page, 
+    pageSize
+  }],
+  queryFn: async () => {
+        console.log('🔴 FETCHING CONTRATOS desde API con filtros:', { // ← AGREGA ESTA LÍNEA
+      search: debouncedSearch,
+      page
+    });
+    const params = new URLSearchParams();
+    
+    if (debouncedSearch) params.append('search', debouncedSearch);
+    if (fechaDesde) params.append('fechaDesde', fechaDesde);
+    if (fechaHasta) params.append('fechaHasta', fechaHasta);
+    if (tipoContrato) params.append('tipo_contrato', tipoContrato);
+    if (id_cliente_1) params.append('id_cliente_1', id_cliente_1.toString());
+    if (id_cliente_2) params.append('id_cliente_2', id_cliente_2.toString());
+    if (id_inmueble) params.append('id_inmueble', id_inmueble.toString());
+    if (id_template) params.append('id_template', id_template.toString());
+    if (firmado !== undefined) params.append('firmado', firmado.toString());
+    if (activo !== undefined) params.append('activo', activo.toString());
+    params.append('page', page.toString());
+    params.append('pageSize', pageSize.toString());
+
+    const res = await fetch(`/api/contracts?${params.toString()}`);
+    if (!res.ok) throw new Error('Error al cargar contratos');
+    return res.json();
+  },
+
+});
+
+// Extraer datos de la query
+const contratos = contratosData?.contratos || [];
+const total = contratosData?.total || 0;
+const error = errorQuery?.message || null;
+
+// Mutation para actualizar contratos
+const updateMutation = useMutation({
+  mutationFn: async ({ id, data }: { id: number; data: any }) => {
+    const res = await fetch(`/api/contracts/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const errorData = await res.json();
+      throw new Error(errorData.error || 'Error en la operación');
     }
-  };
+    return res.json();
+  },
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ['contratos'] });
+  },
+});
+
+// Mutation para eliminar contratos
+const deleteMutation = useMutation({
+  mutationFn: async (id: number) => {
+    const res = await fetch(`/api/contracts/${id}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const errorData = await res.json();
+      throw new Error(errorData.error || 'Error al eliminar');
+    }
+    return res.json();
+  },
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ['contratos'] });
+  },
+});
 
   const handleAction = (id: number, nombre: string, action: 'desactivar' | 'activar' | 'eliminar' | 'firmar' | 'desfirmar') => {
     setItemToAction({ id, nombre });
@@ -165,36 +263,39 @@ useEffect(() => {
     setOpenMenuId(null);
   };
 
-  const confirmAction = async () => {
-    if (!itemToAction) return;
-    try {
-      if (modalAction === 'desactivar' || modalAction === 'activar' || modalAction === 'firmar' || modalAction === 'desfirmar') {
-        const res = await fetch(`/api/contracts/${itemToAction.id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            activo: modalAction === 'activar' ? true : modalAction === 'desactivar' ? false : undefined,
-            firmado: modalAction === 'firmar' ? true : modalAction === 'desfirmar' ? false : undefined,
-          }),
-        });
-        if (!res.ok) throw new Error(`Error al ${modalAction === 'desactivar' ? 'desactivar' : modalAction === 'activar' ? 'activar' : modalAction === 'firmar' ? 'marcar como firmado' : 'desmarcar como firmado'} el contrato`);
-      } else if (modalAction === 'eliminar') {
-        const res = await fetch(`/api/contracts/${itemToAction.id}`, {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-        });
-        if (!res.ok) throw new Error('Error al eliminar permanentemente el contrato');
+const confirmAction = async () => {
+  if (!itemToAction) return;
+  
+  try {
+    if (modalAction === 'eliminar') {
+      await deleteMutation.mutateAsync(itemToAction.id);
+      showNotification('success', '¡Eliminado!', 'Contrato eliminado permanentemente.');
+    } else {
+      const updateData: any = {};
+      
+      if (modalAction === 'activar' || modalAction === 'desactivar') {
+        updateData.activo = modalAction === 'activar';
       }
-      setError(null);
-      fetchContratos();
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setModalOpen(false);
-      setItemToAction(null);
-    }
-  };
+      if (modalAction === 'firmar' || modalAction === 'desfirmar') {
+        updateData.firmado = modalAction === 'firmar';
+      }
 
+      await updateMutation.mutateAsync({ id: itemToAction.id, data: updateData });
+      
+      const actionText = 
+        modalAction === 'activar' ? 'activado' :
+        modalAction === 'desactivar' ? 'desactivado' :
+        modalAction === 'firmar' ? 'marcado como firmado' : 'desmarcado como firmado';
+      
+      showNotification('success', '¡Operación exitosa!', `Contrato ${actionText} correctamente.`);
+    }
+  } catch (err: any) {
+    showNotification('error', 'Error', err.message || 'Ocurrió un error inesperado');
+  } finally {
+    setModalOpen(false);
+    setItemToAction(null);
+  }
+};
   const closeModal = () => {
     setModalOpen(false);
     setItemToAction(null);
@@ -216,9 +317,6 @@ useEffect(() => {
 
   const hasActiveFilters = search || fechaDesde || fechaHasta || tipoContrato || id_cliente_1 || id_cliente_2 || id_inmueble || id_template || firmado !== undefined || activo !== undefined;
 
-  const clienteOptions = clientes.map(c => ({ value: c.id_cliente, label: c.nombre }));
-  const inmuebleOptions = inmuebles.map(i => ({ value: i.id_inmueble, label: i.titulo }));
-  const templateOptions = templates.map(t => ({ value: t.id, label: t.nombre }));
 
   const { cliente1: labelCliente1, cliente2: labelCliente2 } = getClienteLabels(tipoContrato);
 
@@ -254,17 +352,7 @@ useEffect(() => {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {error && (
-          <div className="mb-6 p-4 rounded-xl flex items-start gap-3 bg-red-50 border border-red-200 shadow-sm animate-in fade-in slide-in-from-top-2 duration-300">
-            <AlertCircle className="w-5 h-5 mt-0.5 flex-shrink-0 text-red-500" />
-            <div className="flex-1">
-              <p className="font-medium text-red-800">{error}</p>
-            </div>
-            <button onClick={() => setError(null)} className="text-red-500 hover:text-red-700 transition-colors">
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-        )}
+
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
           <a
@@ -534,7 +622,7 @@ useEffect(() => {
               </div>
             ) : (
               <div className="space-y-4">
-                {contratos.map((contrato) => {
+                {contratos.map((contrato: Contrato) => {
                   const { cliente1, cliente2 } = getClienteLabels(contrato.tipo_contrato);
 
                   return (
@@ -593,13 +681,23 @@ useEffect(() => {
                                       <Eye className="w-4 h-4" />
                                       Vista Previa
                                     </a>
-                                    <a
-                                      href={`/contratos/editar/${contrato.id_contrato}`}
-                                      className="flex items-center gap-2 px-4 py-2 text-sm text-[#686363] hover:bg-[#10b981] hover:text-white transition-colors"
-                                    >
-                                      <Edit3 className="w-4 h-4" />
-                                      Editar
-                                    </a>
+{contrato.firmado ? (
+  <div 
+    className="flex items-center gap-2 px-4 py-2 text-sm text-gray-400 cursor-not-allowed opacity-60"
+  >
+    <Edit3 className="w-4 h-4" />
+    Editar
+
+  </div>
+) : (
+  <a
+    href={`/contratos/editar/${contrato.id_contrato}`}
+    className="flex items-center gap-2 px-4 py-2 text-sm text-[#686363] hover:bg-[#10b981] hover:text-white transition-colors"
+  >
+    <Edit3 className="w-4 h-4" />
+    Editar
+  </a>
+)}
                                     <a
                                       href={contrato.archivoPath}
                                       download
@@ -623,6 +721,7 @@ useEffect(() => {
                                     >
                                       <XCircle className="w-4 h-4" />
                                       Desactivar
+                                      
                                     </button>
                                   </>
                                 )}
@@ -670,11 +769,11 @@ useEffect(() => {
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                             <div className="p-4 rounded-lg bg-gradient-to-br from-[#63bae9]/5 to-[#63bae9]/0 border border-[#63bae9]/10">
                               <p className="text-xs font-bold text-[#63bae9] uppercase mb-1">{cliente1}</p>
-                              <p className="text-base font-bold text-[#686363]">{contrato.cliente_1.nombre}</p>
+                              <p className="text-base font-bold text-[#686363]">{contrato.cliente_1.nombre} {contrato.cliente_1.apellido}</p>
                             </div>
                             <div className="p-4 rounded-lg bg-gradient-to-br from-[#63bae9]/5 to-[#63bae9]/0 border border-[#63bae9]/10">
                               <p className="text-xs font-bold text-[#63bae9] uppercase mb-1">{cliente2}</p>
-                              <p className="text-base font-bold text-[#686363]">{contrato.cliente_2.nombre}</p>
+                              <p className="text-base font-bold text-[#686363]">{contrato.cliente_2.nombre} {contrato.cliente_2.apellido}</p>
                             </div>
                           </div>
                         </div>
@@ -815,51 +914,46 @@ useEffect(() => {
           </div>
         </div>
 
-        {modalOpen && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 animate-in zoom-in-95 duration-200">
-              <div className="flex items-center gap-4 mb-4">
-                <div className="w-12 h-12 rounded-xl bg-red-100 flex items-center justify-center">
-                  <AlertCircle className="w-6 h-6 text-red-600" />
-                </div>
-                <h3 className="text-xl font-bold text-[#686363]">
-                  {modalAction === 'desactivar' ? '¿Desactivar contrato?' :
-                   modalAction === 'activar' ? '¿Activar contrato?' :
-                   modalAction === 'eliminar' ? '¿Eliminar permanentemente?' :
-                   modalAction === 'firmar' ? '¿Marcar como firmado?' : '¿Desmarcar como firmado?'}
-                </h3>
-              </div>
-              <p className="text-[#969696] mb-6">
-                ¿Estás seguro de que quieres {modalAction === 'desactivar' ? 'desactivar' :
-                                         modalAction === 'activar' ? 'activar' :
-                                         modalAction === 'eliminar' ? 'eliminar permanentemente' :
-                                         modalAction === 'firmar' ? 'marcar como firmado' : 'desmarcar como firmado'}
-                el contrato <span className="font-bold text-[#686363]">"{itemToAction?.nombre}"</span>?
-                {modalAction === 'eliminar' && ' Esta acción no se puede deshacer.'}
-              </p>
-              <div className="flex gap-3">
-                <button
-                  onClick={closeModal}
-                  className="flex-1 px-4 py-3 rounded-xl border-2 border-gray-200 font-semibold text-[#686363] hover:bg-gray-50 transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={confirmAction}
-                  className={`flex-1 px-4 py-3 rounded-xl font-semibold text-white transition-all hover:shadow-lg hover:scale-105 active:scale-95 ${
-                    modalAction === 'activar' || modalAction === 'firmar' ? 'bg-green-500 hover:bg-green-600' :
-                    'bg-red-500 hover:bg-red-600'
-                  }`}
-                >
-                  {modalAction === 'desactivar' ? 'Desactivar' :
-                   modalAction === 'activar' ? 'Activar' :
-                   modalAction === 'eliminar' ? 'Eliminar' :
-                   modalAction === 'firmar' ? 'Marcar Firmado' : 'Desmarcar Firmado'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Modal de confirmación */}
+<Modal
+  isOpen={modalOpen}
+  onClose={closeModal}
+  onConfirm={confirmAction}
+  title={
+    modalAction === 'desactivar' ? '¿Desactivar contrato?' :
+    modalAction === 'activar' ? '¿Activar contrato?' :
+    modalAction === 'eliminar' ? '¿Eliminar permanentemente?' :
+    modalAction === 'firmar' ? '¿Marcar como firmado?' :
+    '¿Desmarcar como firmado?'
+  }
+  message={
+    `¿Estás seguro de que quieres ${
+      modalAction === 'desactivar' ? 'desactivar' :
+      modalAction === 'activar' ? 'activar' :
+      modalAction === 'eliminar' ? 'eliminar permanentemente' :
+      modalAction === 'firmar' ? 'marcar como firmado' : 'desmarcar como firmado'
+    } el contrato "${itemToAction?.nombre}"?${
+      modalAction === 'eliminar' ? ' Esta acción no se puede deshacer.' : ''
+    }`
+  }
+  variant={modalAction === 'eliminar' || modalAction === 'desactivar' ? 'danger' : 'warning'}
+  confirmText={
+    modalAction === 'desactivar' ? 'Desactivar' :
+    modalAction === 'activar' ? 'Activar' :
+    modalAction === 'eliminar' ? 'Eliminar' :
+    modalAction === 'firmar' ? 'Marcar Firmado' : 'Desmarcar Firmado'
+  }
+/>
+
+{/* Modal de notificación */}
+<Modal
+  isOpen={notification.isOpen}
+  onClose={() => setNotification(prev => ({ ...prev, isOpen: false }))}
+  title={notification.title}
+  message={notification.message}
+  variant={notification.variant}
+  autoClose={3000}
+/>
       </main>
     </div>
   );

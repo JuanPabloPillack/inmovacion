@@ -22,6 +22,7 @@ import {
 import type { InmuebleEdit } from "@/types/inmuebles";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import Modal from "@/components/ui/Modal";
+import { useQuery } from "@tanstack/react-query";
 
 
 // -----------------------------------------------------------
@@ -58,35 +59,87 @@ export default function FormularioInmueble({
   // Referencia al formulario, útil para capturar datos con FormData
   const formRef = useRef<HTMLFormElement>(null);
 
+    const clientesQuery = useQuery<Cliente[]>({
+  queryKey: ["clientes", "propietarios"],
+  queryFn: async () => {
+    const res = await fetch("/api/clientes/propietarios");
+    if (!res.ok) throw new Error("Error clientes");
+    return res.json();
+  },
+});
+
+
+const tiposQuery = useQuery<TipoInmueble[]>({
+  queryKey: ["tipos_inmueble"],
+  queryFn: async () => {
+    const res = await fetch("/api/tipos_inmueble");
+    if (!res.ok) throw new Error("Error tipos");
+    const data = await res.json();
+    return Array.isArray(data) ? data : data.data;
+  },
+});
+
+const estadosQuery = useQuery<Estado[]>({
+  queryKey: ["estados"],
+  queryFn: async () => {
+    const res = await fetch("/api/estados");
+    if (!res.ok) throw new Error("Error estados");
+    const data = await res.json();
+    return Array.isArray(data) ? data : data.data;
+  },
+});
+
+const operacionesQuery = useQuery<Operacion[]>({
+  queryKey: ["operaciones"],
+  queryFn: async () => {
+    const res = await fetch("/api/operaciones");
+    if (!res.ok) throw new Error("Error operaciones");
+    const data = await res.json();
+    return Array.isArray(data) ? data : data.data;
+  },
+});
+
+
   // ------------------ ESTADOS ------------------
-  // Listas obtenidas desde tus endpoints
-  const [clientes, setClientes] = useState<Cliente[]>([]);
-  const [tipos, setTipos] = useState<TipoInmueble[]>([]);
-  const [estados, setEstados] = useState<Estado[]>([]);
-  const [operaciones, setOperaciones] = useState<Operacion[]>([]);
+const clientes = clientesQuery.data ?? [];
+const tipos = tiposQuery.data ?? [];
+const estados = estadosQuery.data ?? [];
+const operaciones = operacionesQuery.data ?? [];
+
+const isLoading =
+  clientesQuery.isLoading ||
+  tiposQuery.isLoading ||
+  estadosQuery.isLoading ||
+  operacionesQuery.isLoading;
+
+const isError =
+  clientesQuery.isError ||
+  tiposQuery.isError ||
+  estadosQuery.isError ||
+  operacionesQuery.isError;
+
+
 
   // Loading para evitar múltiples envíos
   const [loading, setLoading] = useState(false);
-  const [alerta, setAlerta] = useState<{
-  tipo: "success" | "error";
-  titulo: string;
-  mensaje: string;
-} | null>(null);
-const [modalOpen, setModalOpen] = useState(false);
-const [modalConfig, setModalConfig] = useState<{
-  title: string;
-  message: string;
-  variant?: "success" | "error" | "warning" | "info" | "danger";
-  onConfirm?: () => void;
-}>({
-  title: "",
-  message: "",
-});
 
 
 
   // Manejo de imágenes: cada imagen tiene URL, si es principal, y el archivo real
   const [imagenes, setImagenes] = useState<ImagenData[]>([]);
+
+  useEffect(() => {
+  if (initialData?.imagenes && initialData.imagenes.length > 0) {
+    setImagenes(
+      initialData.imagenes.map((img) => ({
+        url: img.url,
+        principal: img.principal,
+        // ⚠️ NO file → ya está subida
+      }))
+    );
+  }
+}, [initialData]);
+
 
   // Estados para selects
   const [selectedCliente, setSelectedCliente] = useState<number | "">(initialData?.id_cliente ?? "");
@@ -97,46 +150,23 @@ const [modalConfig, setModalConfig] = useState<{
   // Estado local para el texto del barrio
   const [barrioText, setBarrioText] = useState(initialData?.ubicacion?.barrio ?? "");
 
-  // -----------------------------------------------------------
-  //               CARGA DE DATOS INICIALES
-  // -----------------------------------------------------------
-  const [initialized, setInitialized] = useState(false);
+  // ------------------ MODAL ------------------
+type ModalVariant = "success" | "error" | "warning" | "info";
 
-  useEffect(() => {
-    if (initialized) return;
+interface ModalConfig {
+  title: string;
+  message: string;
+  variant: ModalVariant;
+  onConfirm?: () => void;
+}
 
-    const loadData = async () => {
-      try {
-        const [propRaw, tRaw, eRaw, oRaw] = await Promise.all([
-          fetch("/api/clientes/propietarios").then((r) => r.json()),
-          fetch("/api/tipos_inmueble").then((r) => r.json()),
-          fetch("/api/estados").then((r) => r.json()),
-          fetch("/api/operaciones").then((r) => r.json()),
-        ]);
+const [modalOpen, setModalOpen] = useState(false);
+const [modalConfig, setModalConfig] = useState<ModalConfig>({
+  title: "",
+  message: "",
+  variant: "info",
+});
 
-        setClientes(Array.isArray(propRaw) ? propRaw : []);
-        setTipos(Array.isArray(tRaw) ? tRaw : tRaw.data || []);
-        setEstados(Array.isArray(eRaw) ? eRaw : eRaw.data || []);
-        setOperaciones(Array.isArray(oRaw) ? oRaw : oRaw.data || []);
-
-        // 👇 clave
-        setInitialized(true);
-      } catch (err) {
-        console.error("Error cargando datos:", err);
-      }
-    };
-
-    loadData();
-
-    if (initialData?.imagenes?.length) {
-      setImagenes(
-        initialData.imagenes.map((img) => ({
-          url: img.url,
-          principal: img.principal,
-        }))
-      );
-    }
-  }, [initialized, initialData]);
 
 
   // -----------------------------------------------------------
@@ -188,41 +218,9 @@ const [modalConfig, setModalConfig] = useState<{
       prev.map((img, i) => ({ ...img, principal: i === index }))
     );
   };
-useEffect(() => {
-  if (initialized) return;
 
-  const loadData = async () => {
-    try {
-      const [propRaw, tRaw, eRaw, oRaw] = await Promise.all([
-        fetch("/api/clientes/propietarios").then((r) => r.json()),
-        fetch("/api/tipos_inmueble").then((r) => r.json()),
-        fetch("/api/estados").then((r) => r.json()),
-        fetch("/api/operaciones").then((r) => r.json()),
-      ]);
 
-      setClientes(Array.isArray(propRaw) ? propRaw : []);
-      setTipos(Array.isArray(tRaw) ? tRaw : tRaw.data || []);
-      setEstados(Array.isArray(eRaw) ? eRaw : eRaw.data || []);
-      setOperaciones(Array.isArray(oRaw) ? oRaw : oRaw.data || []);
 
-      // 👇 clave
-      setInitialized(true);
-    } catch (err) {
-      console.error("Error cargando datos:", err);
-    }
-  };
-
-  loadData();
-
-  if (initialData?.imagenes?.length) {
-    setImagenes(
-      initialData.imagenes.map((img) => ({
-        url: img.url,
-        principal: img.principal,
-      }))
-    );
-    }
-  }, [initialized, initialData]);
 
   // -----------------------------------------------------------
   //                     VALIDACIONES
@@ -474,6 +472,26 @@ const handleSubmit = (e: React.FormEvent) => {
   setModalOpen(true);
 };
 
+  if (isLoading) {
+    return (
+      <div className="p-8 text-center text-gray-500">
+        Cargando formulario...
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <Alert variant="destructive">
+        <AlertTitle>Error</AlertTitle>
+        <AlertDescription>
+          No se pudieron cargar los datos del formulario.
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+
 
   // =====================================================
   //     RENDER
@@ -485,15 +503,6 @@ const handleSubmit = (e: React.FormEvent) => {
     noValidate
     className="space-y-6"
   >
-    {alerta && (
-      <Alert
-        variant={alerta.tipo === "error" ? "destructive" : "default"}
-        className="mb-6"
-      >
-        <AlertTitle>{alerta.titulo}</AlertTitle>
-        <AlertDescription>{alerta.mensaje}</AlertDescription>
-      </Alert>
-    )}
 
 
   

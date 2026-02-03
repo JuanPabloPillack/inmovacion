@@ -36,6 +36,7 @@ const contractSchema = z.object({
 }, { message: 'Deben especificarse dos clientes diferentes según el tipo de contrato' });
 
 // ==================== GET (listado) - SIN CAMBIOS ====================
+// ==================== GET OPTIMIZADO - SOLO CAMPOS NECESARIOS ====================
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
@@ -53,7 +54,9 @@ export async function GET(req: NextRequest) {
     const pageSize = parseInt(searchParams.get('pageSize') || '10');
 
     const where: any = {};
+    
     if (search) where.nombre = { contains: search, mode: 'insensitive' };
+    
     if (fechaDesde || fechaHasta) {
       where.AND = where.AND || [];
       if (fechaDesde) {
@@ -65,6 +68,7 @@ export async function GET(req: NextRequest) {
         where.AND.push({ fecha_inicio: { lte: new Date(y, m - 1, d, 23, 59, 59) } });
       }
     }
+    
     if (id_cliente_1) where.id_cliente_1 = id_cliente_1;
     if (id_cliente_2) where.id_cliente_2 = id_cliente_2;
     if (id_inmueble) where.id_inmueble = id_inmueble;
@@ -73,16 +77,63 @@ export async function GET(req: NextRequest) {
     if (firmado !== null) where.firmado = firmado === 'true';
     if (activo !== null) where.activo = activo === 'true';
 
+    // ✅ OPTIMIZACIÓN: Promise.all + select específico
     const [contratos, total] = await Promise.all([
       db.contrato.findMany({
         where,
-        include: {
-          cliente_1: { select: { nombre: true, apellido: true } },
-          cliente_2: { select: { nombre: true, apellido: true } },
-          inmueble: { select: { titulo: true } },
-          template: { select: { nombre: true } },
-          createdBy: { select: { id: true, name: true, email: true } },
-          updatedBy: { select: { id: true, name: true, email: true } },
+        select: {
+          id_contrato: true,
+          nombre: true,
+          tipo_contrato: true,
+          fecha_inicio: true,
+          fecha_fin: true,
+          monto: true,
+          archivoPath: true,
+          activo: true,
+          firmado: true,
+          createdAt: true,
+          updatedAt: true,
+          valores: true,
+          cliente_1: {
+            select: {
+              id_cliente: true,
+              nombre: true,
+              apellido: true,
+            }
+          },
+          cliente_2: {
+            select: {
+              id_cliente: true,
+              nombre: true,
+              apellido: true,
+            }
+          },
+          inmueble: {
+            select: {
+              id_inmueble: true,
+              titulo: true,
+            }
+          },
+          template: {
+            select: {
+              id: true,
+              nombre: true,
+            }
+          },
+          createdBy: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            }
+          },
+          updatedBy: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            }
+          },
         },
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * pageSize,
@@ -93,8 +144,14 @@ export async function GET(req: NextRequest) {
 
     const formatted = contratos.map(c => ({
       ...c,
-      createdBy: { id: c.createdBy.id, name: c.createdBy.name || c.createdBy.email || 'Usuario desconocido' },
-      updatedBy: { id: c.updatedBy.id, name: c.updatedBy.name || c.updatedBy.email || 'Usuario desconocido' },
+      createdBy: {
+        id: c.createdBy.id,
+        name: c.createdBy.name || c.createdBy.email || 'Usuario desconocido'
+      },
+      updatedBy: {
+        id: c.updatedBy.id,
+        name: c.updatedBy.name || c.updatedBy.email || 'Usuario desconocido'
+      },
     }));
 
     return NextResponse.json({ contratos: formatted, total, page, pageSize });

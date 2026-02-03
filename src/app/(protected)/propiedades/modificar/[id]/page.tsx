@@ -82,24 +82,29 @@ export default function EditarInmueblePage() {
 
         // Adaptación de datos para que coincidan con InmuebleEdit
         const inmuebleData: InmuebleEdit = {
-          ...src,
+  ...src,
 
-          // Convertimos barrio a los tipos que espera el formulario
-          id_barrio: src.ubicacion?.barrio?.id_barrio ?? undefined,
-          ubicacion: {
-            ...src.ubicacion,
-            barrio: src.ubicacion?.barrio?.nombre ?? "",
-          },
+  id_barrio: src.ubicacion?.barrio?.id_barrio ?? undefined,
+  ubicacion: {
+    ...src.ubicacion,
+    barrio: src.ubicacion?.barrio?.nombre ?? "",
+  },
 
-          // Mapeo de createdBy y updatedBy para que tengan { id, name }
-          createdBy: src.createdBy
-            ? { id: src.createdBy.id, name: src.createdBy.name }
-            : null,
+  createdBy: src.createdBy
+    ? { id: src.createdBy.id, name: src.createdBy.name }
+    : null,
 
-          updatedBy: src.updatedBy
-            ? { id: src.updatedBy.id, name: src.updatedBy.name }
-            : null,
-        };
+  updatedBy: src.updatedBy
+    ? { id: src.updatedBy.id, name: src.updatedBy.name }
+    : null,
+
+  // 👇 ESTO ES LO QUE FALTABA
+  imagenes: (src.imagenes ?? []).map((img: any) => ({
+    url: img.url,
+    principal: img.principal,
+    // ❗ file NO se setea porque ya está subida
+  })),
+};
 
         setInmueble(inmuebleData);
       } catch (err: any) {
