@@ -1,3 +1,4 @@
+// src/lib/excelGenerator.ts
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import ExcelJS from "exceljs";
 
@@ -163,19 +164,24 @@ export async function generarExcelRendicion(
   const workbook = new ExcelJS.Workbook();
 
   // Parseo "DD-MM-YYYY"
-  const [day, month, year] = fechaRendicion.split("-").map(Number);
+  const [day, monthStr, yearStr] = fechaRendicion.split("-");
+  const dayNum = Number(day);
+  const month = Number(monthStr);
+  const year = Number(yearStr);
   const monthName = getMonthName(month);
+  const shortMonth = monthName.substring(0, 3);
   const shortYear = year.toString().substring(2);
+  const monthPad = monthStr.padStart(2, '0');
 
   // Excel usa números de serie para fechas
-  const date = new Date(year, month - 1, day);
+  const date = new Date(year, month - 1, dayNum);
   const dateSerial = Math.floor(date.getTime() / 86400000) + 25569;
 
   /* ==========================================================
    *               HOJA PRINCIPAL: "Rend XX-Mes YY"
    * ========================================================== */
-  const sheetName = `Rend ${numeroRendicion}-${monthName} ${shortYear} `;
-  const sheetR = workbook.addWorksheet(sheetName); //sheet -> hoja principal
+  const sheetName = `Rend ${numeroRendicion}-${shortMonth} ${shortYear} `;
+  const sheetR = workbook.addWorksheet(sheetName);
 
   /* --------------------------------------------
    * Encabezado
@@ -203,6 +209,12 @@ export async function generarExcelRendicion(
   sheetR.getCell('H5').value = 'Aumento IPC c/ 3 meses';
   sheetR.getCell('J5').value = 'Contrato';
 
+  // Aplicar bordes a la fila de headers de ingresos
+  ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'].forEach(col => {
+    const cell = sheetR.getCell(`${col}5`);
+    cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+  });
+
   // Row 6
   sheetR.getCell('H6').value = 'Link a aumentos IPC';
 
@@ -219,17 +231,23 @@ export async function generarExcelRendicion(
     const pagoEfvo = 0; // Asumir 0 (no en schema, agregar si hay modelo PagoEfvo)
     const totalCobr = c.total_cobrado ?? (c.pagado ? totalCobrar : 0); // Basado en pagado
     const aCobrar = c.a_cobrar ?? (totalCobrar - totalCobr);
-    const expensas = totalCobrar - alquiler; // Diferencia como expensas/cuotas
-    totalIngresos += totalCobrar; // O usa aCobrar si prefieres pendiente
+    totalIngresos += totalCobrar;
     totalAlquiler += alquiler;
-    totalExpensas += expensas;
     totalCobrado += totalCobr;
+
+    // Parse expensas from concepto
+    let expensa = 0;
+    const expMatch = c.concepto.match(/\+ Expensas? (\d+\.?\d*)/);
+    if (expMatch) {
+      expensa = parseFloat(expMatch[1]);
+    }
+    totalExpensas += expensa;
 
     // ID en A
     sheetR.getCell(`A${rowNum}`).value = c.id_cobranza; // Usar id_cobranza real
 
     // Descripción completa en B (cliente + concepto + observaciones si hay)
-    const desc = `${c.cliente.nombre}: ${c.concepto}${c.observaciones ? ` - ${c.observaciones}` : ''}`;
+    const desc = `${c.cliente.nombre}: ${c.unFuncional ? c.unFuncional + ': ' : ''}${c.concepto}${c.observaciones ? ` - ${c.observaciones}` : ''}`;
     sheetR.getCell(`B${rowNum}`).value = desc;
 
     // Alquiler en C
@@ -252,13 +270,19 @@ export async function generarExcelRendicion(
     sheetR.getCell(`G${rowNum}`).value = aCobrar;
     sheetR.getCell(`G${rowNum}`).numFmt = '#,##0';
 
-    // Aumento IPC en H
-    sheetR.getCell(`H${rowNum}`).value = c.ipcAumento ?? (ipcData?.valor ? `IPC ${ipcData.anio}` : '');
+    // Aumento IPC en H (texto)
+  if (ipcData?.mes && ipcData?.anio && c.ipcValor) {
+    sheetR.getCell(`H${rowNum}`).value = `IPC ${getMonthName(ipcData.mes)} ${ipcData.anio}`;
+  } else {
+    sheetR.getCell(`H${rowNum}`).value = '';
+  }
 
-    // Link/Valor IPC en I
-    if (c.ipcValor) {
-      sheetR.getCell(`I${rowNum}`).value = c.ipcValor;
-    }
+  // Valor IPC real en I
+  if (c.ipcValor != null) {
+    sheetR.getCell(`I${rowNum}`).value = c.ipcValor;
+    sheetR.getCell(`I${rowNum}`).numFmt = '0.00'; // o % si lo guardás como porcentaje
+  }
+
 
     // Contrato en J (usar derivado)
     sheetR.getCell(`J${rowNum}`).value = c.contratoStr ?? '';
@@ -279,64 +303,168 @@ export async function generarExcelRendicion(
   sheetR.getCell(`G${totalIngresosRow}`).value = totalIngresos - totalCobrado; // Pendiente total
   sheetR.getCell(`G${totalIngresosRow}`).numFmt = '#,##0';
 
+  // Aplicar bordes a la fila de total ingresos
+  ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'].forEach(col => {
+    const cell = sheetR.getCell(`${col}${totalIngresosRow}`);
+    cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+  });
+
   // Sección EGRESOS
   const egresosStartRow = totalIngresosRow + 2;
-  sheetR.getCell(`A${egresosStartRow}`).value = 'EGRESOS';
+  sheetR.getCell(`B${egresosStartRow}`).value = 'EGRESOS';
 
   // SS Adm 10%
   const ssAdmStartRow = egresosStartRow + 3;
-  sheetR.getCell(`A${ssAdmStartRow}`).value = 'SS Adm 10%/Mensual/A cargo Propietario';
+  sheetR.getCell(`B${ssAdmStartRow}`).value = 'SS Adm 10%/Mensual/A cargo Propietario';
 
   let ssAdmRow = ssAdmStartRow + 1;
   // Una fila por cada
   cobranzas.forEach((c) => {
-    const ssPorItem = c.monto * 0.1;
+    let ssPorItem = c.monto * 0.1;
+    let desc = `${c.inmueble?.titulo ?? c.unFuncional ?? 'Inmueble'} 10% de ${c.monto}`;
+
+    // Parse extra Ss y Gtos Adm from concepto
+    let extraSs = 0;
+    const ssMatch = c.concepto.match(/Ss y Gtos Adm: (\d+\.?\d*)\/3: (\d+\.?\d*)/);
+    if (ssMatch) {
+      extraSs = parseFloat(ssMatch[2]);
+      desc = `${c.inmueble?.titulo ?? c.unFuncional ?? 'Inmueble'} 10% de ${c.monto} + Ss y Gtos Adm cobrados en ingresos cuota 1/3: ${extraSs}`;
+    }
+    ssPorItem += extraSs;
+
+    sheetR.getCell(`B${ssAdmRow}`).value = desc;
+    sheetR.getCell(`G${ssAdmRow}`).value = ssPorItem;
+    sheetR.getCell(`G${ssAdmRow}`).numFmt = '#,##0.00';
     totalSSAdm += ssPorItem;
-    sheetR.getCell(`B${ssAdmRow}`).value = `${c.inmueble?.titulo ?? 'Inmueble'} 10% de ${c.monto}`; // Usar inmueble.titulo
-    sheetR.getCell(`E${ssAdmRow}`).value = ssPorItem;
-    sheetR.getCell(`E${ssAdmRow}`).numFmt = '#,##0.00';
+
+    // Bordes para filas SS Adm
+    ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'].forEach(col => {
+      const cell = sheetR.getCell(`${col}${ssAdmRow}`);
+      cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+    });
+
     ssAdmRow++;
   });
 
   // Total SS Adm
-  sheetR.getCell(`E${ssAdmRow}`).value = totalSSAdm;
-  sheetR.getCell(`E${ssAdmRow}`).numFmt = '#,##0.00';
+  sheetR.getCell(`G${ssAdmRow}`).value = totalSSAdm;
+  sheetR.getCell(`G${ssAdmRow}`).numFmt = '#,##0.00';
+
+  // Bordes para total SS Adm
+  ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'].forEach(col => {
+    const cell = sheetR.getCell(`${col}${ssAdmRow}`);
+    cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+  });
 
   // Expensas cobradas
   const expensasRow = ssAdmRow + 3;
-  sheetR.getCell(`A${expensasRow}`).value = 'SS Adm Cobrado a Inquilinos en ingresos';
-  sheetR.getCell(`A${expensasRow + 1}`).value = 'Expensas cobradas a inquilinos';
-  sheetR.getCell(`E${expensasRow + 1}`).value = totalExpensas; // Calculado de diferencias
-  sheetR.getCell(`E${expensasRow + 1}`).numFmt = '#,##0';
+  sheetR.getCell(`B${expensasRow}`).value = 'SS Adm Cobrado a Inquilinos en ingresos';
+  sheetR.getCell(`B${expensasRow + 1}`).value = 'Expensas cobradas a inquilinos';
+  sheetR.getCell(`F${expensasRow + 1}`).value = totalExpensas;
+  sheetR.getCell(`F${expensasRow + 1}`).numFmt = '#,##0';
 
-  // Gtos Mantenimiento (placeholder, agregar modelo si existe)
+  // Bordes para expensas
+  ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'].forEach(col => {
+    const cell1 = sheetR.getCell(`${col}${expensasRow}`);
+    cell1.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+    const cell2 = sheetR.getCell(`${col}${expensasRow + 1}`);
+    cell2.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+  });
+
+  // Gtos Mantenimiento (CON COMISIÓN DEL 10%)
   const gtosMRow = expensasRow + 5;
-  sheetR.getCell(`A${gtosMRow}`).value = 'Gtos Mantenimiento (CON COMISIÓN DEL 10%)';
-  // Filas vacías con 0 en E (ajustar si hay Historial o pagos relacionados)
+  sheetR.getCell(`B${gtosMRow}`).value = 'Gtos Mantenimiento (CON COMISIÓN DEL 10%)';
+  // Filas vacías con 0 en G (ajustar si hay Historial o pagos relacionados)
   for (let i = 0; i < 6; i++) {
-    sheetR.getCell(`E${gtosMRow + i + 1}`).value = 0;
-  }
-  sheetR.getCell(`E${gtosMRow + 7}`).value = 0; // 10% Adm = 0
+    sheetR.getCell(`A${gtosMRow + i + 1}`).value = 8 + i;
+    sheetR.getCell(`G${gtosMRow + i + 1}`).value = 0;
 
-  // Impuestos - Servicios (placeholder, fijos como sample; agregar modelo Egreso si se expande schema)
-  const impRow = gtosMRow + 9;
-  sheetR.getCell(`A${impRow}`).value = 'Impuestos - Servicios y Pagos a cuenta (SIN COMISIÓN DEL 10%)';
+    // Bordes para cada fila de gtos
+    ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'].forEach(col => {
+      const cell = sheetR.getCell(`${col}${gtosMRow + i + 1}`);
+      cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+    });
+  }
+  // Totales intermedios 0
+  for (let i = 6; i < 9; i++) {
+    sheetR.getCell(`G${gtosMRow + i + 1}`).value = 0;
+
+    // Bordes para totales intermedios
+    ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'].forEach(col => {
+      const cell = sheetR.getCell(`${col}${gtosMRow + i + 1}`);
+      cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+    });
+  }
+  // 10% Adm Construcción
+  sheetR.getCell(`B${gtosMRow + 9 + 1}`).value = '10% Adm Construcción';
+  sheetR.getCell(`F${gtosMRow + 9 + 1}`).value = 0;
+  sheetR.getCell(`G${gtosMRow + 9 + 1}`).value = 0;
+
+  // Bordes para 10% Adm
+  ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'].forEach(col => {
+    const cell = sheetR.getCell(`${col}${gtosMRow + 9 + 1}`);
+    cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+  });
+
+  // Impuestos - Servicios y Pagos a cuenta (SIN COMISIÓN DEL 10%)
+  const impRow = gtosMRow + 9 + 2;
+  sheetR.getCell(`B${impRow}`).value = 'Impuestos - Servicios y Pagos a cuenta (SIN COMISIÓN DEL 10%)';
   // Valores fijos (reemplazar con query a nuevo modelo si se agrega)
-  sheetR.getCell(`A${impRow + 1}`).value = 'Seguro Sep y Oct 26.755 / 8 x 4 x 2 meses';
-  sheetR.getCell(`E${impRow + 1}`).value = 26755;
-  sheetR.getCell(`A${impRow + 3}`).value = 'TV OC CITY FC 2579-00008163';
-  sheetR.getCell(`E${impRow + 3}`).value = 510000;
+  sheetR.getCell(`A${impRow + 1}`).value = 14;
+  sheetR.getCell(`B${impRow + 1}`).value = 'Seguro Sep y Oct 26.755 / 8 x 4 x 2 meses';
+  sheetR.getCell(`F${impRow + 1}`).value = 26755;
+
+  sheetR.getCell(`A${impRow + 2}`).value = 15;
+  sheetR.getCell(`B${impRow + 2}`).value = 'LAR corpiño y gaseosas';
+  sheetR.getCell(`F${impRow + 2}`).value = 19987.65;
+
+  sheetR.getCell(`A${impRow + 3}`).value = 16;
+  sheetR.getCell(`B${impRow + 3}`).value = 'TV OC CITY FC 2579-00008163';
+  sheetR.getCell(`F${impRow + 3}`).value = 510000;
+
+  // Filas vacías con IDs 17-22
+  for (let i = 3; i < 9; i++) {
+    sheetR.getCell(`A${impRow + 1 + i}`).value = 14 + i;
+
+    // Bordes para filas vacías
+    ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'].forEach(col => {
+      const cell = sheetR.getCell(`${col}${impRow + 1 + i}`);
+      cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+    });
+  }
+
+  // Bordes para filas con valores
+  for (let i = 1; i <= 3; i++) {
+    ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'].forEach(col => {
+      const cell = sheetR.getCell(`${col}${impRow + i}`);
+      cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+    });
+  }
+
   const totalImpuestos = 26755 + 19987.65 + 510000;
-  sheetR.getCell(`E${impRow + 6}`).value = totalImpuestos;
-  sheetR.getCell(`E${impRow + 6}`).numFmt = '#,##0.00';
+  sheetR.getCell(`A${impRow + 9 + 1}`).value = 23;
+  sheetR.getCell(`G${impRow + 9 + 1}`).value = totalImpuestos;
+  sheetR.getCell(`G${impRow + 9 + 1}`).numFmt = '#,##0.00';
+
+  // Bordes para total impuestos
+  ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'].forEach(col => {
+    const cell = sheetR.getCell(`${col}${impRow + 9 + 1}`);
+    cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+  });
 
   // Total Egresos (SS + Expensas + Gtos(0) + Impuestos)
-  const totalEgresos = totalSSAdm + totalExpensas + totalImpuestos;
-  const totalEgrRow = impRow + 8;
+  const totalEgresos = totalSSAdm + totalExpensas + 0 + totalImpuestos;
+  const totalEgrRow = impRow + 9 + 1 + 3; // Ajuste para espacios
   sheetR.getCell(`B${totalEgrRow}`).value = 'TOTAL EGRESOS';
   sheetR.getCell(`E${totalEgrRow}`).value = totalEgresos;
   sheetR.getCell(`F${totalEgrRow}`).value = totalEgresos;
   sheetR.getCell(`E${totalEgrRow}`).numFmt = '#,##0.00';
+
+  // Bordes para total egresos
+  ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'].forEach(col => {
+    const cell = sheetR.getCell(`${col}${totalEgrRow}`);
+    cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+  });
 
   // Saldo anterior (usar param)
   const sdoAnt = saldoAnterior ?? 386953; // Default sample
@@ -344,25 +472,43 @@ export async function generarExcelRendicion(
   sheetR.getCell(`E${sdoAntRow}`).value = sdoAnt;
   sheetR.getCell(`E${sdoAntRow}`).numFmt = '#,##0';
 
+  // Bordes para saldo anterior
+  ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'].forEach(col => {
+    const cell = sheetR.getCell(`${col}${sdoAntRow}`);
+    cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+  });
+
   // Saldo final
   const saldoFinal = totalCobrado - totalEgresos + sdoAnt; // Ajustado con totalCobrado
   const saldoFinalRow = sdoAntRow + 1;
-  sheetR.getCell(`C${saldoFinalRow}`).value = `SALDO FINAL  ${day}-${monthName.substring(0,3)}-${shortYear}`;
+  sheetR.getCell(`C${saldoFinalRow}`).value = `SALDO FINAL  ${day}-${monthPad}-${shortYear}`;
   sheetR.getCell(`D${saldoFinalRow}`).value = saldoFinal;
   sheetR.getCell(`D${saldoFinalRow}`).numFmt = '#,##0.00';
+
+  // Bordes para saldo final
+  ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'].forEach(col => {
+    const cell = sheetR.getCell(`${col}${saldoFinalRow}`);
+    cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+  });
 
   // Firma
   const firmaRow = saldoFinalRow + 1;
   sheetR.getCell(`A${firmaRow}`).value = 'Firma: ………………………………………………………………………………………..';
+
+  // Bordes para firma (opcional, pero para consistencia)
+  ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'].forEach(col => {
+    const cell = sheetR.getCell(`${col}${firmaRow}`);
+    cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+  });
 
   // Formato general para headers y totals
   [5, totalIngresosRow, ssAdmStartRow, expensasRow, gtosMRow, impRow, totalEgrRow, sdoAntRow, saldoFinalRow].forEach(r => {
     sheetR.getRow(r).font = { bold: true };
   });
 
-  // =============================================================
-  //                     HOJA RECIBOS
-  // =============================================================
+  /* ==========================================================
+   *                     HOJA RECIBOS
+   * ========================================================== */
   const sheetRec = workbook.addWorksheet('RECIBOS ');
 
   // Columnas anchas
@@ -422,6 +568,14 @@ export async function generarExcelRendicion(
       sheetRec.getCell(`D${currentRow}`).value = c.numero_recibo; // Agregar número recibo
     }
 
+    // Aplicar bordes a todo el bloque de recibo original
+    for (let r = currentRow - 9; r <= currentRow; r++) {
+      ['A', 'B', 'C', 'D'].forEach(col => {
+        const cell = sheetRec.getCell(`${col}${r}`);
+        cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+      });
+    }
+
     // RECIBO DUPLICADO (E-H, mirror)
     const dupRowStart = currentRow - 9;
     sheetRec.getCell(`E${dupRowStart}`).value = 'RECIBO DUPLICADO';
@@ -453,6 +607,14 @@ export async function generarExcelRendicion(
     sheetRec.getCell(`G${dupRowStart + 9}`).value = `Rend. Nº ${numeroRendicion}`;
     if (c.numero_recibo) {
       sheetRec.getCell(`H${dupRowStart + 9}`).value = c.numero_recibo;
+    }
+
+    // Aplicar bordes a todo el bloque de recibo duplicado
+    for (let r = dupRowStart; r <= dupRowStart + 9; r++) {
+      ['E', 'F', 'G', 'H'].forEach(col => {
+        const cell = sheetRec.getCell(`${col}${r}`);
+        cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+      });
     }
 
     currentRow += 2; // Espacio

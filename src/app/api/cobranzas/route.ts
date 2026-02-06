@@ -27,8 +27,9 @@ export async function GET(req: NextRequest) {
     const id_cliente_raw = normalize(searchParams.get("cliente"));
     const id_cliente = id_cliente_raw !== null ? Number(id_cliente_raw) : null;
 
-    // Filtro: sinRendir=1 → buscar solo cobranzas que NO estén ligadas a una rendición
+    // 🔥 ESTO VA ACÁ
     const sinRendir = searchParams.get("sinRendir") === "1";
+    const soloActivas = searchParams.get("soloActivas") === "1";  // 👈 NUEVO
 
     const skip = (page - 1) * pageSize;
     const take = pageSize;
@@ -45,6 +46,10 @@ export async function GET(req: NextRequest) {
     if (sinRendir) {
       where.id_rendicion = null;
     }
+
+    if (soloActivas) {
+    where.activa = true;
+  }
 
     // --- FILTROS POR FECHA (MES y AÑO) ---
     if (anio && mes) {

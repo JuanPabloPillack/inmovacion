@@ -290,6 +290,7 @@ model Rendicion {
   inmueble     Inmueble   @relation("InmuebleRendiciones", fields: [id_inmueble], references: [id_inmueble])
   fecha        DateTime
   monto_total  Decimal    @db.Decimal(12, 2)
+  pagado       Boolean    @default(false)   
   cobranzas    Cobranza[] @relation("RendicionCobranza")
   mes_ipc      Int?
   anio_ipc     Int?

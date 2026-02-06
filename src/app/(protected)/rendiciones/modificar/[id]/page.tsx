@@ -2,10 +2,16 @@
 // rendiciones/modificar/[id]/page.tsx
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import toast from "react-hot-toast";
 import Header from "@/components/ui/Header";
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+
+import Loading from '@/components/ui/Loading';
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
+import Modal from '@/components/ui/Modal';
+
 
 /**
  * Interfaces que describen la estructura de los datos
@@ -14,6 +20,7 @@ import Header from "@/components/ui/Header";
 interface Cliente {
   id_cliente: number;
   nombre: string;
+  apellido: string;
 }
 
 interface Cobranza {
@@ -33,13 +40,10 @@ export default function ModificarRendicionPage() {
   const params = useParams();            // Obtiene los params dinámicos de la URL
   const id_rendicion = params?.id;       // Extrae el ID de la rendición
 
-  // Estados principales
-  const [clientes, setClientes] = useState<Cliente[]>([]);
-  const [loadedClientes, setLoadedClientes] = useState(false); // Saber si clientes ya cargaron
+  const [clienteSearch, setClienteSearch] = useState("");
+  const [clienteOpen, setClienteOpen] = useState(false);
 
-  const [cobranzas, setCobranzas] = useState<Cobranza[]>([]);
   const [seleccionadas, setSeleccionadas] = useState<number[]>([]);
-  const [loading, setLoading] = useState(false);
 
   // Filtros seleccionados
   const [cliente, setCliente] = useState("");
@@ -54,122 +58,156 @@ export default function ModificarRendicionPage() {
   const currentYear = new Date().getFullYear();
   const years = Array.from({ length: currentYear - 2020 + 1 }, (_, i) => 2020 + i);
 
-  // ====================================================
-  // 1. CARGAR CLIENTES
-  // ====================================================
-  const cargarClientes = async () => {
-    try {
-      const res = await fetch("/api/clientes");
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalConfig, setModalConfig] = useState<{
+    title: string;
+    message: string;
+    variant?: "success" | "error" | "warning" | "info" | "danger";
+    onConfirm?: () => void;
+  }>({
+    title: "",
+    message: "",
+  });
+
+
+    const {
+    data: clientes = [],
+    isLoading: loadingClientes,
+    error: errorClientes,
+  } = useQuery<Cliente[]>({
+    queryKey: ['clientes'],
+    queryFn: async () => {
+      const res = await fetch('/api/clientes');
+      if (!res.ok) throw new Error('Error clientes');
       const data = await res.json();
+      return Array.isArray(data) ? data : data.clientes ?? [];
+    },
+  });
 
-      /**
-       * La API puede devolver:
-       *  → Un array directo
-       *  → Un objeto con { clientes: [...] }
-       * Por eso este manejo flexible.
-       */
-      const lista = Array.isArray(data)
-        ? data
-        : Array.isArray(data?.clientes)
-        ? data.clientes
-        : [];
+const clientesFiltrados = clientes.filter(c =>
+  `${c.nombre} ${c.apellido}`
+    .toLowerCase()
+    .includes(clienteSearch.toLowerCase())
+);
 
-      setClientes(lista);
-      setLoadedClientes(true);
-    } catch (e) {
-      toast.error("Error al cargar clientes");
-      setLoadedClientes(true);
-    }
-  };
 
-  // Llama a cargarClientes al montar el componente
-  useEffect(() => {
-    cargarClientes();
-  }, []);
+  const {
+    data: rendicion,
+    isLoading: loadingRendicion,
+    error: errorRendicion,
+  } = useQuery<any>({
 
-  // ====================================================
-  // 2. CARGAR DATOS DE LA RENDICIÓN
-  // ====================================================
-  const cargarRendicion = async () => {
-    if (!id_rendicion) return;
-
-    try {
+    queryKey: ['rendicion', id_rendicion],
+    enabled: !!id_rendicion,
+    queryFn: async () => {
       const res = await fetch(`/api/rendiciones/${id_rendicion}`);
-      const data = await res.json();
+      if (!res.ok) throw new Error('Rendición no encontrada');
+      return res.json();
+    },
+  });
 
-      if (!data?.rendicion) {
-        toast.error("Rendición no encontrada");
-        return;
-      }
+useEffect(() => {
+  if (!rendicion) return;
 
-      const r = data.rendicion;
+  const r = rendicion;
 
-      // Carga campos base de la rendición
-      setMesIPC(r.mes_ipc ? String(r.mes_ipc) : "");
-      setAnioIPC(r.anio_ipc ? String(r.anio_ipc) : "");
+  setMesIPC(r.mes_ipc ? String(r.mes_ipc) : '');
+  setAnioIPC(r.anio_ipc ? String(r.anio_ipc) : '');
 
-      // Cargar cobranzas previamente asociadas
-      setSeleccionadas(
-        Array.isArray(r.cobranzas)
-          ? r.cobranzas.map((c: any) => c.id_cobranza)
-          : []
-      );
+  const ids = Array.isArray(r.cobranzas)
+    ? r.cobranzas.map((c: any) => c.id_cobranza)
+    : [];
 
-      setCliente(r.id_cliente ? String(r.id_cliente) : "");
-      setAnio(r.anio ? String(r.anio) : "");
-      setMes(r.mes ? String(r.mes) : "");
-    } catch (e) {
-      toast.error("Error al cargar rendición");
+  setSeleccionadas(ids);
+
+  // 🔥 Tomar cliente desde la primera cobranza
+  if (r.cobranzas?.length > 0) {
+    const cli = r.cobranzas[0].cliente;
+    if (cli) {
+      setCliente(String(cli.id_cliente));
+      setClienteSearch(`${cli.nombre} ${cli.apellido}`);
     }
-  };
+  }
 
-  useEffect(() => {
-    cargarRendicion();
-  }, [id_rendicion]);
+}, [rendicion]);
 
-  // ====================================================
-  // 3. CARGAR COBRANZAS SEGÚN FILTROS
-  // ====================================================
-  const cargarCobranzas = async () => {
-    if (!loadedClientes) return; // Esperar a que clientes esté listo
 
-    try {
-      // Armado dinámico de query params
+
+
+
+  const {
+    data: cobranzas = [],
+    isLoading: loadingCobranzas,
+    error: errorCobranzas,
+  } = useQuery<Cobranza[]>({
+    queryKey: ['cobranzas', cliente, anio, mes, id_rendicion],
+    enabled: !!cliente || !!id_rendicion,
+    queryFn: async () => {
       const params = new URLSearchParams();
-      params.append("page", "1");
-      params.append("pageSize", "1000");
 
-      if (cliente) params.append("cliente", cliente);
-      if (anio) params.append("anio", anio);
-      if (mes) params.append("mes", mes);
+      params.append('page', '1');
+      params.append('pageSize', '1000');
 
-      // Para incluir cobranzas ya seleccionadas aunque no coincidan con los filtros nuevos
-      params.append("incluirSeleccionadas", "1");
-      params.append("rendicionActual", String(id_rendicion));
-
-      const res = await fetch(`/api/cobranzas?${params.toString()}`);
-      const data = await res.json();
-
-      /**
-       * Mapeamos las cobranzas para agregar la propiedad "fecha"
-       * ya que la API usa "fecha_cobranza".
-       */
-      const lista: Cobranza[] = Array.isArray(data?.cobranzas)
-        ? data.cobranzas.map((c: any) => ({
-            ...c,
-            fecha: c.fecha_cobranza,
-          }))
-        : [];
-
-      setCobranzas(lista);
-    } catch (e) {
-      toast.error("Error al cargar cobranzas");
+      params.append('soloActivas', '1');
+      if (!id_rendicion) {
+      params.append('sinRendir', '1');
     }
-  };
 
-  useEffect(() => {
-    cargarCobranzas();
-  }, [cliente, anio, mes, loadedClientes]);
+      params.append('incluirSeleccionadas', '1');
+      params.append('rendicionActual', String(id_rendicion));
+
+      if (cliente) params.append('cliente', cliente);
+      if (anio) params.append('anio', anio);
+      if (mes) params.append('mes', mes);
+
+      const res = await fetch(`/api/cobranzas?${params}`);
+      if (!res.ok) throw new Error('Error cobranzas');
+
+      const data = await res.json();
+      return data.cobranzas ?? [];
+    },
+  });
+
+
+  const queryClient = useQueryClient();
+
+const guardarMutation = useMutation({
+  mutationFn: async () => {
+    const payload = {
+      cobranzas: seleccionadas,
+      mes_ipc: mesIPC ? Number(mesIPC) : undefined,
+      anio_ipc: anioIPC ? Number(anioIPC) : undefined,
+    };
+
+    const res = await fetch(`/api/rendiciones/${id_rendicion}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) throw new Error('Error actualizando');
+    return res.blob();
+  },
+  onSuccess: (blob) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Rendicion_${id_rendicion}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    toast.success('Rendición modificada');
+    queryClient.invalidateQueries({ queryKey: ['rendiciones'] });
+
+    setTimeout(() => {
+      window.location.href = '/rendiciones';
+    }, 800);
+  },
+  onError: (e: any) => toast.error(e.message),
+});
+
+
+
 
   // ====================================================
   // 4. SELECCIONAR / DESELECCIONAR COBRANZAS + IPC AUTO
@@ -209,60 +247,15 @@ export default function ModificarRendicionPage() {
     });
   };
 
-  // ====================================================
-  // 5. GUARDAR CAMBIOS Y DESCARGAR EXCEL DIRECTO
-  // ====================================================
-  const guardar = async () => {
-    if (seleccionadas.length === 0)
-      return toast.error("Seleccioná al menos una cobranza");
 
-    setLoading(true);
+  if (loadingClientes || loadingRendicion || loadingCobranzas) {
+  return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <Loading message="Cargando rendición..." size="lg" />
+    </div>
+  );
+}
 
-    try {
-      // Armamos el cuerpo del PUT
-      const payload = {
-        cobranzas: seleccionadas,
-        mes_ipc: mesIPC ? Number(mesIPC) : undefined,
-        anio_ipc: anioIPC ? Number(anioIPC) : undefined,
-      };
-
-      // Guardar la rendición
-      const res = await fetch(`/api/rendiciones/${id_rendicion}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Error actualizando");
-      }
-
-      // Descarga automática del Excel generado
-      const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
-
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `Rendicion_${id_rendicion}.xlsx`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-
-      window.URL.revokeObjectURL(url);
-
-      toast.success("Rendición modificada y Excel descargado");
-
-      // Redirigir después de 1 segundo
-      setTimeout(() => {
-        window.location.href = "/rendiciones";
-      }, 1000);
-    } catch (e: any) {
-      toast.error(e.message || "Error guardando");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   // ============================
   // RENDER
@@ -282,19 +275,49 @@ export default function ModificarRendicionPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label className="text-sm font-medium">Cliente</label>
-              <select
-                className="mt-1 w-full border rounded-lg px-3 py-2"
-                value={cliente}
-                onChange={(e) => setCliente(e.target.value)}
-              >
-                <option value="">Todos</option>
-                {clientes.map((c) => (
-                  <option key={c.id_cliente} value={String(c.id_cliente)}>
-                    {c.nombre}
-                  </option>
-                ))}
-              </select>
+              <label className="block text-sm font-semibold mb-2" style={{ color: '#686363' }}>
+                Cliente
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={clienteSearch}
+                  onChange={(e) => {
+                    setClienteSearch(e.target.value);
+                    setClienteOpen(true);
+                  }}
+                  onFocus={() => setClienteOpen(true)}
+                  placeholder="Buscar cliente..."
+                  className="w-full px-4 py-3 rounded-xl border-2 transition-all duration-200 focus:outline-none focus:border-[#63bae9]"
+                  style={{
+                    borderColor: cliente ? '#63bae9' : '#e5e7eb',
+                    backgroundColor: cliente ? '#f0f9ff' : 'white',
+                  }}
+                />
+
+                {clienteOpen && clienteSearch && (
+                  <div className="absolute z-10 w-full bg-white border rounded-xl shadow-lg max-h-60 overflow-auto mt-1">
+                    {clientesFiltrados.length === 0 ? (
+                      <div className="px-4 py-3 text-gray-500">Sin resultados</div>
+                    ) : (
+                      clientesFiltrados.map(c => (
+                        <div
+                          key={c.id_cliente}
+                          onClick={() => {
+                            setCliente(String(c.id_cliente));
+                            setClienteSearch(`${c.nombre} ${c.apellido}`);
+                            setClienteOpen(false);
+                            setSeleccionadas([]);
+                          }}
+                          className="px-4 py-3 hover:bg-gray-50 cursor-pointer transition-colors"
+                        >
+                          {c.nombre} {c.apellido}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
 
             <div>
@@ -374,7 +397,11 @@ export default function ModificarRendicionPage() {
             {cobranzas.map((c) => (
               <label
                 key={c.id_cobranza}
-                className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer"
+                className={`flex items-start gap-4 p-5 border-2 rounded-xl cursor-pointer transition-all duration-200 ${
+                  seleccionadas.includes(c.id_cobranza)
+                    ? 'bg-[#f0f9ff] border-[#63bae9]'
+                    : 'bg-white border-gray-200 hover:border-gray-300'
+                }`}
               >
                 <input
                   type="checkbox"
@@ -408,15 +435,46 @@ export default function ModificarRendicionPage() {
             </button>
 
             <button
-              onClick={guardar}
-              disabled={loading}
-              className="w-1/2 px-6 py-3 rounded-lg text-white bg-[#63bae9] hover:opacity-90"
+              onClick={() => {
+                if (seleccionadas.length === 0) {
+                  setModalConfig({
+                    title: "Validación",
+                    message: "Seleccioná al menos una cobranza.",
+                    variant: "warning",
+                  });
+                  setModalOpen(true);
+                  return;
+                }
+
+                setModalConfig({
+                  title: "Confirmar cambios",
+                  message: `¿Deseás modificar la rendición #${id_rendicion} con ${seleccionadas.length} cobranzas?`,
+                  variant: "warning",
+                  onConfirm: () => {
+                    guardarMutation.mutate();
+                    setModalOpen(false);
+                  },
+                });
+
+                setModalOpen(true);
+              }}
+              disabled={guardarMutation.isPending}
+              className="w-1/2 px-8 py-4 rounded-xl text-lg font-bold text-white"
+              style={{ backgroundColor: '#63bae9' }}
             >
-              {loading ? "Guardando..." : "Guardar Cambios"}
+              {guardarMutation.isPending ? "Guardando..." : "Guardar Cambios"}
             </button>
           </div>
         </div>
       </div>
+      <Modal
+        isOpen={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title={modalConfig.title}
+        message={modalConfig.message}
+        variant={modalConfig.variant}
+        onConfirm={modalConfig.onConfirm}
+      />
     </div>
   );
 }

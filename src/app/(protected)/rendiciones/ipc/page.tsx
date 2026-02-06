@@ -1,12 +1,17 @@
+// src/app/(protected)/rendiciones/ipc/page.tsx
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { TrendingUp, ArrowLeft, Upload, Trash2, FileSpreadsheet, Loader2, AlertCircle } from 'lucide-react';
+import { useState, useRef } from 'react';
+import { TrendingUp, ArrowLeft, Upload, Trash2, FileSpreadsheet, Loader2, AlertCircle, Calendar, X, Pencil } from 'lucide-react';
 import Header from '@/components/ui/Header';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
-import Loading from '@/components/ui/Loading'; // ← Asegúrate de que la ruta sea correcta
+import Loading from '@/components/ui/Loading'; 
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
+import Modal from '@/components/ui/Modal';
 
 /**
  * Interface que representa un registro de IPC almacenado en BD.
@@ -21,34 +26,68 @@ interface IpcData {
 }
 
 export default function IpcManagementPage() {
-  const [ipcData, setIpcData] = useState<IpcData[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true); // Inicia en true para mostrar loading al refrescar
+
+  const [editConfirmOpen, setEditConfirmOpen] = useState(false);
+
   const [filterYear, setFilterYear] = useState<number | null>(null);
+
+  const [loading, setLoading] = useState(false);
+
+  const [editingItem, setEditingItem] = useState<IpcData | null>(null);
+  const [editValor, setEditValor] = useState("");
+  const [editFuente, setEditFuente] = useState("");
+
 
   // Estados para la subida mejorada
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    fetchIpcData();
-  }, []);
+  const queryClient = useQueryClient();
 
-  const fetchIpcData = async () => {
-    setLoading(true);
-    try {
-      const res = await fetch('/api/rendiciones/ipc');
-      if (!res.ok) throw new Error('No se pudieron cargar los datos de IPC');
-      const { datos } = await res.json();
-      setIpcData(datos || []);
-    } catch (e: any) {
-      setError(e.message);
-      toast.error('Error al cargar datos de IPC');
-    } finally {
-      setLoading(false);
-    }
+  const fetchIpcData = async (): Promise<IpcData[]> => {
+    const res = await fetch('/api/rendiciones/ipc');
+    if (!res.ok) throw new Error('ERROR_FETCH');
+    const { datos } = await res.json();
+    return datos ?? [];
   };
+
+  const {
+    data: ipcData = [],
+    isLoading,
+    error,
+  } = useQuery({
+    queryKey: ['ipc'],
+    queryFn: fetchIpcData,
+  });
+  const [modalOpen, setModalOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<IpcData | null>(null);
+
+  const deleteIpcMutation = useMutation({
+  mutationFn: async (id: number) => {
+    const res = await fetch(`/api/rendiciones/ipc?id=${id}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) throw new Error();
+  },
+  onSuccess: () => {
+    toast.success('Dato de IPC eliminado');
+    setModalOpen(false);
+    setItemToDelete(null);
+  },
+  onError: () => {
+    toast.error('No se pudo eliminar el IPC');
+  },
+});
+
+const currentYear = new Date().getFullYear();
+
+const years = Array.from(
+  { length: currentYear - 2025 + 1 },
+  (_, i) => 2025 + i
+);
+
+
 
   // ============================================================
   // 📌 SUBIDA MEJORADA: Drag & Drop + Vista previa + Validación
@@ -75,6 +114,14 @@ export default function IpcManagementPage() {
   const handleDragLeave = () => {
     setIsDragging(false);
   };
+
+  const handleEdit = (item: IpcData) => {
+    setEditingItem(item);
+    setEditValor(String(item.valor ?? ""));
+    setEditFuente(item.fuente ?? "");
+  };
+
+
 
   const validateFile = (file: File | null): boolean => {
     if (!file) return false;
@@ -128,7 +175,7 @@ export default function IpcManagementPage() {
       if (result.success) {
         toast.success(`¡Éxito! ${result.count || nuevosDatos.length} registros cargados`);
         setSelectedFile(null);
-        fetchIpcData(); // ← también muestra loading al refrescar después de subir
+        queryClient.invalidateQueries({ queryKey: ['ipc'] });
       } else {
         toast.error(result.error || 'Error al guardar en la base de datos');
       }
@@ -140,29 +187,66 @@ export default function IpcManagementPage() {
     }
   };
 
-  // ============================================================
-  // 📌 ELIMINAR UN REGISTRO DE IPC
-  // ============================================================
-  const handleDelete = async (id: number) => {
-    if (!confirm('¿Estás seguro de eliminar este dato de IPC?')) return;
+ const handleDelete = (item: IpcData) => {
+    setItemToDelete(item);
+    setModalOpen(true);
+  };
 
-    try {
-      const res = await fetch(`/api/rendiciones/ipc?id=${id}`, {
-        method: 'DELETE',
-      });
+  const updateIpcMutation = useMutation({
+    mutationFn: async () => {
 
-      const result = await res.json();
-
-      if (!res.ok || !result.success) {
-        throw new Error(result.error || 'No se pudo eliminar');
+      if (!editingItem) {
+        toast.error("No hay IPC seleccionado");
+        throw new Error("NO_ITEM");
       }
 
-      toast.success('Dato de IPC eliminado');
-      fetchIpcData(); // ← también muestra loading al refrescar después de eliminar
-    } catch (err: any) {
-      toast.error(err.message || 'Error desconocido');
-    }
-  };
+      const valorNumber = Number(editValor);
+
+      if (isNaN(valorNumber)) {
+        toast.error("El valor debe ser un número válido");
+        throw new Error("INVALID_NUMBER");
+      }
+
+      const res = await fetch("/api/rendiciones/ipc", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          id: editingItem.id,
+          valor: valorNumber,
+          fuente: editFuente,
+        }),
+      });
+
+      if (!res.ok) throw new Error("UPDATE_FAILED");
+
+      return {
+        id: editingItem.id,
+        valor: valorNumber,
+        fuente: editFuente,
+      };
+    },
+
+    onSuccess: () => {
+
+      // ✅ recargar datos desde el backend
+      queryClient.invalidateQueries({ queryKey: ['ipc'] });
+
+      toast.success("IPC actualizado");
+
+      setEditingItem(null);
+    },
+
+
+      onError: () => {
+        toast.error("Error actualizando IPC");
+      },
+    });
+
+
+
+
 
   // ============================================================
   // 📌 Formatear número del IPC con decimales
@@ -180,23 +264,20 @@ export default function IpcManagementPage() {
         });
   };
 
-  const years = Array.from(new Set(ipcData.map(d => d.anio))).sort((a, b) => b - a);
 
   const filteredData = filterYear
     ? ipcData.filter(d => d.anio === filterYear)
     : ipcData;
 
-  // Mientras carga inicialmente (refresco de página)
-  if (loading && ipcData.length === 0) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <Loading
-          message="Cargando datos de IPC ..."
-          size="lg"
-        />
-      </div>
-    );
-  }
+
+if (isLoading) {
+  return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <Loading message="Cargando datos de IPC..." size="lg" />
+    </div>
+  );
+}
+
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -210,7 +291,7 @@ export default function IpcManagementPage() {
             </div>
             <div>
               <h1 className="text-3xl font-bold text-[#686363]">Gestión de IPC</h1>
-              <p className="text-sm mt-1 text-[#969696]">Sube y administra los datos del IPC anual</p>
+              <p className="text-sm mt-1 text-[#969696]">Suba y administre los datos del IPC anual</p>
             </div>
           </div>
           <a
@@ -234,7 +315,7 @@ export default function IpcManagementPage() {
               <h2 className="text-xl font-semibold text-[#686363]">Subir archivo Excel anual</h2>
             </div>
             <p className="mt-1 text-sm text-gray-500">
-              Arrastra y suelta tu archivo .xlsx o .xls aquí (máximo 10MB)
+              Arrastrar y sueltar el archivo .xlsx o .xls aquí (máximo 10MB)
             </p>
           </div>
 
@@ -265,7 +346,7 @@ export default function IpcManagementPage() {
                   <Upload className="w-16 h-16 mx-auto text-[#63bae9] opacity-80" />
                   <div>
                     <p className="text-xl font-medium text-gray-800">
-                      Arrastra tu archivo aquí o haz clic para seleccionar
+                      Arrastrar el archivo aquí o hacer clic para seleccionar
                     </p>
                     <p className="text-sm text-gray-500 mt-2">
                       Solo archivos Excel (.xlsx / .xls) – Máximo 10MB
@@ -318,36 +399,93 @@ export default function IpcManagementPage() {
           </div>
         </div>
 
-        {/* Filtro por año */}
-        <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
-          <label htmlFor="filterYear" className="font-medium text-gray-700 text-lg">
-            Filtrar por año:
-          </label>
-          <select
-            id="filterYear"
-            value={filterYear || ''}
-            onChange={e => setFilterYear(e.target.value ? Number(e.target.value) : null)}
-            className="border border-gray-300 rounded-lg px-4 py-3 text-gray-700 focus:ring-2 focus:ring-[#63bae9] focus:border-[#63bae9] min-w-[180px]"
-          >
-            <option value="">Todos los años</option>
-            {years.map(y => (
-              <option key={y} value={y}>{y}</option>
-            ))}
-          </select>
-        </div>
+        {/* Filtro por año - estilo igual que Filtros.tsx */}
+          <div className="w-full">
+            {/* Contenedor principal - mismo estilo que contratos */}
+            <div className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden">
+              {/* Header del panel de filtros */}
+              <div className="p-6 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-[#63bae9]/10 flex items-center justify-center">
+                      <Calendar className="w-5 h-5 text-[#63bae9]" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-bold text-[#686363]">Filtro por Año</h3>
+                      <p className="text-sm text-[#969696]">Seleccionar un año para ver los datos de IPC</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Contenido (sin desplegable en este caso, porque es solo un filtro) */}
+              <div className="p-6 bg-gray-50">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Selector de Año */}
+                  <div>
+                    <label className="block text-sm font-bold text-[#686363] mb-2">
+                      Año
+                    </label>
+                    <div className="relative">
+                      <select
+                        className="w-full px-4 py-3 pl-11 rounded-xl border-2 border-gray-200 focus:border-[#63bae9] focus:outline-none transition-all text-[#686363] appearance-none bg-white"
+                        value={filterYear ?? ""}
+                        onChange={(e) =>
+                          setFilterYear(e.target.value ? Number(e.target.value) : null)
+                        }
+                      >
+                        <option value="" disabled hidden>
+                          Seleccione un año
+                        </option>
+
+                        {years.map((y) => (
+                          <option key={y} value={y}>
+                            {y}
+                          </option>
+                        ))}
+                      </select>
+                      <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#969696] pointer-events-none" />
+                    </div>
+                  </div>
+
+                  {/* Espacio reservado – si en el futuro agregas otro filtro (ej: mes, fuente), va aquí */}
+                  <div></div>
+                </div>
+              </div>
+            </div>
+
+            {/* Tag activo - igual que en Filtros.tsx */}
+            {filterYear && (
+              <div className="flex flex-wrap gap-2.5 mt-4">
+                <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-[#63bae9]/10 text-[#63bae9] rounded-lg text-sm font-medium shadow-sm">
+                  Año: {filterYear}
+                  <button
+                    onClick={() => setFilterYear(null)}
+                    className="focus:outline-none"
+                  >
+                    <X className="w-4 h-4 hover:text-red-600 transition-colors" />
+                  </button>
+                </span>
+              </div>
+            )}
+          </div>
 
         {/* Lista de datos */}
         <div className="bg-white rounded-2xl shadow-md border border-gray-200 p-6">
           <h2 className="text-2xl font-semibold mb-6 text-[#686363]">
-            Datos de IPC {filterYear ? `(${filterYear})` : ''}
+            Datos IPC {filterYear ? `(${filterYear})` : ''}
           </h2>
 
           {error && (
-            <div className="text-center py-8 text-red-600">
-              <AlertCircle className="w-10 h-10 mx-auto mb-4" />
-              <p>{error}</p>
-            </div>
+            <Alert className="mb-6 bg-red-50 border-l-4 border-red-400">
+              <AlertCircle className="h-4 w-4 text-red-600" />
+              <AlertTitle>Error</AlertTitle>
+              <AlertDescription>
+                No se pudieron cargar los datos de IPC
+              </AlertDescription>
+            </Alert>
           )}
+
 
           {filteredData.length === 0 && !loading ? (
             <div className="text-center py-12 text-gray-500">
@@ -365,27 +503,109 @@ export default function IpcManagementPage() {
                     <h3 className="font-bold text-lg text-gray-800">
                       {new Date(0, d.mes - 1).toLocaleString('es-AR', { month: 'long' })} {d.anio}
                     </h3>
-                    <p className="text-gray-700">
-                      Valor: <span className="font-semibold">{formatValor(d.valor)}</span>
-                    </p>
+                    <p className="text-gray-700 flex items-center gap-2">
+                      Valor:
+
+                      {editingItem?.id === d.id ? (
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={editValor}
+                          onChange={(e) => setEditValor(e.target.value)}
+                          className="px-2 py-1 border rounded-lg w-32 font-semibold"
+                          autoFocus
+                        />
+                      ) : (
+                        <span className="font-semibold">{formatValor(d.valor)}</span>
+                      )}
+                    </p>  
                     <p className="text-sm text-gray-600">
-                      Fuente: {d.fuente} • Consultado: {new Date(d.fechaConsulta).toLocaleDateString('es-ES')}
+                      Fuente: {d.fuente} • Cargado: {new Date(d.fechaConsulta).toLocaleDateString('es-ES')}
                     </p>
                   </div>
 
-                  <button
-                    onClick={() => handleDelete(d.id)}
-                    className="px-5 py-2.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors flex items-center gap-2 font-medium"
-                  >
-                    <Trash2 className="w-5 h-5" />
-                    Eliminar
-                  </button>
+                  <div className="flex gap-2">
+                    {editingItem?.id === d.id ? (
+                      <>
+                        <button
+                          onClick={() => setEditConfirmOpen(true)}
+                          className="px-5 py-2.5 rounded-lg bg-green-50 text-green-600 hover:bg-green-100 font-medium"
+                        >
+                          Guardar
+                        </button>
+
+                        <button
+                          onClick={() => setEditingItem(null)}
+                          className="px-5 py-2.5 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 font-medium"
+                        >
+                          Cancelar
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                          <button
+                            onClick={() => handleEdit(d)}
+                            className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 font-medium"
+                          >
+                            <Pencil className="w-4 h-4" />
+                            <span>Modificar</span>
+                          </button>
+
+                          <button
+                            onClick={() => handleDelete(d)}
+                            className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 font-medium"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            <span>Eliminar</span>
+                          </button>
+                      </>
+                    )}
+
+                  </div>
                 </div>
               ))}
             </div>
           )}
         </div>
+
       </main>
+
+        <Modal
+          isOpen={modalOpen}
+          onClose={() => {
+            setModalOpen(false);
+            setItemToDelete(null);
+          }}
+          onConfirm={() => itemToDelete && deleteIpcMutation.mutate(itemToDelete.id)}
+          title="Eliminar dato de IPC"
+          message={
+            itemToDelete
+              ? `¿Eliminar IPC de ${itemToDelete.mes}/${itemToDelete.anio}?`
+              : ''
+          }
+          confirmText="Eliminar"
+          cancelText="Cancelar"
+          variant="danger"
+        />
+
+        <Modal
+          isOpen={editConfirmOpen}
+          onClose={() => setEditConfirmOpen(false)}
+          onConfirm={() => {
+            updateIpcMutation.mutate(undefined, {
+              onSuccess: () => {
+                setEditConfirmOpen(false);
+                setEditingItem(null);
+              }
+            });
+          }}
+          title="Confirmar edición"
+          message="¿Desea guardar los cambios del IPC?"
+          confirmText="Guardar"
+          cancelText="Cancelar"
+          variant="success"
+        />
+
     </div>
   );
 }

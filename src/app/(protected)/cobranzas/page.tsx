@@ -406,7 +406,7 @@ export default function CobranzasPage() {
                         }}
                         className="w-full px-4 py-3 pl-11 rounded-xl border-2 border-gray-200 focus:border-[#63bae9] focus:outline-none focus:ring-0 transition-all text-[#686363] appearance-none bg-white"
                       >
-                        <option value="">Seleccione un año</option>
+                        <option value="" disabled hidden>Seleccione un año</option>
                         {Array.from(
                           { length: new Date().getFullYear() - 2020 + 1 },
                           (_, i) => 2020 + i
@@ -434,7 +434,7 @@ export default function CobranzasPage() {
                         }}
                         className="w-full px-4 py-3 pl-11 rounded-xl border-2 border-gray-200 focus:border-[#63bae9] focus:outline-none focus:ring-0 transition-all text-[#686363] appearance-none bg-white"
                       >
-                        <option value="">Seleccione un mes</option>
+                        <option value="" disabled hidden>Seleccione un mes</option>
                         {Array.from({ length: 12 }, (_, i) => i + 1).map(mes => (
                           <option key={mes} value={mes}>
                             {mes.toString().padStart(2, '0')}

@@ -1,3 +1,4 @@
+// src/app/api/rendiciones/route.ts
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 // Importamos herramientas del framework Next.js para manejar requests/responses HTTP
@@ -12,6 +13,8 @@ import { Prisma } from "@prisma/client";
 // Funciones para generar archivos (EXCEL y PDF)
 import { generarExcelRendicion } from "@/lib/excelGenerator";
 import { generarPDFRecibo } from "@/lib/pdfGenerator";
+
+import { auth } from "../../../../auth";
 
 
 // ========================================================
@@ -61,42 +64,186 @@ async function calcularSaldoAnterior(id_inmueble: number, fechaActual: Date) {
 // ========================================================
 // GET — Listar todas las rendiciones completas
 // ========================================================
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    /*
-      Busca todas las rendiciones en la base de datos,
-      incluyendo:
 
-      - datos del inmueble
-      - todas las cobranzas de esa rendición
-        - cliente
-        - inmueble y su ubicación
-        - recibo
-    */
-    const rendiciones = await db.rendicion.findMany({
-      orderBy: { id_rendicion: "desc" },
-      include: {
-        inmueble: true,
-        cobranzas: { 
-          include: { 
-            cliente: true,
-            inmueble: { include: { ubicacion: true }},
-            recibo: true
-          }
+    const { searchParams } = new URL(req.url);
+
+    const page = Number(searchParams.get("page") ?? 1);
+    const pageSize = Number(searchParams.get("pageSize") ?? 5);
+
+    const year = searchParams.get("year");
+  const month = searchParams.get("month");
+  const cliente = searchParams.get("cliente");
+
+    const skip = (page - 1) * pageSize;
+
+    const where: any = {};
+
+// 👉 Filtro por año / mes (fecha de rendición)
+if (year || month) {
+  const y = year ? Number(year) : undefined;
+  const m = month ? Number(month) - 1 : undefined;
+
+  let desde: Date;
+  let hasta: Date;
+
+  if (y && m !== undefined) {
+    // Año + mes
+    desde = new Date(y, m, 1, 0, 0, 0);
+    hasta = new Date(y, m + 1, 1, 0, 0, 0);
+  } else if (y) {
+    // Solo año
+    desde = new Date(y, 0, 1, 0, 0, 0);
+    hasta = new Date(y + 1, 0, 1, 0, 0, 0);
+  } else {
+    // ⚠️ Solo mes → NO filtramos por fecha (porque no sabemos el año)
+    desde = null as any;
+    hasta = null as any;
+  }
+
+  if (desde && hasta) {
+    where.fecha = {
+      gte: desde,
+      lt: hasta,
+    };
+  }
+}
+
+// 👉 Filtro por cliente (a través de cobranzas)
+if (cliente) {
+  where.cobranzas = {
+    some: {
+      id_cliente: Number(cliente),
+    },
+  };
+}
+
+
+
+   const [rendiciones, total] = await Promise.all([
+  db.rendicion.findMany({
+    where, // 👈 ACÁ
+
+    skip,
+    take: pageSize,
+
+    orderBy: { id_rendicion: "desc" },
+
+    include: {
+      inmueble: {
+        include: {
+          ubicacion: true,
         },
       },
+
+      cobranzas: {
+        include: {
+          cliente: true,
+          recibo: true,
+          inmueble: {
+            include: {
+              ubicacion: true,
+            },
+          },
+        },
+      },
+
+      createdBy: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      },
+
+      updatedBy: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      },
+    },
+  }),
+
+  db.rendicion.count({ where }), // 👈 Y ACÁ TAMBIÉN
+]);
+
+
+   const mapped = rendiciones.map(r => ({
+  id_rendicion: r.id_rendicion,
+  fecha: r.fecha,
+  monto_total: Number(r.monto_total),
+
+  pagado: r.pagado,
+
+
+  // ✅ MAPEAR INMUEBLE CORRECTAMENTE
+    inmueble: r.inmueble
+    ? {
+        id_inmueble: r.inmueble.id_inmueble,
+
+        nombre:
+          r.inmueble.titulo ??
+          `Inmueble ${r.inmueble.id_inmueble}`,
+
+        direccionCompleta: [
+          r.inmueble.ubicacion?.direccion,
+          r.inmueble.ubicacion?.ciudad,
+          r.inmueble.ubicacion?.provincia,
+        ]
+          .filter(Boolean)
+          .join(", "),
+      }
+    : null,
+
+
+
+  cobranzas: r.cobranzas.map(c => ({
+      ...c,
+      monto: c.monto ? Number(c.monto) : null,
+    })),
+
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt,
+
+    // ✅ MAPEAR USUARIO CORRECTAMENTE
+    createdBy: r.createdBy
+      ? {
+          id_usuario: r.createdBy.id,
+          nombre: r.createdBy.name || r.createdBy.email,
+        }
+      : null,
+
+    updatedBy: r.updatedBy
+      ? {
+          id_usuario: r.updatedBy.id,
+          nombre: r.updatedBy.name || r.updatedBy.email,
+        }
+      : null,
+  }));
+
+
+    return NextResponse.json({
+      data: mapped,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
     });
 
-    return NextResponse.json(rendiciones);
-
   } catch (e) {
+
     console.error("Error en GET /rendiciones:", e);
+
     return NextResponse.json(
       { error: "No se pudieron obtener las rendiciones" },
       { status: 500 }
     );
   }
 }
+
 
 
 
@@ -156,7 +303,7 @@ export async function POST(req: NextRequest) {
     // ========================================================
     const total = seleccionadas.reduce((acc, c) => acc + Number(c.monto ?? 0), 0);
 
-    const totalFinal = new Prisma.Decimal(total.toFixed(2));
+    const totalFinal = Number(total.toFixed(2));
 
 
     // ========================================================
@@ -173,21 +320,48 @@ export async function POST(req: NextRequest) {
     const saldoAnterior = await calcularSaldoAnterior(inmuebles[0]!, fecha);
 
 
-    // ========================================================
-    // Crear la rendición en DB
-    // ========================================================
+    const session = await auth();
+
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+    }
+
+    const userId = session.user.id;
+
+    // MISMO PATRÓN QUE COBRANZAS
+    const user =
+      (await db.user.findUnique({ where: { id: userId } })) ??
+      (await db.user.create({
+        data: {
+          id: userId,
+          name: session.user.name ?? "Usuario",
+          email: session.user.email ?? `user_${userId}@example.com`,
+        },
+      }));
+
     const rend = await db.rendicion.create({
       data: {
         id_inmueble: inmuebles[0]!,
         fecha,
         monto_total: totalFinal,
+
         cobranzas: {
           connect: idsCobranzas.map(id => ({ id_cobranza: id })),
         },
+
         mes_ipc: mes_ipc ?? null,
         anio_ipc: anio_ipc ?? null,
+
+        createdById: user.id,
+        updatedById: user.id,
+      },
+
+      include: {
+        createdBy: true,
+        updatedBy: true,
       },
     });
+
 
 
     // ========================================================
@@ -218,7 +392,23 @@ export async function POST(req: NextRequest) {
     // ========================================================
     // PREPARAR DATOS PARA EL EXCEL DE RENDICIÓN
     // ========================================================
-    const ipcValor = 1; // Ajuste opcional de IPC
+    // Obtener IPC real desde la base de datos
+    let ipcValor: number | null = null;
+
+    if (mes_ipc && anio_ipc) {
+
+      const ipc = await db.ipc.findFirst({
+        where: {
+          mes: Number(mes_ipc),
+          anio: Number(anio_ipc),
+        },
+      });
+
+      ipcValor = ipc?.valor ? Number(ipc.valor) : null;
+
+
+    }
+
 
     const cobranzasExcel = seleccionadas.map(c => {
       const montoBase = Number(c.monto ?? 0);
@@ -264,8 +454,11 @@ export async function POST(req: NextRequest) {
 
         unFuncional: unFunc,
         contratoStr: c.id_contrato ? `Contrato ${c.id_contrato}` : '',
-        ipcAumento: '',
-        ipcValor,
+        ipcAumento: ipcValor
+          ? `IPC ${mes_ipc}/${anio_ipc}`
+          : '',
+
+        ipcValor: ipcValor,
       };
     });
 
@@ -302,3 +495,4 @@ export async function POST(req: NextRequest) {
     );
   }
 }
+
