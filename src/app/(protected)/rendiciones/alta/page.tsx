@@ -110,12 +110,58 @@ export default function AltaRendicionPage() {
 
   const guardarMutation = useMutation({
   mutationFn: async () => {
-    // PUT /api/rendiciones/[id]
-  },
+
+  const res = await fetch("/api/rendiciones", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      cobranzas: seleccionadas,
+      mes_ipc: mesIPC ? Number(mesIPC) : null,
+      anio_ipc: anioIPC ? Number(anioIPC) : null,
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || "Error creando rendición");
+  }
+
+  // 👇 descargar Excel con el nombre real del backend
+  const blob = await res.blob();
+
+  // leer nombre desde Content-Disposition
+  const contentDisposition = res.headers.get("Content-Disposition");
+
+  let filename = "Rendicion.xlsx";
+
+  if (contentDisposition) {
+    const match = contentDisposition.match(/filename="?(.+?)"?$/);
+    if (match?.[1]) {
+      filename = match[1];
+    }
+  }
+
+  const url = window.URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename; // 👈 nombre correcto
+  document.body.appendChild(a);
+  a.click();
+
+  a.remove();
+  window.URL.revokeObjectURL(url);
+
+  return true;
+},
+
+
   onSuccess: () => {
     setModalConfig({
-      title: "Rendición actualizada",
-      message: "La rendición se modificó correctamente.",
+      title: "Rendición creada",
+      message: "La rendición se creó correctamente.",
       variant: "success",
       onConfirm: () => {
         setModalOpen(false);
@@ -124,15 +170,17 @@ export default function AltaRendicionPage() {
     });
     setModalOpen(true);
   },
+
   onError: (e: any) => {
     setModalConfig({
-      title: "Error al guardar",
-      message: e.message || "Ocurrió un error inesperado.",
+      title: "Error",
+      message: e.message,
       variant: "error",
     });
     setModalOpen(true);
   },
 });
+
 
   const toggle = (id: number) => {
     const next = seleccionadas.includes(id)

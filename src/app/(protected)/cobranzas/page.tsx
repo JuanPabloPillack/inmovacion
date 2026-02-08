@@ -99,7 +99,7 @@ export default function CobranzasPage() {
   // ---------------------------
 
   const [page, setPage] = useState(1);      // Página actual
-  const [pageSize] = useState(10);          // Cantidad por página
+  const [pageSize] = useState(5);          // Cantidad por página
 
   // Filtros del usuario
   const [filterYear, setFilterYear] = useState('');

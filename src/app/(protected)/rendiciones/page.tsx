@@ -7,13 +7,11 @@ import { FileText, PlusCircle, Trash2, Pencil, FileSignature, User, Filter, X, C
 // 🔹 Iconos SVG usados en los botones y elementos visuales.
 
 import Header from '@/components/ui/Header';
-import toast, { Toaster } from 'react-hot-toast';
-// 🔹 toast = para mostrar notificaciones tipo “¡Éxito!” o “Error”.
 
 import { useRouter } from "next/navigation";
 // 🔹 Permite navegar programáticamente (router.push).
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData  } from '@tanstack/react-query';
 import Loading from '@/components/ui/Loading';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import Modal from '@/components/ui/Modal';
@@ -44,15 +42,24 @@ interface Recibo {
 }
 
 // Cobranza perteneciente a una rendición
+interface IPC {
+  mes: number;
+  anio: number;
+}
+
 interface Cobranza {
   id_cobranza: number;
-  cliente: Cliente;   // Objeto cliente relacionado
+  cliente: Cliente;
   monto: number;
   concepto: string;
   fecha_cobranza: string;
-  recibo: Recibo | null; // Puede no existir
-  pagado: boolean; // Añadido para marcar como cobrado/no cobrado
+  recibo: Recibo | null;
+  pagado: boolean;
+
+  ipc?: IPC | null;
+  montoActualizado?: number;  // monto + IPC
 }
+
 
 // Inmueble asociado a la rendición
 interface Inmueble {
@@ -88,18 +95,24 @@ export default function RendicionesPage() {
   const queryClient = useQueryClient();
 
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalConfig, setModalConfig] = useState<{
+    title: string;
+    message: string;
+    variant?: "success" | "error" | "warning" | "info" | "danger";
+    onConfirm?: () => void;
+  }>({
+    title: "",
+    message: "",
+  });
+
 
   // ----------------------
   // 📌 Estados – paginación
   // ----------------------
   const [page, setPage] = useState(1);
-  const pageSize = 5;
+const [pageSize] = useState(5); // o el valor que quieras
 
-  // ----------------------
-  // 📌 Estados – modal eliminar
-  // ----------------------
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-  const [itemToDelete, setItemToDelete] = useState<Rendicion | null>(null);
 
   // ----------------------
   // 📌 Estados – filtros
@@ -148,21 +161,33 @@ export default function RendicionesPage() {
 
 
 
- const {
-    data,
-    isLoading,
-    error,
-  } = useQuery({
-    queryKey: ['rendiciones', page, filterYear, filterMonth, filterCliente],
-    queryFn: () => fetchRendiciones(page),
-    placeholderData: (prev) => prev,
+ const { data, isLoading, isFetching, error } =useQuery<RendicionesResponse>({
+  queryKey:['rendiciones', page, filterYear, filterMonth, filterCliente],
+  queryFn: async () => {
+      const query = new URLSearchParams({
+        page: String(page),
+        pageSize: String(pageSize),
+      });
+
+      if (filterYear) query.append("year", filterYear);
+      if (filterMonth) query.append("month", filterMonth);
+      if (filterCliente) query.append("cliente", filterCliente);
+
+      const res = await fetch(`/api/rendiciones?${query.toString()}`);
+      if (!res.ok) throw new Error('Error al cargar rendiciones');
+
+      return res.json();
+    },
+    placeholderData: keepPreviousData, 
+    refetchOnWindowFocus: false,
+    staleTime: 1000 * 60 * 5, // 5 minutos (opcional pero recomendado)
   });
 
 
 
   const rendiciones = data?.data ?? [];
+const total = data?.total ?? 0;
 
-  const totalPages = data?.totalPages ?? 1;
 
   // ----------------------
   // 📌 Fetch clientes
@@ -182,23 +207,44 @@ export default function RendicionesPage() {
   // ----------------------
   // 📌 Mutation eliminar rendición
   // ----------------------
-  const deleteRendicionMutation = useMutation({
-    mutationFn: async (id: number) => {
-      const res = await fetch(`/api/rendiciones/${id}`, {
-        method: 'DELETE',
-      });
-      if (!res.ok) throw new Error();
-    },
-    onSuccess: () => {
-      toast.success('Rendición eliminada correctamente');
-      queryClient.invalidateQueries({ queryKey: ['rendiciones'] });
-      setDeleteModalOpen(false);
-      setItemToDelete(null);
-    },
-    onError: () => {
-      toast.error('Error al eliminar rendición');
+  const handleDelete = (rend: Rendicion) => {
+  setModalConfig({
+    title: "Eliminar rendición",
+    message: `¿Estás seguro que querés eliminar la rendición #${rend.id_rendicion}? Esta acción no se puede deshacer.`,
+    variant: "danger",
+    onConfirm: async () => {
+      try {
+        const res = await fetch(`/api/rendiciones/${rend.id_rendicion}`, {
+          method: "DELETE",
+        });
+
+        if (!res.ok) throw new Error();
+
+        queryClient.invalidateQueries({ queryKey: ['rendiciones'] });
+
+        setModalConfig({
+          title: "Eliminada",
+          message: "La rendición se eliminó correctamente.",
+          variant: "success",
+          onConfirm: () => setModalOpen(false),
+        });
+
+        setModalOpen(true);
+      } catch {
+        setModalConfig({
+          title: "Error",
+          message: "No se pudo eliminar la rendición.",
+          variant: "error",
+        });
+
+        setModalOpen(true);
+      }
     },
   });
+
+  setModalOpen(true);
+};
+
 
 
   // ----------------------
@@ -228,13 +274,12 @@ export default function RendicionesPage() {
       return res.json();
     },
 
-    // 🚀 OPTIMISTIC UPDATE
     onMutate: async ({ id_rendicion, pagado }) => {
       await queryClient.cancelQueries({ queryKey: ['rendiciones'] });
 
       const previous = queryClient.getQueryData<any>(['rendiciones', page]);
 
-      queryClient.setQueryData<any>(['rendiciones', page], (old: { data: Rendicion[]; }) => {
+      queryClient.setQueryData<any>(['rendiciones', page], (old: { data: Rendicion[] }) => {
         if (!old) return old;
 
         return {
@@ -250,42 +295,38 @@ export default function RendicionesPage() {
       return { previous };
     },
 
-    // 🔙 rollback si falla
     onError: (_err, _vars, context) => {
       if (context?.previous) {
         queryClient.setQueryData(['rendiciones', page], context.previous);
       }
-      toast.error('Error al actualizar estado');
+
+      setModalConfig({
+        title: "Error",
+        message: "No se pudo actualizar el estado de la rendición.",
+        variant: "error",
+      });
+      setModalOpen(true);
     },
 
-    // 🔄 sincroniza después
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['rendiciones'] });
     },
 
     onSuccess: () => {
-      toast.success('Estado de rendición actualizado');
+      setModalConfig({
+        title: "Estado actualizado",
+        message: "El estado de la rendición se actualizó correctamente.",
+        variant: "success",
+      });
+      setModalOpen(true);
     },
   });
+
 
 
   // ----------------------
   // 📌 Handlers
   // ----------------------
-  const handleDelete = (rend: Rendicion) => {
-    setItemToDelete(rend);
-    setDeleteModalOpen(true);
-  };
-
-  const confirmDelete = () => {
-    if (!itemToDelete) return;
-    deleteRendicionMutation.mutate(itemToDelete.id_rendicion);
-  };
-
-  const closeModal = () => {
-    setDeleteModalOpen(false);
-    setItemToDelete(null);
-  };
 
   const handleToggleRendicionPagado = (rendicion: Rendicion) => {
     updateRendicionPagadoMutation.mutate({
@@ -301,7 +342,6 @@ export default function RendicionesPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <Header />
-      <Toaster position="top-right" />
 
       <header className="bg-white border-b shadow-sm">
         <div className="max-w-7xl mx-auto px-6 py-6 flex items-center justify-between">
@@ -315,8 +355,11 @@ export default function RendicionesPage() {
             </div>  
           </div>
 
-          <div className="px-4 py-2 rounded-lg bg-[#fef9e7] text-sm font-medium text-gray-600">
-            {data?.total ?? 0} registros
+          <div className="flex items-center gap-3 px-4 py-2 rounded-lg bg-[#fef9e7]">
+            <div className="w-2 h-2 rounded-full animate-pulse bg-[#fcc238]" />
+          <span className="text-sm font-medium text-gray-600">
+            {total} rendicion{total !== 1 ? 'es' : ''} 
+          </span>
           </div>
         </div>
       </header>
@@ -520,16 +563,12 @@ export default function RendicionesPage() {
         <div className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden">
           <div className="p-6 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
             <h2 className="text-xl font-bold text-[#686363]">Rendiciones Registradas</h2>
-            <p className="text-sm text-[#969696] mt-1">
-              Lista completa de rendiciones generadas en el sistema
-            </p>
           </div>
 
           <div className="p-6">
             {isLoading ? (
-              <div className="text-center py-20">
-                <div className="inline-block w-16 h-16 border-4 border-gray-200 border-t-[#63bae9] rounded-full animate-spin mb-4"></div>
-                <p className="text-lg font-semibold text-[#969696]">Cargando rendiciones...</p>
+              <div className="py-20 flex justify-center">
+                <Loading message="Cargando rendiciones..." size="lg" />
               </div>
             ) : rendiciones.length === 0 ? (
               <div className="text-center py-20">
@@ -539,26 +578,20 @@ export default function RendicionesPage() {
                 <h3 className="text-2xl font-bold text-[#686363] mb-2">
                   No hay rendiciones disponibles
                 </h3>
-                <p className="text-lg text-[#969696] mb-8 max-w-md mx-auto">
-                  Comienza creando tu primera rendición
-                </p>
-                <a
-                  href="/rendiciones/alta"
-                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-[#63bae9] to-[#4a9fd4] text-white font-semibold hover:shadow-lg transition-all hover:scale-105 active:scale-95"
-                >
-                  <PlusCircle className="w-5 h-5" />
-                  Nueva Rendición
-                </a>
               </div>
             ) : (
               <div className="space-y-4">
                 {rendiciones.map((r) => {
-                  // Formateo de fecha más legible
+
                   const fechaFormatted = new Date(r.fecha).toLocaleDateString('es-ES', {
                     day: '2-digit',
                     month: 'long',
                     year: 'numeric',
                   });
+
+                  const totalConIPC = r.monto_total;
+
+
 
                   return (
                     <div
@@ -584,7 +617,7 @@ export default function RendicionesPage() {
                                   {r.cobranzas.length} cobranza{r.cobranzas.length !== 1 ? 's' : ''}
                                 </span>
                                 <span className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg bg-amber-50 text-amber-700 border border-amber-200">
-                                  ${r.monto_total.toLocaleString('es-ES')}
+                                  Total con IPC: ${totalConIPC.toLocaleString('es-ES')}
                                 </span>
 
                                 {/* Nueva etiqueta de estado COBRADO para toda la rendición */}
@@ -744,44 +777,36 @@ export default function RendicionesPage() {
               </div>
             )}
 
-            {/* Paginación */}
-            {totalPages > 1 && (
-              <div className="flex flex-col sm:flex-row justify-between items-center pt-6 gap-4 border-t border-gray-200 mt-8">
-                <button
-                  onClick={() => setPage(p => Math.max(1, p - 1))}
-                  disabled={page === 1}
-                  className="flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-[#63bae9] to-[#4a9fd4] text-white font-semibold shadow-md hover:shadow-lg transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
-                >
-                  <ArrowLeft className="w-5 h-5" />
-                  Anterior
-                </button>
+             {/* PAGINACIÓN */}
+        <div className="flex justify-center mt-6 gap-4">
+          <button
+            disabled={page === 1}
+            onClick={() => setPage(prev => prev - 1)}
+            className="px-4 py-2 rounded-lg bg-gray-200 disabled:opacity-30"
+          >
+            Anterior
+          </button>
 
-                <span className="text-sm font-bold text-[#686363] px-4 py-2 rounded-lg bg-gray-100">
-                  Página {page} de {totalPages}
-                </span>
+          <button
+            disabled={page * pageSize >= total}
+            onClick={() => setPage(prev => prev + 1)}
+            className="px-4 py-2 rounded-lg bg-gray-200 disabled:opacity-30"
+          >
+            Siguiente
+          </button>
+        </div>
 
-                <button
-                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                  disabled={page === totalPages}
-                  className="flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-[#63bae9] to-[#4a9fd4] text-white font-semibold shadow-md hover:shadow-lg transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
-                >
-                  Siguiente
-                  <ArrowLeft className="w-5 h-5 transform rotate-180" />
-                </button>
-              </div>
-            )}
-          </div>
+
+        </div>
         </div>
 
         <Modal
-          isOpen={deleteModalOpen}
-          onClose={closeModal}
-          onConfirm={confirmDelete}
-          title="¿Eliminar rendición?"
-          message={itemToDelete ? `¿Eliminar la rendición #${itemToDelete.id_rendicion}?` : ''}
-          confirmText="Eliminar"
-          cancelText="Cancelar"
-          variant="danger"
+          isOpen={modalOpen}
+          onClose={() => setModalOpen(false)}
+          title={modalConfig.title}
+          message={modalConfig.message}
+          variant={modalConfig.variant}
+          onConfirm={modalConfig.onConfirm}
         />
       </main>
     </div>

@@ -29,7 +29,13 @@ export async function GET(req: NextRequest) {
 
     // 🔥 ESTO VA ACÁ
     const sinRendir = searchParams.get("sinRendir") === "1";
-    const soloActivas = searchParams.get("soloActivas") === "1";  // 👈 NUEVO
+    const soloActivas = searchParams.get("soloActivas") === "1";
+
+    // 🔥 NUEVO
+    const incluirSeleccionadas = searchParams.get("incluirSeleccionadas") === "1";
+    const rendicionActualRaw = searchParams.get("rendicionActual");
+    const rendicionActual = rendicionActualRaw ? Number(rendicionActualRaw) : null;
+
 
     const skip = (page - 1) * pageSize;
     const take = pageSize;
@@ -44,8 +50,17 @@ export async function GET(req: NextRequest) {
     }
 
     if (sinRendir) {
-      where.id_rendicion = null;
-    }
+  if (incluirSeleccionadas && rendicionActual) {
+    where.OR = [
+      { id_rendicion: null },
+      { id_rendicion: rendicionActual },
+    ];
+  } else {
+    where.id_rendicion = null;
+  }
+}
+
+
 
     if (soloActivas) {
     where.activa = true;

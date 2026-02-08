@@ -27,7 +27,7 @@ interface Cobranza {
   id_cobranza: number;
   monto: number;
   concepto: string;
-  cliente: { nombre: string };
+  cliente: { nombre: string; apellido: string };
   genera_recibo: boolean;
   fecha?: string;
 }
@@ -44,6 +44,9 @@ export default function ModificarRendicionPage() {
   const [clienteOpen, setClienteOpen] = useState(false);
 
   const [seleccionadas, setSeleccionadas] = useState<number[]>([]);
+
+  const [ipcInicialCargado, setIpcInicialCargado] = useState(false);
+
 
   // Filtros seleccionados
   const [cliente, setCliente] = useState("");
@@ -111,27 +114,32 @@ useEffect(() => {
 
   const r = rendicion;
 
-  setMesIPC(r.mes_ipc ? String(r.mes_ipc) : '');
-  setAnioIPC(r.anio_ipc ? String(r.anio_ipc) : '');
+  const cobranzasRendicion = Array.isArray(r.cobranzas) ? r.cobranzas : [];
 
-  const ids = Array.isArray(r.cobranzas)
-    ? r.cobranzas.map((c: any) => c.id_cobranza)
-    : [];
+  const ids = cobranzasRendicion.map((c: any) => c.id_cobranza);
 
   setSeleccionadas(ids);
 
-  // 🔥 Tomar cliente desde la primera cobranza
-  if (r.cobranzas?.length > 0) {
-    const cli = r.cobranzas[0].cliente;
+  if (cobranzasRendicion.length > 0) {
+    const cli = cobranzasRendicion[0].cliente;
     if (cli) {
       setCliente(String(cli.id_cliente));
       setClienteSearch(`${cli.nombre} ${cli.apellido}`);
     }
   }
 
+  // ✅ usar IPC guardado
+  if (r.mes_ipc && r.anio_ipc) {
+    setMesIPC(String(r.mes_ipc));
+    setAnioIPC(String(r.anio_ipc));
+  } else {
+    setMesIPC("");
+    setAnioIPC("");
+  }
+
+  setIpcInicialCargado(true);
+
 }, [rendicion]);
-
-
 
 
 
@@ -142,23 +150,25 @@ useEffect(() => {
   } = useQuery<Cobranza[]>({
     queryKey: ['cobranzas', cliente, anio, mes, id_rendicion],
     enabled: !!cliente || !!id_rendicion,
+    placeholderData: (prev) => prev,   // ✅ MISMO COMPORTAMIENTO QUE ALTA
     queryFn: async () => {
       const params = new URLSearchParams();
 
       params.append('page', '1');
       params.append('pageSize', '1000');
 
-      params.append('soloActivas', '1');
-      if (!id_rendicion) {
+      // 🔥 MISMO FILTRO QUE ALTA
       params.append('sinRendir', '1');
-    }
+      params.append('soloActivas', '1');
 
+      // 🔥 EXTRA SOLO PARA MODIFICAR
       params.append('incluirSeleccionadas', '1');
       params.append('rendicionActual', String(id_rendicion));
 
       if (cliente) params.append('cliente', cliente);
       if (anio) params.append('anio', anio);
       if (mes) params.append('mes', mes);
+
 
       const res = await fetch(`/api/cobranzas?${params}`);
       if (!res.ok) throw new Error('Error cobranzas');
@@ -168,43 +178,116 @@ useEffect(() => {
     },
   });
 
+  const [ipcManual, setIpcManual] = useState(false);
+
+
+
+  useEffect(() => {
+
+  if (!ipcInicialCargado) return;
+
+  if (ipcManual) return; // 🔥 ESTE ES EL FIX
+
+  if (!cobranzas) return;
+
+  const seleccionadasAhora = cobranzas.filter(c =>
+    seleccionadas.includes(c.id_cobranza)
+  );
+
+  if (seleccionadasAhora.length === 0) {
+    setMesIPC("");
+    setAnioIPC("");
+    return;
+  }
+
+  const fechasValidas = seleccionadasAhora
+  .map(c =>
+    (c as any).fecha_cobranza
+      ? new Date((c as any).fecha_cobranza)
+      : null
+  )
+  .filter(Boolean) as Date[];
+
+
+  if (fechasValidas.length === 0) return;
+
+  const masReciente = fechasValidas.reduce((a, b) => (a > b ? a : b));
+
+  setMesIPC(String(masReciente.getMonth() + 1));
+  setAnioIPC(String(masReciente.getFullYear()));
+
+}, [seleccionadas, cobranzas, ipcInicialCargado, ipcManual]);
+
+
+
 
   const queryClient = useQueryClient();
 
-const guardarMutation = useMutation({
-  mutationFn: async () => {
-    const payload = {
-      cobranzas: seleccionadas,
-      mes_ipc: mesIPC ? Number(mesIPC) : undefined,
-      anio_ipc: anioIPC ? Number(anioIPC) : undefined,
-    };
+  const guardarMutation = useMutation({
+    mutationFn: async () => {
 
-    const res = await fetch(`/api/rendiciones/${id_rendicion}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      const payload = {
+        cobranzas: seleccionadas,
+        mes_ipc: mesIPC ? Number(mesIPC) : null,
+        anio_ipc: anioIPC ? Number(anioIPC) : null,
+      };
+
+      const res = await fetch(`/api/rendiciones/${id_rendicion}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Error actualizando rendición");
+      }
+
+      const blob = await res.blob();
+
+      // descargar Excel
+      const url = window.URL.createObjectURL(blob);
+
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Rendicion_${id_rendicion}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+
+      a.remove();
+      window.URL.revokeObjectURL(url);
+
+      return true;
+    },
+
+    onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ["rendiciones"] });
+
+    setModalConfig({
+      title: "Rendición modificada",
+      message: "La rendición se modificó correctamente.",
+      variant: "success",
+      onConfirm: () => {
+        setModalOpen(false);
+        window.location.href = "/rendiciones";
+      },
     });
 
-    if (!res.ok) throw new Error('Error actualizando');
-    return res.blob();
+    setModalOpen(true);
   },
-  onSuccess: (blob) => {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Rendicion_${id_rendicion}.xlsx`;
-    a.click();
-    URL.revokeObjectURL(url);
 
-    toast.success('Rendición modificada');
-    queryClient.invalidateQueries({ queryKey: ['rendiciones'] });
-
-    setTimeout(() => {
-      window.location.href = '/rendiciones';
-    }, 800);
+  onError: (e: any) => {
+    setModalConfig({
+      title: "Error",
+      message: e.message,
+      variant: "error",
+    });
+    setModalOpen(true);
   },
-  onError: (e: any) => toast.error(e.message),
 });
+
 
 
 
@@ -213,42 +296,16 @@ const guardarMutation = useMutation({
   // 4. SELECCIONAR / DESELECCIONAR COBRANZAS + IPC AUTO
   // ====================================================
   const toggle = (id: number) => {
-    setSeleccionadas((prev) => {
-      // Si está seleccionada → se quita, sino se agrega
-      const next = prev.includes(id)
-        ? prev.filter((x) => x !== id)
-        : [...prev, id];
-
-      // Obtener las cobranzas seleccionadas actualmente
-      const seleccionadasAhora = cobranzas.filter((c) =>
-        next.includes(c.id_cobranza)
-      );
-
-      // Si no hay ninguna → limpiar IPC
-      if (seleccionadasAhora.length === 0) {
-        setMesIPC("");
-        setAnioIPC("");
-        return next;
-      }
-
-      // Tomar las fechas válidas de las cobranzas seleccionadas
-      const fechasValidas = seleccionadasAhora
-        .map((c) => (c.fecha ? new Date(c.fecha) : null))
-        .filter(Boolean) as Date[];
-
-      // Selecciona la fecha más reciente para el IPC
-      if (fechasValidas.length > 0) {
-        const masReciente = fechasValidas.reduce((a, b) => (a > b ? a : b));
-        setMesIPC(String(masReciente.getMonth() + 1));
-        setAnioIPC(String(masReciente.getFullYear()));
-      }
-
-      return next;
-    });
-  };
+  setSeleccionadas(prev =>
+    prev.includes(id)
+      ? prev.filter(x => x !== id)
+      : [...prev, id]
+  );
+};
 
 
-  if (loadingClientes || loadingRendicion || loadingCobranzas) {
+
+  if (loadingClientes || loadingRendicion) {
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center">
       <Loading message="Cargando rendición..." size="lg" />
@@ -304,11 +361,17 @@ const guardarMutation = useMutation({
                         <div
                           key={c.id_cliente}
                           onClick={() => {
-                            setCliente(String(c.id_cliente));
-                            setClienteSearch(`${c.nombre} ${c.apellido}`);
-                            setClienteOpen(false);
-                            setSeleccionadas([]);
-                          }}
+                              setCliente(String(c.id_cliente));
+                              setClienteSearch(`${c.nombre} ${c.apellido}`);
+                              setClienteOpen(false);
+
+                              setSeleccionadas([]);
+
+                              // 🔥 reset IPC como en Alta
+                              setMesIPC("");
+                              setAnioIPC("");
+                              setIpcManual(false);
+                            }}
                           className="px-4 py-3 hover:bg-gray-50 cursor-pointer transition-colors"
                         >
                           {c.nombre} {c.apellido}
@@ -362,7 +425,10 @@ const guardarMutation = useMutation({
               <select
                 className="mt-1 w-full border rounded-lg px-3 py-2"
                 value={mesIPC}
-                onChange={(e) => setMesIPC(e.target.value)}
+                onChange={(e) => {
+                  setMesIPC(e.target.value);
+                  setIpcManual(true);
+                }}
               >
                 <option value="">Ninguno</option>
                 {[...Array(12)].map((_, i) => (
@@ -378,7 +444,10 @@ const guardarMutation = useMutation({
               <select
                 className="mt-1 w-full border rounded-lg px-3 py-2"
                 value={anioIPC}
-                onChange={(e) => setAnioIPC(e.target.value)}
+                onChange={(e) => {
+                  setAnioIPC(e.target.value);
+                  setIpcManual(true);
+                }}
               >
                 <option value="">Ninguno</option>
                 {years.map((y) => (
@@ -394,35 +463,46 @@ const guardarMutation = useMutation({
           <h2 className="font-semibold text-lg mt-6">Seleccionar Cobranzas</h2>
 
           <div className="space-y-3">
-            {cobranzas.map((c) => (
-              <label
-                key={c.id_cobranza}
-                className={`flex items-start gap-4 p-5 border-2 rounded-xl cursor-pointer transition-all duration-200 ${
-                  seleccionadas.includes(c.id_cobranza)
-                    ? 'bg-[#f0f9ff] border-[#63bae9]'
-                    : 'bg-white border-gray-200 hover:border-gray-300'
-                }`}
-              >
-                <input
-                  type="checkbox"
-                  checked={seleccionadas.includes(c.id_cobranza)}
-                  onChange={() => toggle(c.id_cobranza)}
-                />
+            {cobranzas.map((c) => {
+                const isSelected = seleccionadas.includes(c.id_cobranza);
 
-                <div>
-                  <div className="font-semibold">{c.cliente.nombre}</div>
+                return (
+                  <label
+                    key={c.id_cobranza}
+                    className={`flex items-start gap-4 p-5 border-2 rounded-xl cursor-pointer transition-all duration-200 ${
+                      isSelected
+                        ? 'bg-[#f0f9ff] border-[#63bae9]'
+                        : 'bg-white border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => toggle(c.id_cobranza)}
+                      className="mt-1.5 w-5 h-5"
+                    />
 
-                  <div className="text-sm text-gray-500">
-                    {c.concepto} — ${c.monto}
-                    {c.fecha && (
-                      <span className="ml-2 text-xs text-gray-400">
-                        ({new Date(c.fecha).toLocaleDateString("es-AR")})
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </label>
-            ))}
+                    <div className="flex-1">
+                      <div className="font-semibold text-lg" style={{ color: '#686363' }}>
+                        {c.cliente?.nombre} {c.cliente?.apellido}
+                      </div>
+
+                      <div className="text-gray-600 mt-1">
+                        {c.concepto} —{" "}
+                        <span className="font-bold" style={{ color: '#63bae9' }}>
+                          ${c.monto.toLocaleString("es-AR")}
+                        </span>
+
+                        {(c as any).fecha_cobranza && (
+                          <span className="ml-3 text-sm text-gray-400">
+                            ({new Date((c as any).fecha_cobranza).toLocaleDateString("es-AR")})
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </label>
+                );
+              })}
           </div>
 
           {/* BOTONES */}

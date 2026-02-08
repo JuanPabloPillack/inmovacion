@@ -154,15 +154,49 @@ const years = Array.from(
       const data = await selectedFile.arrayBuffer();
       const workbook = XLSX.read(data);
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      const rows: any[] = XLSX.utils.sheet_to_json(sheet);
+      const rows: any[] = XLSX.utils.sheet_to_json(sheet, { defval: null });
 
-      const nuevosDatos = rows.map(r => ({
-        mes: Number(r.mes),
-        anio: Number(r.anio),
-        valor: r.valor !== undefined && r.valor !== null ? Number(r.valor) : 0,
-        fuente: r.fuente ?? 'Archivo Excel',
-        fechaConsulta: r.fecha_publicacion ?? new Date().toISOString(),
-      }));
+      const nuevosDatos = rows.map((r: any) => {
+
+        // detectar columna año o anio automáticamente
+        const keyAnio = Object.keys(r).find(
+          k => k.toLowerCase() === "anio" || k.toLowerCase() === "año"
+        );
+
+        return {
+          mes: Number(
+            r.mes ??
+            r.Mes ??
+            r.MES
+          ),
+
+          anio: Number(
+            r.anio ??
+            r.año ??
+            (keyAnio ? r[keyAnio] : null)
+          ),
+
+          valor:
+            r.valor !== undefined && r.valor !== null
+              ? Number(r.valor)
+              : 0,
+
+          fuente:
+            r.fuente ??
+            r.Fuente ??
+            'Archivo Excel',
+
+          fechaConsulta:
+            r.fecha_publicacion ??
+            r.fechaConsulta ??
+            new Date().toISOString(),
+        };
+
+      }).filter(d =>
+        !isNaN(d.mes) &&
+        !isNaN(d.anio)
+      );
+
 
       const res = await fetch('/api/rendiciones/ipc', {
         method: 'POST',

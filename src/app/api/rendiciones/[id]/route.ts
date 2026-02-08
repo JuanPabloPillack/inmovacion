@@ -1,3 +1,5 @@
+// src/app/api/rendiciones/[id]/route.ts
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
@@ -208,13 +210,44 @@ export async function PUT(req: NextRequest, context: { params: { id: string } })
       );
 
 
-    const total = seleccionadas.reduce(
-      (acc, c) => acc + Number(c.monto ?? 0),
-      0
+    const totalBase = seleccionadas.reduce(
+  (acc, c) => acc + Number(c.monto ?? 0),
+  0
+);
+
+// IPC real (lo movemos acá arriba para usarlo en DB)
+let ipcValor: number | null = null;
+
+if (mes_ipc && anio_ipc) {
+  const ipc = await db.ipc.findFirst({
+    where: {
+      mes: Number(mes_ipc),
+      anio: Number(anio_ipc),
+    },
+  });
+
+  if (!ipc) {
+    return NextResponse.json(
+      { error: `No existe IPC para ${mes_ipc}/${anio_ipc}` },
+      { status: 400 }
     );
+  }
 
+  ipcValor = Number(ipc.valor);
 
-    const monto_total = Number(total.toFixed(2));
+  // por si viene como 12 en vez de 0.12
+  if (ipcValor > 1) {
+    ipcValor = ipcValor / 100;
+  }
+}
+
+const totalConIPC =
+  ipcValor != null
+    ? totalBase + totalBase * ipcValor
+    : totalBase;
+
+const monto_total = Number(totalConIPC.toFixed(2));
+
 
 
 
@@ -274,24 +307,6 @@ export async function PUT(req: NextRequest, context: { params: { id: string } })
     });
 
 
-    // IPC real
-    let ipcValor: number | null = null;
-
-    if (mes_ipc && anio_ipc) {
-
-      const ipc = await db.ipc.findFirst({
-        where: {
-          mes: Number(mes_ipc),
-          anio: Number(anio_ipc),
-        },
-      });
-
-      ipcValor = ipc?.valor
-        ? Number(ipc.valor)
-        : null;
-
-    }
-
 
     const saldoAnterior =
       await calcularSaldoAnterior(
@@ -299,14 +314,29 @@ export async function PUT(req: NextRequest, context: { params: { id: string } })
         new Date()
       );
 
+      console.log("ipcValor:", ipcValor);
+
 
     // Excel data
     const cobranzasExcel: CobranzaForExcel[] =
       seleccionadas.map(c => {
 
-        const monto = Number(c.monto ?? 0);
+        const montoBase = Number(c.monto ?? 0);
+
+        // ✅ aplicar IPC correctamente
+        const aumentoIPC =
+          ipcValor != null
+            ? montoBase * ipcValor
+            : 0;
+
+        const total_cobrar =
+          Number((montoBase + aumentoIPC).toFixed(2));
+
         const total_cobrado =
-          c.pagado ? monto : 0;
+          c.pagado ? total_cobrar : 0;
+
+        const a_cobrar =
+          total_cobrar - total_cobrado;
 
         return {
 
@@ -318,6 +348,7 @@ export async function PUT(req: NextRequest, context: { params: { id: string } })
 
           cliente: {
             nombre: c.cliente?.nombre ?? "",
+            apellido: c.cliente?.apellido ?? "",
             email: c.cliente?.email ?? null,
             telefono: c.cliente?.telefono ?? null,
           },
@@ -334,7 +365,7 @@ export async function PUT(req: NextRequest, context: { params: { id: string } })
 
           concepto: c.concepto,
 
-          monto,
+          monto: montoBase,
 
           fecha_cobranza:
             c.fecha_cobranza
@@ -353,12 +384,12 @@ export async function PUT(req: NextRequest, context: { params: { id: string } })
           observaciones:
             c.observaciones ?? null,
 
-          total_cobrar: monto,
+          // ✅ ESTOS SON LOS IMPORTANTES
+          total_cobrar,
 
           total_cobrado,
 
-          a_cobrar:
-            monto - total_cobrado,
+          a_cobrar,
 
           unFuncional:
             c.inmueble
@@ -371,7 +402,7 @@ export async function PUT(req: NextRequest, context: { params: { id: string } })
               : "",
 
           ipcAumento:
-            ipcValor
+            ipcValor != null
               ? `IPC ${mes_ipc}/${anio_ipc}`
               : "",
 
@@ -382,6 +413,7 @@ export async function PUT(req: NextRequest, context: { params: { id: string } })
       });
 
 
+
     const buffer =
       await generarExcelRendicion(
         `Rendicion_${id_rendicion}`,
@@ -390,17 +422,18 @@ export async function PUT(req: NextRequest, context: { params: { id: string } })
           .substring(0, 10),
         cobranzasExcel,
         {
-          mes: mes_ipc,
-          anio: anio_ipc,
-          valor: ipcValor,
+          mes: mes_ipc ?? null,
+          anio: anio_ipc ?? null,
+          valor: ipcValor ?? null,
         },
-        saldoAnterior
+
       );
 
 
     return new NextResponse(
       new Uint8Array(buffer),
       {
+        status: 200,
         headers: {
           "Content-Type":
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

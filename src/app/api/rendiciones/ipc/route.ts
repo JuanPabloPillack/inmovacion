@@ -42,14 +42,14 @@ export async function POST(req: NextRequest) {
             mes_anio: { mes: d.mes, anio: d.anio },
           },
           update: {
-            valor: d.valor,
+            valor: d.valor / 100,
             fuente: d.fuente,
             fechaConsulta: new Date(d.fechaConsulta),
           },
           create: {
             mes: d.mes,
             anio: d.anio,
-            valor: d.valor,
+            valor: d.valor / 100,
             fuente: d.fuente,
             fechaConsulta: new Date(d.fechaConsulta),
           },
@@ -112,7 +112,7 @@ export async function PUT(req: NextRequest) {
     let valorParsed: number | undefined = undefined;
 
     if (valor !== undefined) {
-      valorParsed = Number(valor);
+      valorParsed = Number(valor) / 100;
 
       if (isNaN(valorParsed)) {
         return NextResponse.json(
