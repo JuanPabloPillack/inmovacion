@@ -39,41 +39,81 @@ export async function GET(req: NextRequest, context: { params: { id: string } })
   try {
 
     const rendicion = await db.rendicion.findUnique({
-      where: { id_rendicion },
+  where: { id_rendicion },
+  select: {
+    id_rendicion: true,
+    fecha: true,
+    monto_total: true,
+    mes_ipc: true,
+    anio_ipc: true,
+    createdAt: true,
+    updatedAt: true,
 
-      include: {
+    inmueble: {
+      select: {
+        id_inmueble: true,
+        titulo: true,
+        ubicacion: {
+          select: {
+            direccion: true,
+            ciudad: true,
+            provincia: true,
+          },
+        },
+      },
+    },
 
-        inmueble: true,
+    cobranzas: {
+      select: {
+        id_cobranza: true,
+        monto: true,
+        concepto: true,
+        fecha_cobranza: true,
+        pagado: true,
+        id_contrato: true,
+        numero_recibo: true,
+        observaciones: true,
+        genera_recibo: true,
 
-        cobranzas: {
-          include: {
-            cliente: true,
-            recibo: true,
-            inmueble: {
-              include: { ubicacion: true },
+        cliente: {
+          select: {
+            id_cliente: true,
+            nombre: true,
+            apellido: true,
+            email: true,
+            telefono: true,
+          },
+        },
+
+        recibo: {
+          select: {
+            id_recibo: true,
+            total: true,
+            descripcion: true,
+          },
+        },
+
+        inmueble: {
+          select: {
+            titulo: true,
+            ubicacion: {
+              select: { direccion: true },
             },
           },
         },
-
-        createdBy: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
-
-        updatedBy: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
-
       },
+    },
 
-    });
+    createdBy: {
+      select: { id: true, name: true, email: true },
+    },
+
+    updatedBy: {
+      select: { id: true, name: true, email: true },
+    },
+  },
+});
+
 
     if (!rendicion)
       return NextResponse.json(

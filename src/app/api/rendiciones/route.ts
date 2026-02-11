@@ -146,49 +146,68 @@ if (year && month) {
 
    const [rendiciones, total] = await Promise.all([
   db.rendicion.findMany({
-    where, // 👈 ACÁ
+  where,
+  skip,
+  take,
+  orderBy: { id_rendicion: "desc" },
+  select: {
+    id_rendicion: true,
+    fecha: true,
+    monto_total: true,
+    pagado: true,
+    createdAt: true,
+    updatedAt: true,
 
-    skip,
-    take,
-
-    orderBy: { id_rendicion: "desc" },
-
-    include: {
-      inmueble: {
-        include: {
-          ubicacion: true,
-        },
-      },
-
-      cobranzas: {
-        include: {
-          cliente: true,
-          recibo: true,
-          inmueble: {
-            include: {
-              ubicacion: true,
-            },
+    inmueble: {
+      select: {
+        id_inmueble: true,
+        titulo: true,
+        ubicacion: {
+          select: {
+            direccion: true,
+            ciudad: true,
+            provincia: true,
           },
         },
       },
+    },
 
-      createdBy: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
+    cobranzas: {
+      select: {
+        id_cobranza: true,
+        monto: true,
+        concepto: true,
+        fecha_cobranza: true,
+        pagado: true,
+
+        cliente: {
+          select: {
+            id_cliente: true,
+            nombre: true,
+            apellido: true,
+          },
         },
-      },
 
-      updatedBy: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
+        recibo: {
+          select: {
+            id_recibo: true,
+            total: true,
+            descripcion: true,
+          },
         },
       },
     },
-  }),
+
+    createdBy: {
+      select: { id: true, name: true, email: true },
+    },
+
+    updatedBy: {
+      select: { id: true, name: true, email: true },
+    },
+  },
+}),
+
 
   db.rendicion.count({ where }), 
   
