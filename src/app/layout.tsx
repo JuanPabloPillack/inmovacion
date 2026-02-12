@@ -3,7 +3,6 @@ import "./globals.css";
 import type { ReactNode } from "react";
 import { SessionProvider } from "next-auth/react";
 import { QueryProvider } from "@/providers/QueryProvider";
-import { SessionProvider } from 'next-auth/react';
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="es">
