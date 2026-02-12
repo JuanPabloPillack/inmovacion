@@ -35,7 +35,7 @@
     "formidable": "^3.5.4",
     "html2canvas": "^1.4.1",
     "jspdf": "^3.0.3",
-    "libphonenumber-js": "^1.12.27",
+    "libphonenumber-js": "^1.12.36",
     "libreoffice-convert": "^1.7.0",
     "lucide-react": "^0.540.0",
     "mammoth": "^1.11.0",
@@ -59,6 +59,7 @@
     "react-phone-number-input": "^3.4.14",
     "resend": "^6.0.1",
     "tailwind-merge": "^3.3.1",
+    "use-debounce": "^10.1.0",
     "xlsx": "^0.18.5",
     "zod": "^4.1.12"
   },

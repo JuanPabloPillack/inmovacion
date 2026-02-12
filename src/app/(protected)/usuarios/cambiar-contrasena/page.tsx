@@ -25,7 +25,7 @@ import {
   Building 
 } from "lucide-react";
 import Header from "@/components/ui/Header";
-import ConfirmationModal from "@/components/ui/confirmation-modal";
+import Modal from '@/components/ui/Modal';
 import { changePassword } from "@/actions/user-actions";
 import { registerSchema } from "@/lib/zod"; // Importa el esquema desde zod.ts
 
@@ -341,7 +341,7 @@ export default function ChangePasswordPage() {
         </Card>
 
         {/* Modal de confirmación */}
-        <ConfirmationModal
+        <Modal
           isOpen={isModalOpen}
           onClose={() => setIsModalOpen(false)}
           onConfirm={() => router.push("/usuarios/perfil")}

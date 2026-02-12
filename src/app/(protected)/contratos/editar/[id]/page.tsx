@@ -7,6 +7,7 @@ import Header from '@/components/ui/Header';
 import Combobox from '@/components/ui/combobox';
 import { z } from 'zod';
 import Modal from '@/components/ui/Modal';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 interface Cliente {
   id_cliente: number;
@@ -228,7 +229,12 @@ export default function EditContract() {
         const contratoData = await contratoRes.json();
         setContrato(contratoData);
         setClientes(await clientesRes.json());
-        setInmuebles(await inmueblesRes.json());
+        const inmueblesRaw = await inmueblesRes.json();
+const inmueblesList = Array.isArray(inmueblesRaw) 
+  ? inmueblesRaw 
+  : inmueblesRaw?.data ?? [];           // ← ¡Extraemos el array real!
+
+setInmuebles(inmueblesList);
         const templatesData = await templatesRes.json();
         setTemplates(templatesData.templates || []);
 

@@ -3,14 +3,13 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useSession } from "next-auth/react";  // Import agregado
+import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Badge } from "@/components/ui/Badge";
 import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useForm } from "react-hook-form";
@@ -20,7 +19,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { 
   User, 
   Mail, 
-  Phone, 
   Shield, 
   ArrowLeft, 
   Save, 
@@ -31,8 +29,9 @@ import {
   Building 
 } from "lucide-react";
 import Header from "@/components/ui/Header";
-import ConfirmationModal from "@/components/ui/confirmation-modal";
+import Modal from '@/components/ui/Modal';
 import { getUserById, updateUser } from "@/actions/user-actions";
+import { PhoneInputField } from "@/components/ui/PhoneInputField";
 
 // Esquema de validación
 const editUserSchema = z.object({
@@ -68,7 +67,7 @@ export default function EditUserPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const userId = searchParams.get("id");
-  const { data: session, status: sessionStatus } = useSession();  // Hook agregado
+  const { data: session, status: sessionStatus } = useSession();
   
   const [user, setUser] = useState<EditUserFormValues | null>(null);
   const [loadingState, setLoadingState] = useState<LoadingState>({
@@ -92,7 +91,7 @@ export default function EditUserPage() {
     },
   });
 
-  // Check de autorización en el cliente (agregado)
+  // Check de autorización en el cliente
   useEffect(() => {
     if (sessionStatus === "loading" || !userId) return;
 
@@ -106,7 +105,7 @@ export default function EditUserPage() {
         hasError: true,
         message: "No autorizado para editar este usuario.",
       });
-      setTimeout(() => router.push("/usuarios/perfil"), 2000);  // Redirige a perfil propio
+      setTimeout(() => router.push("/usuarios/perfil"), 2000);
     }
   }, [sessionStatus, session, userId, router]);
 
@@ -332,34 +331,16 @@ export default function EditUserPage() {
                       )}
                     />
 
-                    <FormField
+                    {/* Campo de teléfono usando PhoneInputField */}
+                    <PhoneInputField
                       control={form.control}
                       name="phone"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel className="flex items-center gap-2 text-[#686363] font-medium">
-                            <Phone className="h-4 w-4 text-[#63bae9]" />
-                            Teléfono
-                          </FormLabel>
-                          <FormControl>
-                            <Input 
-                              {...field} 
-                              type="tel"
-                              className="h-12 rounded-xl border-[#969696]/20 focus:border-[#63bae9] focus:ring-[#63bae9]/20 transition-all duration-200 text-[#686363] placeholder-[#969696] bg-slate-50/50"
-                              placeholder="+1 (555) 123-4567"
-                            />
-                          </FormControl>
-                          <FormMessage className="text-red-500 text-sm flex items-center gap-1">
-                            {form.formState.errors.phone?.message && (
-                              <AlertCircle className="h-3 w-3" />
-                            )}
-                            {form.formState.errors.phone?.message}
-                          </FormMessage>
-                        </FormItem>
-                      )}
+                      label="Teléfono"
+                      placeholder="+54 9 11 2345 6789"
+                      disabled={loadingState.isSubmitting}
                     />
 
-                    {session?.user.role === "admin" && (  // Condicional agregado para ocultar role si no es admin
+                    {session?.user.role === "admin" && (
                       <FormField
                         control={form.control}
                         name="role"
@@ -450,7 +431,7 @@ export default function EditUserPage() {
         </Card>
 
         {/* Modal de confirmación */}
-        <ConfirmationModal
+        <Modal
           isOpen={isModalOpen}
           onClose={() => setIsModalOpen(false)}
           onConfirm={() => router.push("/usuarios")}

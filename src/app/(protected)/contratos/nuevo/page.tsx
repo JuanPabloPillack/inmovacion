@@ -173,7 +173,9 @@ export default function NewContract() {
           throw new Error('Error al cargar datos');
         }
         setClientes(await clientesRes.json());
-        setInmuebles(await inmueblesRes.json());
+      const inmueblesRaw = await inmueblesRes.json();
+const inmueblesList = Array.isArray(inmueblesRaw) ? inmueblesRaw : inmueblesRaw?.data ?? [];
+setInmuebles(inmueblesList);
         const templatesData = await templatesRes.json();
         setTemplates(templatesData.templates || []);
       } catch (err) {

@@ -1,3 +1,4 @@
+
 //src/app/(protected)/contratos/page.tsx
 
 'use client';
@@ -6,6 +7,8 @@ import { FileText, PlusCircle, AlertCircle, Download, Trash2, Calendar, DollarSi
 import Combobox from '@/components/ui/combobox';
 import Header from '@/components/ui/Header';
 import Modal from '@/components/ui/Modal';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useDebounce } from 'use-debounce';
 interface Cliente { id_cliente: number; nombre: string; apellido: string; }
 interface Inmueble { id_inmueble: number; titulo: string; }
 interface Template { id: number; nombre: string; }
@@ -33,16 +36,18 @@ interface Contrato {
 }
 
 function Contratos() {
-  const [contratos, setContratos] = useState<Contrato[]>([]);
-  const [clientes, setClientes] = useState<Cliente[]>([]);
-  const [inmuebles, setInmuebles] = useState<Inmueble[]>([]);
-  const [templates, setTemplates] = useState<Template[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+
+
+
+
+
+
+
   const [modalOpen, setModalOpen] = useState(false);
   const [modalAction, setModalAction] = useState<'desactivar' | 'activar' | 'eliminar' | 'firmar' | 'desfirmar'>('desactivar');
   const [itemToAction, setItemToAction] = useState<{ id: number; nombre: string } | null>(null);
   const [search, setSearch] = useState('');
+  const [debouncedSearch] = useDebounce(search, 400);
   const [fechaDesde, setFechaDesde] = useState('');
   const [fechaHasta, setFechaHasta] = useState('');
   const [tipoContrato, setTipoContrato] = useState<'ALQUILER_LOCACION' | 'COMPRA_VENTA' | ''>('');
@@ -54,11 +59,13 @@ function Contratos() {
   const [activo, setActivo] = useState<boolean | undefined>(undefined);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(10);
-  const [total, setTotal] = useState(0);
+
   const [showFilters, setShowFilters] = useState(false);
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
   const menuRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
 
+
+  const queryClient = useQueryClient();
   // Estado para notificaciones
 const [notification, setNotification] = useState<{
   isOpen: boolean;
@@ -92,13 +99,7 @@ const showNotification = (
 
 
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setPage(1);
-      fetchContratos();
-    }, search ? 400 : 0);
-    return () => clearTimeout(timer);
-  }, [search, fechaDesde, fechaHasta, tipoContrato, id_cliente_1, id_cliente_2, id_inmueble, id_template, firmado, activo, page]);
+
 
 useEffect(() => {
   const handleClickOutside = (event: MouseEvent) => {
@@ -113,112 +114,148 @@ useEffect(() => {
   return () => document.removeEventListener('mousedown', handleClickOutside);
 }, [openMenuId]);
 
-// ✅ OPTIMIZACIÓN: Cargar datos iniciales en paralelo (UNA SOLA VEZ)
-  useEffect(() => {
-    const fetchInitialData = async () => {
-      try {
-        setLoading(true);
-        
-        const [clientesRes, inmueblesRes, templatesRes] = await Promise.all([
-          fetch('/api/clientes'),
-          fetch('/api/inmuebles'),
-          fetch('/api/templates?pageSize=100')
-        ]);
+// Queries para cargar datos
+const { data: clientes = [] } = useQuery({
+  queryKey: ['clientes'],
+  queryFn: async () => {
+    console.log('🔵 FETCHING CLIENTES desde API');
+    const res = await fetch('/api/clientes');
+    if (!res.ok) throw new Error('Error al cargar clientes');
+    return res.json();
+  },
+});
 
-        if (!clientesRes.ok || !inmueblesRes.ok || !templatesRes.ok) {
-          throw new Error('Error al cargar datos');
-        }
+const { data: inmuebles = [] } = useQuery({
+  queryKey: ['inmuebles'],
+  queryFn: async () => {
+    const res = await fetch('/api/inmuebles?pageSize=1000');
+    if (!res.ok) throw new Error('Error al cargar inmuebles');
+    const json = await res.json();
+    return json.data; 
+  },
+});
 
-        const [clientesData, inmueblesData, templatesData] = await Promise.all([
-          clientesRes.json(),
-          inmueblesRes.json(),
-          templatesRes.json()
-        ]);
-
-        setClientes(clientesData);
-        setInmuebles(inmueblesData);
-        setTemplates(templatesData.templates || []);
-      } catch (err) {
-        setError('No se pudieron cargar los datos iniciales');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchInitialData();
-  }, []); // ← Solo se ejecuta UNA VEZ
+const { data: templates = [] } = useQuery({
+  queryKey: ['templates'],
+  queryFn: async () => {
+    console.log('🟡 FETCHING TEMPLATES desde API');
+    const res = await fetch('/api/templates?pageSize=100');
+    if (!res.ok) throw new Error('Error al cargar templates');
+    const data = await res.json();
+    return data.templates || [];
+  },
+});
 
   // ✅ OPTIMIZACIÓN: Memoizar opciones para evitar recalcular
   const clienteOptions = useMemo(
-    () => clientes.map(c => ({
-      value: c.id_cliente,
-      label: `${c.nombre} ${c.apellido}`
-    })),
-    [clientes]
-  );
+  () => clientes.map((c: Cliente) => ({
+    value: c.id_cliente,
+    label: `${c.nombre} ${c.apellido}`
+  })),
+  [clientes]
+);
 
-  const inmuebleOptions = useMemo(
-    () => inmuebles.map(i => ({
-      value: i.id_inmueble,
-      label: i.titulo
-    })),
-    [inmuebles]
-  );
+const inmuebleOptions = useMemo(
+  () => inmuebles.map((i: Inmueble) => ({
+    value: i.id_inmueble,
+    label: i.titulo
+  })),
+  [inmuebles]
+);
 
-  const templateOptions = useMemo(
-    () => templates.map(t => ({
-      value: t.id,
-      label: t.nombre
-    })),
-    [templates]
-  );
+const templateOptions = useMemo(
+  () => templates.map((t: Template) => ({
+    value: t.id,
+    label: t.nombre
+  })),
+  [templates]
+);
 
-  // ✅ OPTIMIZACIÓN: fetchContratos con useCallback
-  const fetchContratos = useCallback(async () => {
-    try {
-      setLoading(true);
-      const params = new URLSearchParams();
-      
-      if (search) params.append('search', search);
-      if (fechaDesde) params.append('fechaDesde', fechaDesde);
-      if (fechaHasta) params.append('fechaHasta', fechaHasta);
-      if (tipoContrato) params.append('tipo_contrato', tipoContrato);
-      if (id_cliente_1) params.append('id_cliente_1', id_cliente_1.toString());
-      if (id_cliente_2) params.append('id_cliente_2', id_cliente_2.toString());
-      if (id_inmueble) params.append('id_inmueble', id_inmueble.toString());
-      if (id_template) params.append('id_template', id_template.toString());
-      if (firmado !== undefined) params.append('firmado', firmado.toString());
-      if (activo !== undefined) params.append('activo', activo.toString());
-      params.append('page', page.toString());
-      params.append('pageSize', pageSize.toString());
-
-      const url = `/api/contracts?${params.toString()}`;
-      const res = await fetch(url);
-      
-      if (!res.ok) throw new Error('Error al cargar contratos');
-      
-      const { contratos, total } = await res.json();
-      setContratos(contratos);
-      setTotal(total);
-    } catch (err) {
-      setError('No se pudieron cargar los contratos');
-    } finally {
-      setLoading(false);
-    }
-  }, [
-    search,
-    fechaDesde,
-    fechaHasta,
+// Query para cargar contratos con filtros
+const { 
+  data: contratosData, 
+  isLoading: loading,
+  error: errorQuery 
+} = useQuery({
+  queryKey: ['contratos', {
+    search: debouncedSearch, 
+    fechaDesde, 
+    fechaHasta, 
     tipoContrato,
-    id_cliente_1,
-    id_cliente_2,
-    id_inmueble,
+    id_cliente_1, 
+    id_cliente_2, 
+    id_inmueble, 
     id_template,
-    firmado,
-    activo,
-    page,
+    firmado, 
+    activo, 
+    page, 
     pageSize
-  ]);
+  }],
+  queryFn: async () => {
+        console.log('🔴 FETCHING CONTRATOS desde API con filtros:', { // ← AGREGA ESTA LÍNEA
+      search: debouncedSearch,
+      page
+    });
+    const params = new URLSearchParams();
+    
+    if (debouncedSearch) params.append('search', debouncedSearch);
+    if (fechaDesde) params.append('fechaDesde', fechaDesde);
+    if (fechaHasta) params.append('fechaHasta', fechaHasta);
+    if (tipoContrato) params.append('tipo_contrato', tipoContrato);
+    if (id_cliente_1) params.append('id_cliente_1', id_cliente_1.toString());
+    if (id_cliente_2) params.append('id_cliente_2', id_cliente_2.toString());
+    if (id_inmueble) params.append('id_inmueble', id_inmueble.toString());
+    if (id_template) params.append('id_template', id_template.toString());
+    if (firmado !== undefined) params.append('firmado', firmado.toString());
+    if (activo !== undefined) params.append('activo', activo.toString());
+    params.append('page', page.toString());
+    params.append('pageSize', pageSize.toString());
+
+    const res = await fetch(`/api/contracts?${params.toString()}`);
+    if (!res.ok) throw new Error('Error al cargar contratos');
+    return res.json();
+  },
+
+});
+
+// Extraer datos de la query
+const contratos = contratosData?.contratos || [];
+const total = contratosData?.total || 0;
+const error = errorQuery?.message || null;
+
+// Mutation para actualizar contratos
+const updateMutation = useMutation({
+  mutationFn: async ({ id, data }: { id: number; data: any }) => {
+    const res = await fetch(`/api/contracts/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const errorData = await res.json();
+      throw new Error(errorData.error || 'Error en la operación');
+    }
+    return res.json();
+  },
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ['contratos'] });
+  },
+});
+
+// Mutation para eliminar contratos
+const deleteMutation = useMutation({
+  mutationFn: async (id: number) => {
+    const res = await fetch(`/api/contracts/${id}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const errorData = await res.json();
+      throw new Error(errorData.error || 'Error al eliminar');
+    }
+    return res.json();
+  },
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ['contratos'] });
+  },
+});
 
   const handleAction = (id: number, nombre: string, action: 'desactivar' | 'activar' | 'eliminar' | 'firmar' | 'desfirmar') => {
     setItemToAction({ id, nombre });
@@ -231,47 +268,30 @@ const confirmAction = async () => {
   if (!itemToAction) return;
   
   try {
-    if (modalAction === 'desactivar' || modalAction === 'activar' || modalAction === 'firmar' || modalAction === 'desfirmar') {
-      const res = await fetch(`/api/contracts/${itemToAction.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          activo: modalAction === 'activar' ? true : modalAction === 'desactivar' ? false : undefined,
-          firmado: modalAction === 'firmar' ? true : modalAction === 'desfirmar' ? false : undefined,
-        }),
-      });
-      
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.error || 'Error en la operación');
-      }
-      
-      // Mostrar notificación de éxito
-      showNotification(
-        'success',
-        '¡Operación exitosa!',
-        `Contrato ${modalAction === 'activar' ? 'activado' : modalAction === 'desactivar' ? 'desactivado' : modalAction === 'firmar' ? 'marcado como firmado' : 'desmarcado como firmado'} correctamente.`
-      );
-      
-    } else if (modalAction === 'eliminar') {
-      const res = await fetch(`/api/contracts/${itemToAction.id}`, {
-        method: 'DELETE',
-      });
-      
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.error || 'Error al eliminar');
-      }
-      
+    if (modalAction === 'eliminar') {
+      await deleteMutation.mutateAsync(itemToAction.id);
       showNotification('success', '¡Eliminado!', 'Contrato eliminado permanentemente.');
+    } else {
+      const updateData: any = {};
+      
+      if (modalAction === 'activar' || modalAction === 'desactivar') {
+        updateData.activo = modalAction === 'activar';
+      }
+      if (modalAction === 'firmar' || modalAction === 'desfirmar') {
+        updateData.firmado = modalAction === 'firmar';
+      }
+
+      await updateMutation.mutateAsync({ id: itemToAction.id, data: updateData });
+      
+      const actionText = 
+        modalAction === 'activar' ? 'activado' :
+        modalAction === 'desactivar' ? 'desactivado' :
+        modalAction === 'firmar' ? 'marcado como firmado' : 'desmarcado como firmado';
+      
+      showNotification('success', '¡Operación exitosa!', `Contrato ${actionText} correctamente.`);
     }
-    
-    setError(null);
-    fetchContratos();
-    
   } catch (err: any) {
     showNotification('error', 'Error', err.message || 'Ocurrió un error inesperado');
-    setError(err.message);
   } finally {
     setModalOpen(false);
     setItemToAction(null);
@@ -333,17 +353,7 @@ const confirmAction = async () => {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {error && (
-          <div className="mb-6 p-4 rounded-xl flex items-start gap-3 bg-red-50 border border-red-200 shadow-sm animate-in fade-in slide-in-from-top-2 duration-300">
-            <AlertCircle className="w-5 h-5 mt-0.5 flex-shrink-0 text-red-500" />
-            <div className="flex-1">
-              <p className="font-medium text-red-800">{error}</p>
-            </div>
-            <button onClick={() => setError(null)} className="text-red-500 hover:text-red-700 transition-colors">
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-        )}
+
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
           <a
@@ -613,7 +623,7 @@ const confirmAction = async () => {
               </div>
             ) : (
               <div className="space-y-4">
-                {contratos.map((contrato) => {
+                {contratos.map((contrato: Contrato) => {
                   const { cliente1, cliente2 } = getClienteLabels(contrato.tipo_contrato);
 
                   return (
