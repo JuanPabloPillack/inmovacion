@@ -1,3 +1,4 @@
+
 //src/app/(protected)/contratos/page.tsx
 
 'use client';

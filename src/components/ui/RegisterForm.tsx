@@ -1,7 +1,7 @@
 //src/components/ui/RegisterForm.tsx
 "use client"
 
-import { useState, useTransition, useEffect } from "react"
+import { useState, useTransition } from "react"
 import type { z } from "zod"
 import { registerSchema } from "@/lib/zod"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -14,8 +14,8 @@ import { useRouter } from "next/navigation"
 import { Separator } from "@/components/ui/separator"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Eye, EyeOff, User, Mail, Phone, Lock, Shield, CheckCircle, AlertCircle, Loader2, ArrowLeft } from "lucide-react"
-
+import { Eye, EyeOff, User, Mail, Lock, Shield, CheckCircle, AlertCircle, Loader2, ArrowLeft } from "lucide-react"
+import { PhoneInputField } from "@/components/ui/PhoneInputField"
 
 type RegisterFormValues = z.infer<typeof registerSchema>
 
@@ -33,8 +33,6 @@ export default function RegisterForm({ onSuccess, onError, onFormDirtyChange }: 
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const router = useRouter()
 
-  
-
   const form = useForm<RegisterFormValues>({
     resolver: zodResolver(registerSchema),
     defaultValues: {
@@ -46,8 +44,6 @@ export default function RegisterForm({ onSuccess, onError, onFormDirtyChange }: 
       role: "user",
     },
   })
-
-  
 
   async function onSubmit(values: RegisterFormValues) {
     setError(null)
@@ -152,7 +148,7 @@ export default function RegisterForm({ onSuccess, onError, onFormDirtyChange }: 
                       <Input
                         placeholder="usuario@empresa.com"
                         {...field}
-                        type=""
+                        type="email"
                         disabled={isPending}
                         className="h-12 rounded-xl border-[#969696]/20 focus:border-[#63bae9] focus:ring-[#63bae9]/20 transition-all duration-200 text-[#686363] placeholder-[#969696] bg-slate-50/50 text-sm sm:text-base"
                       />
@@ -167,32 +163,13 @@ export default function RegisterForm({ onSuccess, onError, onFormDirtyChange }: 
                 )}
               />
 
-              <FormField
+              {/* Campo de teléfono usando PhoneInputField */}
+              <PhoneInputField
                 control={form.control}
                 name="phone"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="flex items-center gap-2 text-[#686363] font-medium text-sm sm:text-base">
-                      <Phone className="h-4 w-4 text-[#63bae9]" />
-                      Teléfono
-                    </FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder="Ej: +54 9 11 2345 6789"
-                        {...field}
-                        type="tel"
-                        disabled={isPending}
-                        className="h-12 rounded-xl border-[#969696]/20 focus:border-[#63bae9] focus:ring-[#63bae9]/20 transition-all duration-200 text-[#686363] placeholder-[#969696] bg-slate-50/50 text-sm sm:text-base"
-                      />
-                    </FormControl>
-                    <FormMessage className="text-red-500 text-sm flex items-center gap-1">
-                      {form.formState.errors.phone?.message && (
-                        <AlertCircle className="h-3 w-3" />
-                      )}
-                      {form.formState.errors.phone?.message}
-                    </FormMessage>
-                  </FormItem>
-                )}
+                label="Teléfono"
+                placeholder="Ej: +54 9 11 2345 6789"
+                disabled={isPending}
               />
 
               <FormField
@@ -361,7 +338,6 @@ export default function RegisterForm({ onSuccess, onError, onFormDirtyChange }: 
             </div>
           </form>
         </Form>
-        
       </div>
     </div>
   )

@@ -19,7 +19,7 @@ import Header from "@/components/ui/Header"
 import { deactivateUser, deleteUser, activateUser } from "@/actions/user-actions"
 import type { User } from "../../../../types/user"
 import Loading from "@/components/ui/Loading"
-import ConfirmationModal from "@/components/ui/Modal"
+import Modal from "@/components/ui/Modal"
 
 export default function UsersPage() {
   const { data: session, status } = useSession()
@@ -135,6 +135,42 @@ export default function UsersPage() {
     setActionType(null)
     setUserId(null)
   }, [userId, actionType, refreshUsers])
+
+  // Función para obtener la configuración del modal según el tipo de acción
+  const getModalConfig = () => {
+    switch (actionType) {
+      case 'delete':
+        return {
+          title: "¿Eliminar este usuario?",
+          message: "Se eliminará permanentemente el usuario. Esta acción no se puede deshacer.",
+          confirmText: "Eliminar",
+          variant: "danger" as const
+        }
+      case 'deactivate':
+        return {
+          title: "¿Desactivar este usuario?",
+          message: "El usuario no podrá acceder al sistema hasta que se reactive.",
+          confirmText: "Desactivar",
+          variant: "warning" as const
+        }
+      case 'activate':
+        return {
+          title: "¿Activar este usuario?",
+          message: "El usuario podrá acceder nuevamente al sistema.",
+          confirmText: "Activar",
+          variant: "info" as const
+        }
+      default:
+        return {
+          title: "Confirmación",
+          message: "Por favor confirma esta acción.",
+          confirmText: "Confirmar",
+          variant: "info" as const
+        }
+    }
+  }
+
+  const modalConfig = getModalConfig()
 
   if (loading) {
     return <Loading message="Cargando usuarios..." />
@@ -497,7 +533,8 @@ export default function UsersPage() {
           <CardsView />
         )}
 
-        <ConfirmationModal
+        {/* Modal de confirmación */}
+        <Modal
           isOpen={isModalOpen}
           onClose={() => {
             setIsModalOpen(false)
@@ -505,26 +542,11 @@ export default function UsersPage() {
             setUserId(null)
           }}
           onConfirm={handleConfirmAction}
-          title={
-            actionType === 'delete' ? "¿Eliminar este usuario?" :
-            actionType === 'deactivate' ? "¿Desactivar este usuario?" :
-            actionType === 'activate' ? "¿Activar este usuario?" :
-            "Confirmación"
-          }
-          message={
-            actionType === 'delete' ? "Se eliminará permanentemente el usuario. Esta acción no se puede deshacer." :
-            actionType === 'deactivate' ? "El usuario no podrá acceder al sistema hasta que se reactive." :
-            actionType === 'activate' ? "El usuario podrá acceder nuevamente al sistema." :
-            "Por favor confirma esta acción."
-          }
-          confirmText={
-            actionType === 'delete' ? "Eliminar" :
-            actionType === 'deactivate' ? "Desactivar" :
-            actionType === 'activate' ? "Activar" :
-            "Confirmar"
-          }
+          title={modalConfig.title}
+          message={modalConfig.message}
+          confirmText={modalConfig.confirmText}
           cancelText="Cancelar"
-          variant={actionType === 'delete' ? 'danger' : 'warning'}
+          variant={modalConfig.variant}
         />
       </div>
     </div>

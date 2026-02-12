@@ -1,5 +1,4 @@
 // src/app/(protected)/usuarios/nuevo/page.tsx
-
 "use client"
 
 import { useState, useEffect } from "react"
@@ -11,6 +10,7 @@ import Header from "@/components/ui/Header"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Building, ArrowLeft, CheckCircle, AlertCircle } from "lucide-react"
+import Modal from '@/components/ui/Modal'
 
 export default function NewUserPage() {
   const { data: session, status } = useSession()
@@ -18,6 +18,7 @@ export default function NewUserPage() {
   const [showSuccess, setShowSuccess] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [isFormDirty, setIsFormDirty] = useState(false)
+  const [isModalOpen, setIsModalOpen] = useState(false)
 
   useEffect(() => {
     if (status === "loading") return
@@ -33,12 +34,10 @@ export default function NewUserPage() {
 
   const handleCancel = () => {
     if (isFormDirty) {
-      const confirmed = window.confirm(
-        "Tienes cambios sin guardar. ¿Estás seguro de que deseas salir?"
-      )
-      if (!confirmed) return
+      setIsModalOpen(true)
+    } else {
+      router.push("/usuarios")
     }
-    router.push("/usuarios")
   }
 
   return (
@@ -52,15 +51,13 @@ export default function NewUserPage() {
         {/* Navigation & Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-6">
           <Button
-            asChild
             variant="outline"
             size="sm"
+            onClick={handleCancel}
             className="border-[#63bae9] text-[#63bae9] hover:bg-[#63bae9] hover:text-white transition-all duration-200 hover:scale-105 shadow-md"
           >
-            <Link href="/usuarios">
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Volver a usuarios
-            </Link>
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Volver a usuarios
           </Button>
           <div className="space-y-1">
             <div className="flex items-center gap-3">
@@ -69,7 +66,6 @@ export default function NewUserPage() {
                 Crear Nuevo Usuario
               </h1>
             </div>
-
           </div>
         </div>
 
@@ -98,7 +94,7 @@ export default function NewUserPage() {
               </Button>
               <Button
                 variant="outline"
-                onClick={handleCancel}
+                onClick={() => router.push("/usuarios")}
                 className="h-12 border-[#969696]/50 text-[#686363] hover:bg-[#63bae9]/10 hover:text-[#63bae9] rounded-xl font-medium text-sm transition-all duration-200 transform hover:scale-105"
               >
                 <ArrowLeft className="h-4 w-4 mr-2" />
@@ -121,7 +117,17 @@ export default function NewUserPage() {
         )}
       </div>
 
-     
+      {/* Modal de confirmación */}
+      <Modal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onConfirm={() => router.push("/usuarios")}
+        title="Confirmar Cancelación"
+        message="Tienes cambios sin guardar. ¿Estás seguro de que deseas salir?"
+        confirmText="Salir sin guardar"
+        cancelText="Continuar editando"
+        variant="warning"
+      />
     </div>
   )
 }

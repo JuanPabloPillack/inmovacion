@@ -123,6 +123,7 @@ export async function POST(req: NextRequest) {
 }
 
 // ==================== GET ====================
+// ==================== GET OPTIMIZADO ====================
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
@@ -137,12 +138,23 @@ export async function GET(req: NextRequest) {
     if (fechaDesde) where.createdAt = { gte: new Date(fechaDesde) };
     if (tipo) where.tipo = tipo;
 
+    // ✅ OPTIMIZACIÓN: Select solo campos necesarios
     const [templates, total] = await Promise.all([
       db.template.findMany({
         where,
-        include: {
+        select: {
+          id: true,
+          nombre: true,
+          archivoPath: true,
+          camposVariables: true,
+          tipo: true,
+          createdAt: true,
           createdBy: {
-            select: { id: true, name: true, email: true },
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
           },
         },
         orderBy: { createdAt: 'desc' },
@@ -166,7 +178,10 @@ export async function GET(req: NextRequest) {
     );
   } catch (error) {
     console.error('Error al listar templates:', error);
-    return NextResponse.json({ error: 'Error al obtener templates' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Error al obtener templates' },
+      { status: 500 }
+    );
   }
 }
 
