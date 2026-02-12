@@ -14,6 +14,7 @@ import {
   MapPin,
   Clock,
   Home,
+  Phone,
 } from "lucide-react";
 
 
@@ -282,10 +283,17 @@ export default function InmuebleCard({ inmueble, filtrosAplicados }: Props) {
                   </div>
                 </div>
 
-                <span className="flex items-center gap-2 text-gray-700">
-                <span className="text-lg">📞</span>
-                +54 343 6205284
-              </span>
+                <a
+                  href="tel:+543436205284"
+                  className="
+                    flex items-center gap-2 text-gray-700 
+                    hover:text-[#63bae9] hover:underline 
+                    transition-all duration-200
+                  "
+                >
+                  <Phone className="w-5 h-5 text-gray-500" />
+                  +54 343 6205284
+                </a>
               </div>
             </div>
           </div>

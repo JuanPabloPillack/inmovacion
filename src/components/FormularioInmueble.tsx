@@ -33,7 +33,13 @@ interface Cliente { id_cliente: number; nombre: string; apellido: string; }
 interface TipoInmueble { id_tipo_inmueble: number; nombre: string; }
 interface Estado { id_estado: number; nombre: string; }
 interface Operacion { id_operacion: number; nombre: string; }
-interface ImagenData { url: string; principal: boolean; file?: File; }
+interface ImagenData {
+  url: string;        // URL REAL (cuando ya está subida)
+  preview?: string;  // blob: solo para mostrar en UI
+  principal: boolean;
+  file?: File;
+}
+
 
 // Props del componente, flexibles para usarlo en "crear" y en "editar".
 interface FormularioInmuebleProps {
@@ -179,11 +185,14 @@ const [modalConfig, setModalConfig] = useState<ModalConfig>({
     if (!selectedFiles.length) return;
 
     // Convertimos archivos en objetos ImagenData
-    const nuevas = selectedFiles.map((file) => ({
-      url: URL.createObjectURL(file), // URL temporal para previsualizar
-      file,
-      principal: false,
-    }));
+   const nuevas: ImagenData[] = selectedFiles.map((file) => ({
+  url: "",                // temporal, obligatorio para cumplir la interfaz
+  preview: URL.createObjectURL(file),
+  file,
+  principal: false,
+}));
+
+
 
     setImagenes((prev) => {
       // Si no había una imagen principal, se asigna la primera nueva
@@ -198,8 +207,8 @@ const [modalConfig, setModalConfig] = useState<ModalConfig>({
     const img = imagenes[index];
 
     // Liberar URL si es un archivo nuevo
-    if (img.file) {
-      URL.revokeObjectURL(img.url);
+    if (img.preview) {
+      URL.revokeObjectURL(img.preview);
     }
 
     const actualizadas = imagenes.filter((_, i) => i !== index);
@@ -361,19 +370,26 @@ const ejecutarSubmit = async () => {
 
     // Subir imágenes
     for (const img of imagenes) {
-      if (img.file) {
-        const f = new FormData();
-        f.append("file", img.file);
+  if (img.file) {
+    const f = new FormData();
+    f.append("file", img.file);
 
-        const res = await fetch("/api/upload", { method: "POST", body: f });
-        if (!res.ok) throw new Error("Error al subir imagen");
+    const res = await fetch("/api/upload", { method: "POST", body: f });
+    if (!res.ok) throw new Error("Error al subir imagen");
 
-        const data = await res.json();
-        uploadedImages.push({ url: data.url, principal: img.principal });
-      } else {
-        uploadedImages.push({ url: img.url, principal: img.principal });
-      }
+    const data = await res.json();
+    uploadedImages.push({ url: data.url, principal: img.principal });
+  } else {
+    // ⛔ Nunca permitir blobs al backend
+    if (!img.url || img.url.startsWith("blob:")) {
+      throw new Error("Una imagen no fue subida correctamente.");
     }
+
+    uploadedImages.push({ url: img.url, principal: img.principal });
+  }
+}
+
+
 
     const toNumberOrNull = (v: any) =>
     v === "" || v === undefined || v === null ? null : Number(v);
@@ -782,10 +798,11 @@ const handleSubmit = (e: React.FormEvent) => {
             ${img.principal ? "ring-2 ring-blue-500" : ""}`}
         >
           <img
-            src={img.url}
+            src={img.preview || img.url}
             alt={`Imagen ${index + 1}`}
             className="w-full h-full object-cover"
           />
+
 
           {/* Overlay */}
           <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center gap-2">

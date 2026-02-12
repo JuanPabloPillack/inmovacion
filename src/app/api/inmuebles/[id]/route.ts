@@ -32,8 +32,8 @@ const normalize = (v: any) =>
 /* ============================= GET ============================= */
 export async function GET(
   _req: Request,
-  { params }: { params: { id: string } }
-){
+  { params }: { params: Record<string, string> }
+) {
   const numId = Number(params.id);
 
   if (isNaN(numId)) {
@@ -158,7 +158,7 @@ export async function GET(
 
 export async function PUT(
   req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Record<string, string> }
 ) {
   const session = await auth();
 
@@ -505,7 +505,7 @@ const inmueble = await tx.inmueble.update({
 
 export async function DELETE(
   _req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Record<string, string> }
 ) {
 
   const session = await auth();

@@ -23,6 +23,27 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 interface InmuebleLocal extends InmuebleDTO {
   archivadoLocal: boolean;
 }
+// =============================
+// MAPA DE COLORES UI
+// =============================
+
+const ESTADO_COLORS: Record<string, string> = {
+  "Disponible": "bg-green-100 text-green-700",
+  "No disponible": "bg-red-100 text-red-700",
+  "Reservada": "bg-yellow-100 text-yellow-800",
+  "Vendida": "bg-purple-100 text-purple-700",
+};
+
+const OPERACION_COLORS: Record<string, string> = {
+  "Venta": "bg-blue-100 text-blue-700",
+  "Alquiler": "bg-indigo-100 text-indigo-700",
+  "Alquiler temporal": "bg-cyan-100 text-cyan-700",
+};
+
+// fallback si viene algo raro del back
+const DEFAULT_TAG_COLOR = "bg-gray-100 text-gray-700";
+
+
 
 export default function PropiedadesPage() {
   const { data: session, status } = useSession();
@@ -219,12 +240,10 @@ const handleEliminar = (id: number) => {
     variant: archivado ? "success" : "warning",
     onConfirm: async () => {
       try {
-        await toggleArchivarMutation.mutateAsync({
-          id,
-          archivado,
-        });
+        setModalOpen(false); // cerrar confirmación
 
-        // ✅ Actualizar estado local inmediatamente
+        await toggleArchivarMutation.mutateAsync({ id, archivado });
+
         queryClient.setQueryData(['inmuebles', paginaActivos, filtros], (oldData: any) => {
           if (!oldData) return oldData;
           return {
@@ -253,7 +272,8 @@ const handleEliminar = (id: number) => {
           variant: "success",
         });
 
-        // Refetch opcional para asegurarnos de la consistencia
+        setModalOpen(true); // 🔥 mostrar modal de éxito
+
         await queryClient.invalidateQueries({ queryKey: ['inmuebles'] });
         await queryClient.invalidateQueries({ queryKey: ['inmueblesArchivados'] });
 
@@ -263,11 +283,13 @@ const handleEliminar = (id: number) => {
           message: "No se pudo actualizar la propiedad",
           variant: "error",
         });
+
+        setModalOpen(true); // 🔥 mostrar modal de error
       }
     },
   });
 
-  setModalOpen(true);
+  setModalOpen(true); // modal de confirmación
 };
   // =====================================================================
   // FILTRADO Y PAGINACIÓN LOCAL (solo para separar activos/archivados)
@@ -431,15 +453,27 @@ const totalGeneral = totalActivos + totalArchivados;
                     {isAuthenticated && (
                       <div className="mb-3 flex flex-wrap items-center gap-2">
                         {i.estado?.nombre && (
-                          <span className="px-3 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-700">
+                          <span
+                            className={`
+                              px-3 py-1 text-xs font-semibold rounded-full
+                              ${ESTADO_COLORS[i.estado.nombre] ?? DEFAULT_TAG_COLOR}
+                            `}
+                          >
                             {i.estado.nombre}
                           </span>
                         )}
+
                         {i.operacion?.nombre && (
-                          <span className="px-3 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-700">
-                            {i.operacion.nombre}
-                          </span>
-                        )}
+                            <span
+                              className={`
+                                px-3 py-1 text-xs font-semibold rounded-full
+                                ${OPERACION_COLORS[i.operacion.nombre] ?? DEFAULT_TAG_COLOR}
+                              `}
+                            >
+                              {i.operacion.nombre}
+                            </span>
+                          )}
+
                       </div>
                     )}
 
@@ -585,15 +619,27 @@ const totalGeneral = totalActivos + totalArchivados;
                     >
                       <div className="mb-3 flex flex-wrap items-center gap-2">
                         {i.estado?.nombre && (
-                          <span className="px-3 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-700">
-                            {i.estado.nombre}
-                          </span>
-                        )}
-                        {i.operacion?.nombre && (
-                          <span className="px-3 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-700">
-                            {i.operacion.nombre}
-                          </span>
-                        )}
+                            <span
+                              className={`
+                                px-3 py-1 text-xs font-semibold rounded-full
+                                ${ESTADO_COLORS[i.estado.nombre] ?? DEFAULT_TAG_COLOR}
+                              `}
+                            >
+                              {i.estado.nombre}
+                            </span>
+                          )}
+
+                          {i.operacion?.nombre && (
+                            <span
+                              className={`
+                                px-3 py-1 text-xs font-semibold rounded-full
+                                ${OPERACION_COLORS[i.operacion.nombre] ?? DEFAULT_TAG_COLOR}
+                              `}
+                            >
+                              {i.operacion.nombre}
+                            </span>
+                          )}
+
                       </div>
                       <InmuebleCard inmueble={i} />
                       {/* ← Info básica de creación/modificación (igual para archivados) */}
