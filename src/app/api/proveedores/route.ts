@@ -6,16 +6,52 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { proveedorSchema } from "@/lib/zod";
 
+// =============================================================
+// GET → Obtener todos los proveedores activos
+// =============================================================
+export async function GET() {
+  try {
+    const proveedores = await db.proveedor.findMany({
+      where: { estado: true },
+      include: {
+        tipoServicio: true,
+      },
+      orderBy: {
+        id_proveedor: "desc",
+      },
+    });
+
+    return NextResponse.json(proveedores);
+
+  } catch (error) {
+    console.error("Error obteniendo proveedores:", error);
+
+    return NextResponse.json(
+      { success: false, message: "Error interno del servidor" },
+      { status: 500 }
+    );
+  }
+}
+
+// =============================================================
+// POST → Crear nuevo proveedor
+// =============================================================
 export async function POST(req: NextRequest) {
   try {
     const json = await req.json();
+
+    // 🔥 Aseguramos que tipoServicioId sea string antes de validar con Zod
+    if (json.tipoServicioId !== undefined && json.tipoServicioId !== null) {
+      json.tipoServicioId = String(json.tipoServicioId);
+    }
+
     const parsed = proveedorSchema.safeParse(json);
 
     if (!parsed.success) {
       return NextResponse.json(
         {
           success: false,
-          message: parsed.error.issues[0].message
+          message: parsed.error.issues[0].message,
         },
         { status: 400 }
       );
@@ -26,39 +62,38 @@ export async function POST(req: NextRequest) {
     const proveedor = await db.proveedor.create({
       data: {
         ...data,
-        tipoServicioId: Number(data.tipoServicioId), // ← CONVERSIÓN AQUÍ
+        tipoServicioId: Number(data.tipoServicioId),
         estado: true,
+      },
+      include: {
+        tipoServicio: true,
       },
     });
 
-    return NextResponse.json({ success: true, proveedor });
+    return NextResponse.json({
+      success: true,
+      proveedor,
+    });
 
   } catch (err: any) {
-    console.error("Error proveedor:", err);
+    console.error("Error creando proveedor:", err);
 
     if (err.code === "P2002") {
       return NextResponse.json(
         {
           success: false,
-          message: "Ya existe un proveedor con ese CUIT/CUIL"
+          message: "Ya existe un proveedor con ese CUIT/CUIL",
         },
         { status: 400 }
       );
     }
 
     return NextResponse.json(
-      { success: false, message: "Error interno" },
+      {
+        success: false,
+        message: "Error interno del servidor",
+      },
       { status: 500 }
     );
   }
-}
-
-export async function GET() {
-  const proveedores = await db.proveedor.findMany({
-    where: { estado: true },
-    include: { tipoServicio: true },
-    orderBy: { id_proveedor: "desc" },
-  });
-
-  return NextResponse.json(proveedores);
 }

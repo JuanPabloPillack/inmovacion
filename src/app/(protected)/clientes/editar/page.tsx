@@ -1,6 +1,7 @@
 // =============================================================
 // Archivo: src/app/(protected)/clientes/editar/page.tsx
-// Editar cliente (estilo idéntico a Proveedores)
+// Descripción: Editar cliente (estilo idéntico a Proveedores)
+//              Carga cliente + catálogos y permite actualizar.
 // =============================================================
 
 "use client";
@@ -14,7 +15,12 @@ import Header from "@/components/ui/Header";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
-import { CheckCircle, AlertCircle, ArrowLeft, UserCog } from "lucide-react";
+import {
+  CheckCircle,
+  AlertCircle,
+  ArrowLeft,
+  UserCog,
+} from "lucide-react";
 
 import ClienteForm from "@/components/ClienteForm";
 
@@ -26,9 +32,10 @@ export default function EditarClientePage() {
   const id = params.get("id");
 
   const [cliente, setCliente] = useState<any>(null);
-  const [tipoClientes, setTipoClientes] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [tipoClientes, setTipoClientes] = useState<any[]>([]);
+  const [tipoDocumentos, setTipoDocumentos] = useState<any[]>([]);
 
+  const [loading, setLoading] = useState(true);
   const [showSuccess, setShowSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -41,26 +48,29 @@ export default function EditarClientePage() {
   }, [status, session, router]);
 
   // ================================
-  // Cargar datos del cliente + tipos
+  // Cargar cliente + catálogos
   // ================================
   useEffect(() => {
     async function loadData() {
       if (!id) return;
 
       try {
-        // Obtener cliente
-        const resCliente = await fetch(`/api/clientes/${id}`);
-        const clienteData = await resCliente.json();
+        const [resCliente, resTipoClientes, resTipoDocumentos] =
+          await Promise.all([
+            fetch(`/api/clientes/${id}`),
+            fetch("/api/tipo-cliente"),
+            fetch("/api/tipo-documento"),
+          ]);
 
         if (!resCliente.ok) throw new Error("Cliente no encontrado.");
 
+        const clienteData = await resCliente.json();
+        const tipoClientesData = await resTipoClientes.json();
+        const tipoDocumentosData = await resTipoDocumentos.json();
+
         setCliente(clienteData);
-
-        // Obtener tipos de cliente
-        const resTipos = await fetch("/api/tipo-cliente");
-        const tiposData = await resTipos.json();
-
-        setTipoClientes(tiposData);
+        setTipoClientes(tipoClientesData);
+        setTipoDocumentos(tipoDocumentosData);
       } catch (error: any) {
         setErrorMessage(error.message);
       } finally {
@@ -76,6 +86,8 @@ export default function EditarClientePage() {
   // ================================
   const handleSubmit = async (data: any) => {
     try {
+      setErrorMessage(null);
+
       const res = await fetch(`/api/clientes/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -96,14 +108,34 @@ export default function EditarClientePage() {
     }
   };
 
+  // ================================
+  // Estados
+  // ================================
   if (loading) return <p className="p-6">Cargando datos...</p>;
 
-  if (!cliente)
+  if (!cliente) {
     return (
       <p className="p-6 text-red-600">
         No se encontró el cliente o hubo un error.
       </p>
     );
+  }
+
+  // ================================
+  // Inicializar datos del formulario
+  // ================================
+  const initialData = {
+    nombre: cliente.nombre,
+    apellido: cliente.apellido || "",
+    email: cliente.email || "",
+    telefono: cliente.telefono || "",
+    tipoDocumentoId: cliente.tipoDocumentoId || "",
+    numeroDocumento: cliente.numeroDocumento || "",
+    tipoClienteIds: cliente.tiposCliente
+      ? cliente.tiposCliente.map((tc: any) => tc.tipoClienteId)
+      : [],
+    descripcion: cliente.descripcion || "",
+  };
 
   return (
     <div className="flex flex-col min-h-screen bg-white font-sans">
@@ -157,15 +189,8 @@ export default function EditarClientePage() {
           <ClienteForm
             modo="editar"
             tipoClientes={tipoClientes}
-            initialData={{
-              nombre: cliente.nombre,
-              apellido: cliente.apellido || "",
-              email: cliente.email || "",
-              telefono: cliente.telefono || "",
-              tipo_documento: cliente.tipo_documento || "",
-              tipoClienteId: cliente.tipoClienteId || "",
-              descripcion: cliente.descripcion || "",
-            }}
+            tipoDocumentos={tipoDocumentos}
+            initialData={initialData}
             onSubmit={handleSubmit}
           />
         )}

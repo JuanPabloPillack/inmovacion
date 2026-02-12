@@ -1,8 +1,6 @@
 // =============================================================
 // Archivo: src/app/(protected)/clientes/crear/page.tsx
-// Crear nuevo cliente (estilo idéntico a Proveedores)
 // =============================================================
-
 "use client";
 
 import { useState, useEffect } from "react";
@@ -22,7 +20,8 @@ export default function CrearClientePage() {
   const { data: session, status } = useSession();
   const router = useRouter();
 
-  const [tipoClientes, setTipoClientes] = useState([]);
+  const [tipoClientes, setTipoClientes] = useState<any[]>([]);
+  const [tipoDocumentos, setTipoDocumentos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [showSuccess, setShowSuccess] = useState(false);
@@ -33,35 +32,47 @@ export default function CrearClientePage() {
   // ================================
   useEffect(() => {
     if (status === "loading") return;
-    if (!session) {
-      router.push("/");
-      return;
-    }
+    if (!session) router.push("/");
   }, [status, session, router]);
 
   // ================================
-  // Cargar tipos de cliente
+  // Cargar catálogos
   // ================================
   useEffect(() => {
     async function loadData() {
       try {
-        const res = await fetch("/api/tipo-cliente");
-        const data = await res.json();
-        setTipoClientes(data);
-      } catch (err) {
-        console.error("Error cargando tipos de cliente:", err);
+        const [resClientes, resDocumentos] = await Promise.all([
+          fetch("/api/tipo-cliente"),
+          fetch("/api/tipo-documento"),
+        ]);
+
+        if (!resClientes.ok || !resDocumentos.ok) {
+          throw new Error("Error al cargar catálogos");
+        }
+
+        const clientesData = await resClientes.json();
+        const documentosData = await resDocumentos.json();
+
+        setTipoClientes(clientesData);
+        setTipoDocumentos(documentosData);
+      } catch (err: any) {
+        console.error("Error cargando catálogos:", err);
+        setErrorMessage("No se pudieron cargar los catálogos.");
       } finally {
         setLoading(false);
       }
     }
+
     loadData();
   }, []);
 
   // ================================
-  // Submit
+  // Submit (Crear cliente)
   // ================================
   const handleSubmit = async (formData: any) => {
     try {
+      setErrorMessage(null);
+
       const res = await fetch("/api/clientes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -76,14 +87,18 @@ export default function CrearClientePage() {
 
       setShowSuccess(true);
 
-      setTimeout(() => router.push("/clientes"), 1500);
+      setTimeout(() => {
+        router.push("/clientes");
+      }, 1500);
 
     } catch (error: any) {
       setErrorMessage(error.message);
     }
   };
 
-  if (loading) return <p className="p-6">Cargando datos...</p>;
+  if (loading) {
+    return <p className="p-6">Cargando datos...</p>;
+  }
 
   return (
     <div className="flex flex-col min-h-screen bg-white font-sans">
@@ -92,6 +107,8 @@ export default function CrearClientePage() {
       </div>
 
       <div className="container mx-auto p-4 max-w-5xl">
+
+        {/* VOLVER + TÍTULO */}
         <div className="flex items-center gap-3 mb-6">
           <Button
             asChild
@@ -113,15 +130,17 @@ export default function CrearClientePage() {
           </div>
         </div>
 
+        {/* ÉXITO */}
         {showSuccess && (
           <Alert className="mb-6 bg-[#63bae9]/10 border-[#63bae9]/30">
             <CheckCircle className="h-4 w-4 text-[#63bae9]" />
-            <AlertDescription className="text-[#686363]">
+            <AlertDescription>
               Cliente creado correctamente. Redirigiendo…
             </AlertDescription>
           </Alert>
         )}
 
+        {/* ERROR */}
         {errorMessage && (
           <Alert variant="destructive" className="mb-6">
             <AlertCircle className="h-4 w-4" />
@@ -129,10 +148,22 @@ export default function CrearClientePage() {
           </Alert>
         )}
 
+        {/* FORM */}
         {!showSuccess && (
           <ClienteForm
-            tipoClientes={tipoClientes}
             modo="crear"
+            tipoClientes={tipoClientes}
+            tipoDocumentos={tipoDocumentos}
+            initialData={{
+              nombre: "",
+              apellido: "",
+              email: "",
+              telefono: "",
+              tipoDocumentoId: "",
+              numeroDocumento: "",
+              tipoClienteIds: [],
+              descripcion: "",
+            }}
             onSubmit={handleSubmit}
           />
         )}

@@ -33,8 +33,13 @@ function validarCliente(data: any) {
     }
   }
 
-  if (data.tipo_documento && !data.tipoClienteId) {
-    throw new Error("Si ingresás un documento, debés seleccionar un tipo de cliente.");
+  const tieneTipoDoc = !!data.tipoDocumentoId;
+  const tieneNumeroDoc = !!data.numeroDocumento;
+
+  if (tieneTipoDoc !== tieneNumeroDoc) {
+    throw new Error(
+      "Debe completar tanto el tipo de documento como el número de documento."
+    );
   }
 }
 
@@ -45,26 +50,40 @@ export async function createCliente(data: any) {
   try {
     validarCliente(data);
 
-    const cliente = await db.cliente.create({
+    console.log("TIPOS RECIBIDOS:", data.tipoClienteIds);
+
+    return await db.cliente.create({
       data: {
         nombre: data.nombre.trim(),
         apellido: data.apellido?.trim() || null,
         email: data.email?.trim() || null,
         telefono: data.telefono?.trim() || null,
-        tipo_documento: data.tipo_documento?.trim() || null,
+        dumero_documento: data.numeroDocumento?.trim() || null,
         descripcion: data.descripcion || null,
-        tipoClienteId: data.tipoClienteId
-          ? Number(data.tipoClienteId)
+        tipoDocumentoId: data.tipoDocumentoId
+          ? Number(data.tipoDocumentoId)
           : null,
+
+        tiposCliente:
+          data.tipoClienteIds && data.tipoClienteIds.length > 0
+            ? {
+                create: data.tipoClienteIds.map((id: any) => ({
+                  tipoCliente: {
+                    connect: {
+                      id_tipo_cliente: Number(id),
+                    },
+                  },
+                })),
+              }
+            : undefined,
       },
     });
-
-    return cliente;
   } catch (error: any) {
     console.error("Error al crear cliente:", error);
     throw new Error(error.message || "No se pudo crear el cliente.");
   }
 }
+
 
 // ======================================================
 // ACTUALIZAR CLIENTE
@@ -73,27 +92,44 @@ export async function updateCliente(id: number, data: any) {
   try {
     validarCliente(data);
 
-    const cliente = await db.cliente.update({
+    await db.clienteTipo.deleteMany({
+      where: { clienteId: id },
+    });
+
+    return await db.cliente.update({
       where: { id_cliente: id },
       data: {
         nombre: data.nombre.trim(),
         apellido: data.apellido?.trim() || null,
         email: data.email?.trim() || null,
         telefono: data.telefono?.trim() || null,
-        tipo_documento: data.tipo_documento?.trim() || null,
+        dumero_documento: data.numeroDocumento?.trim() || null,
         descripcion: data.descripcion || null,
-        tipoClienteId: data.tipoClienteId
-          ? Number(data.tipoClienteId)
+        tipoDocumentoId: data.tipoDocumentoId
+          ? Number(data.tipoDocumentoId)
           : null,
+
+        tiposCliente:
+          data.tipoClienteIds && data.tipoClienteIds.length > 0
+            ? {
+                create: data.tipoClienteIds.map((idTipo: any) => ({
+                  tipoCliente: {
+                    connect: {
+                      id_tipo_cliente: Number(idTipo),
+                    },
+                  },
+                })),
+              }
+            : undefined,
       },
     });
-
-    return cliente;
   } catch (error: any) {
     console.error("Error al actualizar cliente:", error);
     throw new Error(error.message || "No se pudo actualizar el cliente.");
   }
 }
+
+
 
 // ======================================================
 // SOFT DELETE (activo = false)

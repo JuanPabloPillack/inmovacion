@@ -6,7 +6,7 @@ export async function GET() {
   try {
     const clientes = await db.cliente.findMany({
       orderBy: { id_cliente: "desc" },
-      include: { tipoCliente: true },
+      include: { tiposCliente: true, tipoDocumento: true }, // ✅ nombres correctos
     });
 
     return NextResponse.json(clientes);
@@ -42,10 +42,7 @@ export async function POST(req: Request) {
     if (body.email) {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(body.email)) {
-        return NextResponse.json(
-          { error: "El email no es válido." },
-          { status: 400 }
-        );
+        return NextResponse.json({ error: "El email no es válido." }, { status: 400 });
       }
     }
 
@@ -59,16 +56,28 @@ export async function POST(req: Request) {
       }
     }
 
-    if (body.tipo_documento && !body.tipoClienteId) {
+    if ((body.numeroDocumento && !body.tipoDocumentoId) || (!body.numeroDocumento && body.tipoDocumentoId)) {
       return NextResponse.json(
-        { error: "Si ingresás un documento, debés seleccionar un tipo de cliente." },
+        { error: "Debe completar tanto el tipo de documento como el número de documento." },
         { status: 400 }
       );
     }
 
-    if (body.tipoClienteId) {
+    if (body.tipoDocumentoId) {
+      const exists = await db.tipoDocumento.findUnique({
+        where: { id_tipo_documento: Number(body.tipoDocumentoId) },
+      });
+      if (!exists) {
+        return NextResponse.json(
+          { error: "El tipo de documento seleccionado no existe." },
+          { status: 400 }
+        );
+      }
+    }
+
+    if (body.tiposClienteId) {
       const exists = await db.tipoCliente.findUnique({
-        where: { id_tipo_cliente: Number(body.tipoClienteId) },
+        where: { id_tipo_cliente: Number(body.tiposClienteId) },
       });
       if (!exists) {
         return NextResponse.json(
@@ -80,19 +89,32 @@ export async function POST(req: Request) {
 
     // ==== Crear cliente ====
     const cliente = await db.cliente.create({
-      data: {
-        nombre: body.nombre.trim(),
-        apellido: body.apellido?.trim() || null,
-        email: body.email?.trim() || null,
-        telefono: body.telefono?.trim() || null,
-        tipo_documento: body.tipo_documento?.trim() || null,
-        descripcion: body.descripcion || null,
-        tipoClienteId: body.tipoClienteId
-          ? Number(body.tipoClienteId)
-          : null,
-      },
-    });
+  data: {
+    nombre: body.nombre.trim(),
+    apellido: body.apellido?.trim() || null,
+    email: body.email?.trim() || null,
+    telefono: body.telefono?.trim() || null,
+    dumero_documento: body.numeroDocumento?.trim() || null,
+    descripcion: body.descripcion || null,
+    tipoDocumentoId: body.tipoDocumentoId
+      ? Number(body.tipoDocumentoId)
+      : null,
 
+    tiposCliente:
+      body.tipoClienteIds && body.tipoClienteIds.length > 0
+        ? {
+            create: body.tipoClienteIds.map((id: any) => ({
+              tipoCliente: {
+                connect: {
+                  id_tipo_cliente: Number(id),
+                },
+              },
+            })),
+          }
+        : undefined,
+  },
+  include: { tiposCliente: true, tipoDocumento: true },
+});
     return NextResponse.json(cliente, { status: 201 });
   } catch (error) {
     console.error("Error al crear cliente:", error);

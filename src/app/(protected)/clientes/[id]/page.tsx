@@ -37,7 +37,7 @@ export default function ClienteDetallePage() {
   }, [status, session, router]);
 
   // ================================
-  // Cargar datos del cliente
+  // Cargar cliente
   // ================================
   useEffect(() => {
     async function loadCliente() {
@@ -55,7 +55,7 @@ export default function ClienteDetallePage() {
       }
     }
 
-    loadCliente();
+    if (id) loadCliente();
   }, [id]);
 
   if (loading) return <p className="p-6">Cargando datos...</p>;
@@ -80,7 +80,8 @@ export default function ClienteDetallePage() {
       </div>
 
       <div className="container mx-auto p-4 max-w-4xl">
-        {/* TÍTULO + BOTONES */}
+
+        {/* HEADER */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
             <User className="h-8 w-8 text-[#63bae9]" />
@@ -113,7 +114,7 @@ export default function ClienteDetallePage() {
           </div>
         </div>
 
-        {/* CARD DE DATOS */}
+        {/* CARD */}
         <Card className="border-[#969696]/30 shadow-md">
           <CardContent className="p-6 space-y-4">
 
@@ -122,18 +123,33 @@ export default function ClienteDetallePage() {
             </h2>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              
+
               <Data label="Nombre" value={cliente.nombre} />
-              <Data label="Apellido" value={cliente.apellido || "—"} />
-
-              <Data label="Email" value={cliente.email || "—"} />
-              <Data label="Teléfono" value={cliente.telefono || "—"} />
-
-              <Data label="Documento" value={cliente.tipo_documento || "—"} />
+              <Data label="Apellido" value={cliente.apellido} />
+              <Data label="Email" value={cliente.email} />
+              <Data label="Teléfono" value={cliente.telefono} />
 
               <Data
-                label="Tipo de Cliente"
-                value={cliente.tipoCliente?.nombre || "—"}
+                label="Tipo de documento"
+                value={cliente.tipoDocumento?.nombre}
+              />
+
+              {/* 🔥 CORREGIDO: dumero_documento */}
+              <Data
+                label="Número de documento"
+                value={cliente.dumero_documento}
+              />
+
+              {/* 🔥 CORREGIDO: relación N:N */}
+              <Data
+                label="Tipo(s) de Cliente"
+                value={
+                  cliente.tiposCliente?.length
+                    ? cliente.tiposCliente
+                        .map((tc: any) => tc.tipoCliente?.nombre)
+                        .join(", ")
+                    : null
+                }
               />
 
               <Data
@@ -150,6 +166,7 @@ export default function ClienteDetallePage() {
                 {cliente.descripcion || "Sin descripción"}
               </p>
             </div>
+
           </CardContent>
         </Card>
       </div>
@@ -157,14 +174,22 @@ export default function ClienteDetallePage() {
   );
 }
 
-// =============================================================
-// Componente auxiliar para mostrar datos estructurados
-// =============================================================
-function Data({ label, value }: { label: string; value: string }) {
+// =============================================
+// Componente auxiliar
+// =============================================
+function Data({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | number | null | undefined;
+}) {
   return (
     <div className="flex flex-col">
       <span className="text-sm text-[#969696]">{label}</span>
-      <span className="font-medium text-[#686363]">{value}</span>
+      <span className="font-medium text-[#686363]">
+        {value ?? "—"}
+      </span>
     </div>
   );
 }
