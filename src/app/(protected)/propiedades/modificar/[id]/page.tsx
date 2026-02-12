@@ -7,8 +7,17 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 
+//Loading
+import Loading from "@/components/ui/Loading";
+
 // Icono
 import { Home } from "lucide-react";
+import { Building, ArrowLeft, CheckCircle, AlertCircle } from "lucide-react"
+
+//Alertas
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
+
+import { Button } from "@/components/ui/button"
 
 // Componentes propios
 import Header from "@/components/ui/Header";
@@ -16,6 +25,9 @@ import FormularioInmueble from "@/components/FormularioInmueble";
 
 // Tipos
 import type { InmuebleEdit } from "@/types/inmuebles";
+
+import Modal from "@/components/ui/Modal";
+
 
 // Tipo para manejar imágenes en el frontend
 interface ImagenData {
@@ -37,7 +49,19 @@ export default function EditarInmueblePage() {
   const [inmueble, setInmueble] = useState<InmuebleEdit | null>(null);
 
   // Para mostrar loading mientras se obtiene el inmueble
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true)
+
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalConfig, setModalConfig] = useState<{
+    title: string;
+    message: string;
+    variant?: "success" | "error" | "warning" | "info" | "danger";
+    onConfirm?: () => void;
+  }>({
+    title: "",
+    message: "",
+  });
+
 
   // --------------------------------------------------------
   // 1. FETCH para traer los datos del inmueble a editar
@@ -58,32 +82,50 @@ export default function EditarInmueblePage() {
 
         // Adaptación de datos para que coincidan con InmuebleEdit
         const inmuebleData: InmuebleEdit = {
-          ...src,
+  ...src,
 
-          // Convertimos barrio a los tipos que espera el formulario
-          id_barrio: src.ubicacion?.barrio?.id_barrio ?? undefined,
-          ubicacion: {
-            ...src.ubicacion,
-            barrio: src.ubicacion?.barrio?.nombre ?? "",
-          },
+  id_barrio: src.ubicacion?.barrio?.id_barrio ?? undefined,
+  ubicacion: {
+    ...src.ubicacion,
+    barrio: src.ubicacion?.barrio?.nombre ?? "",
+  },
 
-          // Mapeo de createdBy y updatedBy para que tengan { id, name }
-          createdBy: src.createdBy
-            ? { id: src.createdBy.id, name: src.createdBy.name }
-            : null,
+  createdBy: src.createdBy
+    ? { id: src.createdBy.id, name: src.createdBy.name }
+    : null,
 
-          updatedBy: src.updatedBy
-            ? { id: src.updatedBy.id, name: src.updatedBy.name }
-            : null,
-        };
+  updatedBy: src.updatedBy
+    ? { id: src.updatedBy.id, name: src.updatedBy.name }
+    : null,
+
+  // 👇 ESTO ES LO QUE FALTABA
+  imagenes: (src.imagenes ?? []).map((img: any) => ({
+    url: img.url,
+    principal: img.principal,
+    // ❗ file NO se setea porque ya está subida
+  })),
+};
 
         setInmueble(inmuebleData);
       } catch (err: any) {
-        console.error("❌ Error fetch inmueble:", err);
-        alert(err.message || "No se pudo cargar el inmueble");
-      } finally {
-        setLoading(false);
-      }
+      console.error("❌ Error fetch inmueble:", err)
+
+      setModalConfig({
+        title: "Error",
+        message: err.message || "No se pudo cargar el inmueble",
+        variant: "error",
+        onConfirm: () => {
+          setModalOpen(false);
+          router.push("/propiedades");
+        },
+      });
+      setModalOpen(true);
+
+      setInmueble(null);
+    } finally {
+          setLoading(false)
+        }
+
     };
 
     if (id) fetchInmueble();
@@ -187,14 +229,37 @@ export default function EditarInmueblePage() {
         throw new Error(errorData.error || "Error al actualizar inmueble");
       }
 
-      const updatedData = await res.json();
-      console.log("🔄 Frontend - Response PUT:", updatedData);
+      let updatedData = null;
+    try {
+      const text = await res.text();
+      updatedData = text ? JSON.parse(text) : null;
+    } catch {
+      updatedData = null;
+    }
 
-      alert("✅ Inmueble actualizado correctamente");
-      router.push("/propiedades");
+    console.log("🔄 Frontend - Response PUT:", updatedData);
+
+
+     setModalConfig({
+        title: "Inmueble actualizado",
+        message: "Los cambios se guardaron correctamente.",
+        variant: "success",
+        onConfirm: () => {
+          setModalOpen(false);
+          router.push("/propiedades");
+        },
+      });
+      setModalOpen(true);
+
     } catch (err: any) {
       console.error("❌ Error handleUpdate:", err);
-      alert(err.message || "Error al actualizar inmueble");
+      setModalConfig({
+        title: "Error",
+        message: err.message || "No se pudo actualizar el inmueble",
+        variant: "error",
+      });
+      setModalOpen(true);
+
     }
   };
 
@@ -207,46 +272,43 @@ export default function EditarInmueblePage() {
   // 4. Render
   // --------------------------------------------------------
 
-  if (loading)
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#63bae9] mx-auto mb-4"></div>
-          <p className="text-gray-600">Cargando inmueble...</p>
-        </div>
-      </div>
-    );
-
-  if (!inmueble)
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <p className="text-red-500">Inmueble no encontrado.</p>
-          <button onClick={handleCancel} className="mt-4 px-4 py-2 bg-gray-500 text-white rounded">
-            Volver
-          </button>
-        </div>
-      </div>
-    );
-
+  if (loading) {
   return (
-    <div className="min-h-screen" style={{ backgroundColor: "#f8f9fa" }}>
-      <Header />
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-5xl mx-auto px-8 py-8 flex items-center gap-4">
-          <div className="p-3 rounded-xl bg-[#e8f6fc]">
-            <Home className="w-7 h-7 text-[#63bae9]" />
-          </div>
-          <div>
-            <h1 className="text-3xl font-bold text-gray-700">Modificar Inmueble</h1>
-            <p className="text-sm mt-1 text-gray-500">
-              Edita la información del inmueble seleccionado
-            </p>
-          </div>
-        </div>
-      </header>
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <Loading
+        message="Cargando propiedad..."
+        size="lg"
+      />
+    </div>
+  );
+}
 
-      <main className="max-w-5xl mx-auto px-8 py-10">
+
+
+return (
+  <div className="min-h-screen" style={{ backgroundColor: "#f8f9fa" }}>
+    <Header />
+
+    {/* Header de la página */}
+    <header className="bg-white shadow-sm border-b">
+      <div className="max-w-5xl mx-auto px-8 py-8 flex items-center gap-4">
+        <div className="p-3 rounded-xl bg-[#e8f6fc]">
+          <Home className="w-7 h-7 text-[#63bae9]" />
+        </div>
+        <div>
+          <h1 className="text-3xl font-bold text-gray-700">
+            Modificar Inmueble
+          </h1>
+          <p className="text-sm mt-1 text-gray-500">
+            Edita la información del inmueble seleccionado
+          </p>
+        </div>
+      </div>
+    </header>
+
+    <main className="max-w-5xl mx-auto px-8 py-10">
+      {/* 📝 FORMULARIO */}
+      {inmueble && (
         <div className="bg-white rounded-2xl shadow-sm border p-8">
           <FormularioInmueble
             initialData={inmueble}
@@ -255,7 +317,18 @@ export default function EditarInmueblePage() {
             onCancel={handleCancel}
           />
         </div>
-      </main>
-    </div>
-  );
+      )}
+    </main>
+
+    {/* 🧩 MODAL DE ÉXITO / ERROR */}
+    <Modal
+      isOpen={modalOpen}
+      onClose={() => setModalOpen(false)}
+      title={modalConfig.title}
+      message={modalConfig.message}
+      variant={modalConfig.variant}
+      onConfirm={modalConfig.onConfirm}
+    />
+  </div>
+);
 }

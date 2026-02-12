@@ -1,6 +1,5 @@
 // src/app/layout.tsx
-import "./globals.css"; 
-import { SessionProvider } from "next-auth/react";
+import "./globals.css";
 import type { ReactNode } from "react";
 import { QueryProvider } from "@/providers/QueryProvider";
 

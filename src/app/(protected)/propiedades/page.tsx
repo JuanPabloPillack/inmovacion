@@ -1,21 +1,13 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // src/app/(protected)/propiedades/page.tsx
 
 'use client';
 
-/**
- * Página principal de gestión de propiedades.
- * Contiene:
- * - Listado de inmuebles (activos y archivados)
- * - Paginación
- * - Filtros
- * - CRUD básico (crear, modificar, archivar y eliminar)
- * - Control de sesión (NextAuth)
- */
-
-import { useEffect, useState, useMemo } from 'react';
-import { Home, PlusCircle, AlertCircle, User, Calendar } from 'lucide-react';
+import { useState } from 'react';
+import { Home, PlusCircle, AlertCircle, User, Calendar, FileSignature } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 
 import Header from '@/components/ui/Header';
 import InmuebleCard from '@/components/InmuebleCard';
@@ -25,29 +17,21 @@ import toast, { Toaster } from 'react-hot-toast';
 
 import type { InmuebleDTO } from '@/types/inmuebles';
 import type { FiltrosInmueble } from '@/types/filtros';
+import Loading from '@/components/ui/Loading';
+import Modal from "@/components/ui/Modal";
 
-// Tipado local que agrega la propiedad usada solo en UI.
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+
 interface InmuebleLocal extends InmuebleDTO {
   archivadoLocal: boolean;
 }
 
 export default function PropiedadesPage() {
-
-  // -----------------------------
-  // SESIÓN
-  // -----------------------------
   const { data: session, status } = useSession();
   const isAuthenticated = !!session;
   const isLoadingAuth = status === 'loading';
 
-  // -----------------------------
-  // ESTADOS PRINCIPALES
-  // -----------------------------
-  const [inmuebles, setInmuebles] = useState<InmuebleLocal[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-
-  // Paginación separada para activos y archivados
+  // Paginación
   const [paginaActivos, setPaginaActivos] = useState(1);
   const [paginaArchivados, setPaginaArchivados] = useState(1);
 
@@ -56,217 +40,135 @@ export default function PropiedadesPage() {
   const inmueblesPorPagina = 5;
   const router = useRouter();
 
-
-  // =====================================================================
-  // ============================ FETCH INMUEBLES ==========================
-  // =====================================================================
+  const queryClient = useQueryClient();
 
   const fetchInmuebles = async () => {
-    try {
-      setLoading(true);
+    const params = new URLSearchParams({
+      page: paginaActivos.toString(),
+      pageSize: inmueblesPorPagina.toString(),
+      ...(filtros.tipoId && { tipoId: filtros.tipoId.toString() }),
+      ...(filtros.estadoId && { estadoId: filtros.estadoId.toString() }),
+      ...(filtros.operacionId && { operacionId: filtros.operacionId.toString() }),
+      ...(filtros.precioMin && { precioMin: filtros.precioMin.toString() }),
+      ...(filtros.precioMax && { precioMax: filtros.precioMax.toString() }),
+    });
 
-      const res = await fetch('/api/inmuebles'); //Aquí el frontend hace un GET al endpoint /api/inmuebles
-      if (!res.ok) {
-        const errorText = await res.text();
+    const res = await fetch(`/api/inmuebles?${params.toString()}`);
 
-        // Detecta respuesta HTML que indica redirección o login
-        if (
-          errorText.includes('<!DOCTYPE') ||
-          errorText.includes('login') ||
-          res.status === 401 ||
-          res.status === 302
-        ) {
-          toast.error('Sesión requerida. Redirigiendo al login...');
-          router.push('/login');
-          return;
-        }
-
-        throw new Error(`Error ${res.status}: No se pudieron cargar los inmuebles`);
+    if (!res.ok) {
+      if (res.status === 401) {
+        throw new Error('UNAUTHORIZED');
       }
-
-      const data: InmuebleDTO[] = await res.json();
-
-      // Si NO está logueado → mostrar solo activos
-      if (!isAuthenticated) {
-        const activeData = data.filter((i) => !(i.archivado ?? false));
-        setInmuebles(
-          activeData.map((i) => ({
-            ...i,
-            archivadoLocal: false,
-          }))
-        );
-      } else {
-        // Usuario logueado → ver todo
-        setInmuebles(
-          data.map((i) => ({
-            ...i,
-            archivadoLocal: i.archivado ?? false,
-          }))
-        );
-      }
-    } catch (err) {
-      console.error('❌ Error en fetchInmuebles:', err);
-      setError('No se pudieron cargar los inmuebles');
-    } finally {
-      setLoading(false);
+      throw new Error('ERROR_FETCH');
     }
+
+    return res.json();
   };
 
-  // Ejecuta el fetch cuando la sesión está lista
-  useEffect(() => {
-    if (status === 'loading') return;
-    fetchInmuebles();
-  }, [status]);
-
-
-  // =====================================================================
-  // ============================ HANDLERS ================================
-  // =====================================================================
-
-  // Crear nuevo inmueble
-  const handleCrear = () => router.push('/propiedades/nuevo');
-
-  // Modificar inmueble
-  const handleModificar = (id: number) => router.push(`/propiedades/modificar/${id}`);
-
-  // Archivar / Desarchivar
-  const toggleArchivar = async (id: number, archivado: boolean) => {
-    try {
-      const res = await fetch(`/api/inmuebles/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ archivado: !archivado }),
-      });
-
-      if (!res.ok) { //Si la respuesta falla (res.ok === false), se maneja el error, Si es correcta, se parsea JSON y se guarda en el estado inmuebles.
-        const errorText = await res.text();
-
-        if (
-          errorText.includes('<!DOCTYPE') ||
-          errorText.includes('login') ||
-          res.status === 401
-        ) {
-          toast.error('Sesión requerida. Redirigiendo...');
-          router.push('/login');
-          return;
-        }
-        throw new Error();
-      }
-
-      // Actualiza en frontend inmediato
-      setInmuebles((prev) =>
-        prev.map((i) =>
-          i.id_inmueble === id ? { ...i, archivadoLocal: !archivado } : i
-        )
-      );
-
-      toast.success(
-        archivado
-          ? 'Propiedad reactivada correctamente'
-          : 'Propiedad archivada correctamente'
-      );
-
-    } catch {
-      toast.error('Error al actualizar el inmueble');
-    }
-  };
-
-  // Eliminar inmueble
-  const handleEliminar = async (id: number) => {
-    if (!confirm('¿Estás seguro de eliminar esta propiedad?')) return;
-
-    try {
-      const res = await fetch(`/api/inmuebles/${id}`, { method: 'DELETE' });
-
-      if (!res.ok) {
-        const errorText = await res.text();
-
-        if (
-          errorText.includes('<!DOCTYPE') ||
-          errorText.includes('login') ||
-          res.status === 401
-        ) {
-          toast.error('Sesión requerida. Redirigiendo...');
-          router.push('/login');
-          return;
-        }
-        throw new Error();
-      }
-
-      setInmuebles((prev) => prev.filter((i) => i.id_inmueble !== id));
-      toast.success('Propiedad eliminada correctamente');
-
-    } catch {
-      toast.error('Error al eliminar la propiedad');
-    }
-  };
-
-
-  // =====================================================================
-  // ============================ FILTRADO ================================
-  // =====================================================================
-
-  const inmueblesFiltrados = inmuebles.filter((i) => {
-    if (filtros.operacionId && i.id_operacion !== filtros.operacionId) return false;
-    if (filtros.estadoId && i.id_estado !== filtros.estadoId) return false;
-    if (filtros.tipoId && i.id_tipo_inmueble !== filtros.tipoId) return false;
-
-    // Precio mínimo
-    if (filtros.precioMin) {
-      const min = Number(filtros.precioMin);
-      if (i.precio == null || i.precio < min) return false;
-    }
-
-    // Precio máximo
-    if (filtros.precioMax) {
-      const max = Number(filtros.precioMax);
-      if (i.precio == null || i.precio > max) return false;
-    }
-
-    return true;
+  const {
+    data,
+    isLoading,
+    isFetching,
+    error,
+  } = useQuery({
+    queryKey: ['inmuebles', paginaActivos, filtros],
+    queryFn: fetchInmuebles,
+    placeholderData: (prev) => prev,
+    enabled: status !== 'loading',
   });
 
-  const activos = inmueblesFiltrados.filter((i) => !i.archivadoLocal);
-  const archivados = inmueblesFiltrados.filter((i) => i.archivadoLocal);
+  const inmuebles: InmuebleLocal[] =
+  data?.data?.map((i: InmuebleDTO) => ({
+    ...i,
+    archivadoLocal: i.estado?.nombre?.toLowerCase() !== 'disponible',
+  })) ?? [];
+
+const totalActivos = data?.total ?? 0;
+const totalPagesActivos = data?.totalPages ?? 1;
+
+
+  
 
 
   // =====================================================================
-  // ============================ PAGINACIÓN ==============================
+  // HANDLERS (sin cambios importantes)
   // =====================================================================
 
-  const paginar = useMemo(
-    () => (arr: InmuebleLocal[], page: number) => {
-      const inicio = (page - 1) * inmueblesPorPagina;
-      return arr.slice(inicio, inicio + inmueblesPorPagina);
-    },
-    [inmueblesPorPagina]
+  const handleCrear = () => router.push('/propiedades/nuevo');
+  const handleModificar = (id: number) => router.push(`/propiedades/modificar/${id}`);
+
+  const toggleArchivarMutation = useMutation({
+  mutationFn: async ({ id, archivado }: { id: number; archivado: boolean }) => {
+    const res = await fetch(`/api/inmuebles/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ archivado: !archivado }),
+    });
+
+    if (!res.ok) throw new Error();
+  },
+  onSuccess: () => {
+    toast.success('Estado actualizado');
+    queryClient.invalidateQueries({ queryKey: ['inmuebles'] });
+  },
+  onError: () => {
+    toast.error('Error al actualizar');
+  },
+});
+
+
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalConfig, setModalConfig] = useState<{
+    title: string;
+    message: string;
+    variant?: "success" | "error" | "warning" | "info" | "danger";
+    onConfirm?: () => void;
+  }>({
+    title: "",
+    message: "",
+  });
+
+  const handleEliminar = (id: number) => {
+    setModalConfig({
+      title: "Eliminar propiedad",
+      message: "¿Estás seguro? Esta acción no se puede deshacer.",
+      variant: "danger",
+      onConfirm: async () => {
+        try {
+          const res = await fetch(`/api/inmuebles/${id}`, { method: "DELETE" });
+          if (!res.ok) throw new Error();
+
+          toast.success("Propiedad eliminada");
+          queryClient.invalidateQueries({ queryKey: ['inmuebles'] });
+          setModalOpen(false);
+        } catch {
+          toast.error("No se pudo eliminar la propiedad");
+        }
+      },
+    });
+    setModalOpen(true);
+  };
+
+  // =====================================================================
+  // FILTRADO Y PAGINACIÓN LOCAL (solo para separar activos/archivados)
+  // =====================================================================
+
+  const activos = inmuebles.filter((i) => !i.archivadoLocal);
+  const archivados = inmuebles.filter((i) => i.archivadoLocal);
+  const totalPagesArchivados = Math.ceil(
+  archivados.length / inmueblesPorPagina
+);
+
+
+  const activosPagina = activos.slice(
+    (paginaActivos - 1) * inmueblesPorPagina,
+    paginaActivos * inmueblesPorPagina
   );
 
-  const activosPagina = useMemo(
-    () => paginar(activos, paginaActivos),
-    [activos, paginaActivos, paginar]
+  const archivadosPagina = archivados.slice(
+    (paginaArchivados - 1) * inmueblesPorPagina,
+    paginaArchivados * inmueblesPorPagina
   );
-
-  const archivadosPagina = useMemo(
-    () => paginar(archivados, paginaArchivados),
-    [archivados, paginaArchivados, paginar]
-  );
-
-  const totalPaginasActivos = useMemo(
-    () => Math.ceil(activos.length / inmueblesPorPagina),
-    [activos.length, inmueblesPorPagina]
-  );
-
-  const totalPaginasArchivados = useMemo(
-    () => Math.ceil(archivados.length / inmueblesPorPagina),
-    [archivados.length, inmueblesPorPagina]
-  );
-
-  const totalCount = useMemo(
-    () => (isAuthenticated ? inmuebles.length : activos.length),
-    [isAuthenticated, inmuebles.length, activos.length]
-  );
-
 
   // =====================================================================
   // ============================= RENDER ================================
@@ -276,13 +178,14 @@ export default function PropiedadesPage() {
   if (isLoadingAuth) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="inline-block w-12 h-12 border-4 border-gray-200 rounded-full animate-spin border-t-[#63bae9]" />
-          <p className="mt-4 text-lg font-medium text-gray-400">Cargando...</p>
-        </div>
+        <Loading
+          message="Cargando propiedades..."
+          size="lg"
+        />
       </div>
     );
   }
+
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -305,7 +208,7 @@ export default function PropiedadesPage() {
           <div className="flex items-center gap-3 px-4 py-2 rounded-lg bg-[#fef9e7]">
             <div className="w-2 h-2 rounded-full animate-pulse bg-[#fcc238]" />
             <span className="text-sm font-medium text-gray-600">
-              {totalCount} {totalCount === 1 ? 'propiedad' : 'propiedades'}
+              {totalActivos} {totalActivos === 1 ? 'propiedad' : 'propiedades'}
             </span>
           </div>
         </div>
@@ -313,28 +216,51 @@ export default function PropiedadesPage() {
       {/* CONTENIDO */}
       <main className="max-w-7xl mx-auto px-6 py-8">
         {error && (
-          <div className="mb-6 p-4 rounded-xl flex items-start gap-3 shadow-sm bg-[#fef9e7] border-l-4 border-[#fcc238]">
-            <AlertCircle className="w-5 h-5 mt-0.5 text-yellow-500" />
-            <p className="font-medium text-gray-600">{error}</p>
-          </div>
-        )}
+            <Alert className="mb-6 bg-[#fef9e7] border-l-4 border-[#fcc238]">
+              <AlertCircle className="h-4 w-4 text-yellow-500" />
+              <AlertTitle>Error</AlertTitle>
+              <AlertDescription>
+                No se pudieron cargar los inmuebles
+              </AlertDescription>
+            </Alert>
+          )}
+
         {/* BOTÓN CREAR - Solo para usuarios logueados */}
         {isAuthenticated && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-            <button
-              onClick={handleCrear}
-              className="group p-6 rounded-xl font-medium text-white flex items-center gap-4 transition-all hover:shadow-lg hover:scale-[1.02] active:scale-[0.98] bg-[#63bae9]"
-            >
-              <div className="w-12 h-12 rounded-lg bg-white bg-opacity-20 flex items-center justify-center group-hover:rotate-12 transition-transform">
-                <PlusCircle className="w-6 h-6" />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+          <button
+            onClick={handleCrear}
+            className="group relative p-6 rounded-xl font-medium flex items-center gap-4 
+                      transition-all hover:shadow-lg hover:scale-[1.02] active:scale-[0.98]
+                      bg-[#63bae9] overflow-hidden"
+          >
+            {/* Overlay hover */}
+            <div className="absolute inset-0 bg-gradient-to-r from-white/0 to-white/25 
+                            opacity-0 group-hover:opacity-100 transition-opacity"></div>
+
+            {/* Contenido */}
+            <div className="relative flex items-center gap-4">
+              {/* Cuadrado blanco */}
+              <div className="w-14 h-14 rounded-xl bg-white flex items-center justify-center 
+                              group-hover:rotate-12 transition-transform duration-300 shadow-md">
+                <FileSignature className="w-7 h-7 text-[#63bae9]" strokeWidth={2} />
               </div>
-              <div>
-                <div className="text-lg font-semibold">Registrar Propiedad</div>
-                <div className="text-sm opacity-90">Agrega un nuevo inmueble</div>
+
+              {/* Texto */}
+              <div className="flex-1 text-left text-white">
+                <div className="text-lg font-bold mb-1">
+                  Registrar Propiedad
+                </div>
+                <div className="text-sm opacity-90">
+                  Agrega un nuevo inmueble
+                </div>
               </div>
-            </button>
-          </div>
-        )}
+            </div>
+          </button>
+        </div>
+      )}
+
+
         {/* FILTROS */}
         <Filtros
           filtros={filtros}
@@ -346,19 +272,28 @@ export default function PropiedadesPage() {
         />
         {/* LISTADO ACTIVOS */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 mt-8">
-          <div className="p-6 border-b border-gray-200">
+          <div className="p-6 border-b border-gray-200 flex items-center justify-between">
             <h2 className="text-2xl font-semibold text-gray-700">
               Inmuebles Activos
             </h2>
+
+            {/* Contador */}
+            <div className="flex items-center gap-3 px-4 py-2 rounded-lg bg-[#ecfdf5]">
+              <div className="w-2 h-2 rounded-full animate-pulse bg-[#22c55e]" />
+              <span className="text-sm font-medium text-gray-600">
+                {activos.length} {activos.length === 1 ? 'activo' : 'activos'}
+              </span>
+            </div>
           </div>
+
           <div className="p-6">
-            {(loading || isLoadingAuth) ? (
-              <div className="text-center py-16">
-                <div className="inline-block w-12 h-12 border-4 border-gray-200 rounded-full animate-spin border-t-[#63bae9]" />
-                <p className="mt-4 text-lg font-medium text-gray-400">
-                  Cargando inmuebles...
-                </p>
-              </div>
+          {isLoading && activos.length === 0 ? (
+            <div className="text-center py-20">
+              <div className="inline-block w-16 h-16 border-4 border-gray-200 border-t-[#63bae9] rounded-full animate-spin mb-4"></div>
+              <p className="text-lg font-semibold text-[#969696]">
+                Cargando inmuebles...
+              </p>
+            </div>
             ) : activos.length === 0 ? (
               <div className="text-center py-16">
                 <h3 className="text-xl font-semibold mb-2 text-gray-700">
@@ -372,19 +307,22 @@ export default function PropiedadesPage() {
                     key={i.id_inmueble}
                     className="group border-2 border-gray-200 rounded-xl p-5 hover:shadow-lg transition-all relative border-l-4 border-l-[#63bae9]"
                   >
-                    {/* Tags */}
-                    <div className="mb-3 flex flex-wrap items-center gap-2">
-                      {i.estado?.nombre && (
-                        <span className="px-3 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-700">
-                          {i.estado.nombre}
-                        </span>
-                      )}
-                      {i.operacion?.nombre && (
-                        <span className="px-3 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-700">
-                          {i.operacion.nombre}
-                        </span>
-                      )}
-                    </div>
+                    {/* Tags - solo usuarios logueados */}
+                    {isAuthenticated && (
+                      <div className="mb-3 flex flex-wrap items-center gap-2">
+                        {i.estado?.nombre && (
+                          <span className="px-3 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-700">
+                            {i.estado.nombre}
+                          </span>
+                        )}
+                        {i.operacion?.nombre && (
+                          <span className="px-3 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-700">
+                            {i.operacion.nombre}
+                          </span>
+                        )}
+                      </div>
+                    )}
+
                     <InmuebleCard inmueble={i} />
                     {/* ← Info básica de creación/modificación (solo para logueados) */}
                     {isAuthenticated && (
@@ -435,7 +373,10 @@ export default function PropiedadesPage() {
                         {/* ARCHIVAR → cuando NO está archivado */}
                         <button
                           onClick={() =>
-                            toggleArchivar(i.id_inmueble, i.archivadoLocal)
+                            toggleArchivarMutation.mutate({
+                              id: i.id_inmueble,
+                              archivado: i.archivadoLocal,
+                            })
                           }
                           className="px-4 py-2 text-sm rounded-md font-medium bg-red-100 text-red-700 hover:bg-red-200 transition"
                         >
@@ -454,7 +395,7 @@ export default function PropiedadesPage() {
               </div>
             )}
             {/* PAGINACIÓN ACTIVOS */}
-            {totalPaginasActivos > 1 && (
+            {totalPagesActivos > 1 && (
               <div className="flex justify-center items-center gap-3 mt-6">
                 <button
                   onClick={() =>
@@ -465,7 +406,7 @@ export default function PropiedadesPage() {
                 >
                   ← Anterior
                 </button>
-                {[...Array(totalPaginasActivos)].map((_, index) => (
+                {[...Array(totalPagesActivos)].map((_, index) => (
                   <button
                     key={index}
                     onClick={() => setPaginaActivos(index + 1)}
@@ -481,10 +422,10 @@ export default function PropiedadesPage() {
                 <button
                   onClick={() =>
                     setPaginaActivos((p) =>
-                      Math.min(p + 1, totalPaginasActivos)
+                      Math.min(p + 1, totalPagesActivos)
                     )
                   }
-                  disabled={paginaActivos === totalPaginasActivos}
+                  disabled={paginaActivos === totalPagesActivos}
                   className="px-3 py-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 disabled:opacity-50"
                 >
                   Siguiente →
@@ -496,11 +437,20 @@ export default function PropiedadesPage() {
         {/* ARCHIVADOS - Solo para usuarios logueados */}
         {isAuthenticated && (
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 mt-10">
-            <div className="p-6 border-b border-gray-200">
+            <div className="p-6 border-b border-gray-200 flex items-center justify-between">
               <h2 className="text-2xl font-semibold text-gray-700">
                 Inmuebles Archivados
               </h2>
+
+              {/* Contador */}
+              <div className="flex items-center gap-3 px-4 py-2 rounded-lg bg-[#fef2f2]">
+                <div className="w-2 h-2 rounded-full animate-pulse bg-[#ef4444]" />
+                <span className="text-sm font-medium text-gray-600">
+                  {archivados.length} {archivados.length === 1 ? 'archivado' : 'archivados'}
+                </span>
+              </div>
             </div>
+
             <div className="p-6">
               {archivados.length === 0 ? (
                 <p className="text-center text-gray-500">
@@ -571,7 +521,10 @@ export default function PropiedadesPage() {
                         {/* ACTIVAR → cuando SÍ está archivado */}
                         <button
                           onClick={() =>
-                            toggleArchivar(i.id_inmueble, i.archivadoLocal)
+                            toggleArchivarMutation.mutate({
+                              id: i.id_inmueble,
+                              archivado: i.archivadoLocal,
+                            })
                           }
                           className="px-4 py-2 text-sm rounded-md font-medium bg-green-100 text-green-700 hover:bg-green-200 transition"
                         >
@@ -595,7 +548,7 @@ export default function PropiedadesPage() {
                 </div>
               )}
               {/* PAGINACIÓN ARCHIVADOS */}
-              {totalPaginasArchivados > 1 && (
+              {totalPagesArchivados > 1 && (
                 <div className="flex justify-center items-center gap-3 mt-6">
                   <button
                     onClick={() =>
@@ -606,7 +559,7 @@ export default function PropiedadesPage() {
                   >
                     ← Anterior
                   </button>
-                  {[...Array(totalPaginasArchivados)].map((_, index) => (
+                  {[...Array(totalPagesArchivados)].map((_, index) => (
                     <button
                       key={index}
                       onClick={() => setPaginaArchivados(index + 1)}
@@ -622,10 +575,10 @@ export default function PropiedadesPage() {
                   <button
                     onClick={() =>
                       setPaginaArchivados((p) =>
-                        Math.min(p + 1, totalPaginasArchivados)
+                        Math.min(p + 1, totalPagesArchivados)
                       )
                     }
-                    disabled={paginaArchivados === totalPaginasArchivados}
+                    disabled={paginaArchivados === totalPagesArchivados}
                     className="px-3 py-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 disabled:opacity-50"
                   >
                     Siguiente →
@@ -636,6 +589,17 @@ export default function PropiedadesPage() {
           </div>
         )}
       </main>
+
+      {/* MODAL GLOBAL */}
+    <Modal
+      isOpen={modalOpen}
+      onClose={() => setModalOpen(false)}
+      title={modalConfig.title}
+      message={modalConfig.message}
+      variant={modalConfig.variant}
+      onConfirm={modalConfig.onConfirm}
+    />
+
     </div>
   );
 }

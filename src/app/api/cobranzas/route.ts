@@ -1,6 +1,9 @@
+// src/app/api/cobranzas/route.ts
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { auth } from "../../../../auth";
 
 /* =============================================================
    ================   MÉTODO GET – LISTAR COBRANZAS   ===========
@@ -24,8 +27,15 @@ export async function GET(req: NextRequest) {
     const id_cliente_raw = normalize(searchParams.get("cliente"));
     const id_cliente = id_cliente_raw !== null ? Number(id_cliente_raw) : null;
 
-    // Filtro: sinRendir=1 → buscar solo cobranzas que NO estén ligadas a una rendición
+    // 🔥 ESTO VA ACÁ
     const sinRendir = searchParams.get("sinRendir") === "1";
+    const soloActivas = searchParams.get("soloActivas") === "1";
+
+    // 🔥 NUEVO
+    const incluirSeleccionadas = searchParams.get("incluirSeleccionadas") === "1";
+    const rendicionActualRaw = searchParams.get("rendicionActual");
+    const rendicionActual = rendicionActualRaw ? Number(rendicionActualRaw) : null;
+
 
     const skip = (page - 1) * pageSize;
     const take = pageSize;
@@ -40,8 +50,21 @@ export async function GET(req: NextRequest) {
     }
 
     if (sinRendir) {
-      where.id_rendicion = null;
-    }
+  if (incluirSeleccionadas && rendicionActual) {
+    where.OR = [
+      { id_rendicion: null },
+      { id_rendicion: rendicionActual },
+    ];
+  } else {
+    where.id_rendicion = null;
+  }
+}
+
+
+
+    if (soloActivas) {
+    where.activa = true;
+  }
 
     // --- FILTROS POR FECHA (MES y AÑO) ---
     if (anio && mes) {
@@ -73,8 +96,10 @@ export async function GET(req: NextRequest) {
       take,
       where,
       include: {
-        cliente: true, // trae datos del cliente
-        inmueble: { include: { ubicacion: true } }, // trae inmueble + dirección
+        cliente: true,
+        inmueble: { include: { ubicacion: true } },
+        createdBy: { select: { id: true, name: true, email: true } },
+        updatedBy: { select: { id: true, name: true, email: true } },
       },
       orderBy: { fecha_cobranza: "desc" }, // últimas primero
     });
@@ -86,7 +111,36 @@ export async function GET(req: NextRequest) {
        MAPEO FINAL: nombre amigable del inmueble
        --------------------------------------------------------- */
     const mapped = cobranzas.map((c) => ({
-      ...c,
+      id_cobranza: c.id_cobranza,
+      id_cliente: c.id_cliente,
+      id_inmueble: c.id_inmueble,
+      monto: c.monto,
+      fecha_cobranza: c.fecha_cobranza,
+      medio_pago: c.medio_pago,
+      concepto: c.concepto,
+      observaciones: c.observaciones,
+      activa: c.activa,
+
+      // 🔥 TIMESTAMPS (CLAVE)
+      createdAt: c.createdAt,
+      updatedAt: c.updatedAt,
+
+      // 🔥 USUARIOS
+      createdBy: c.createdBy
+        ? {
+            id_usuario: c.createdBy.id,
+            nombre: c.createdBy.name || c.createdBy.email,
+          }
+        : null,
+      updatedBy: c.updatedBy
+        ? {
+            id_usuario: c.updatedBy.id,
+            nombre: c.updatedBy.name || c.updatedBy.email,
+          }
+        : null,
+
+      cliente: c.cliente,
+
       inmueble: c.inmueble
         ? {
             ...c.inmueble,
@@ -119,6 +173,25 @@ export async function GET(req: NextRequest) {
    ============================================================= */
 export async function POST(req: NextRequest) {
   try {
+
+    const session = await auth();
+      if (!session?.user?.id) {
+        return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+      }
+
+      const userId = session.user.id;
+
+      // 👇 MISMO PATRÓN QUE INMUEBLES
+      const user =
+        (await db.user.findUnique({ where: { id: userId } })) ??
+        (await db.user.create({
+          data: {
+            id: userId,
+            name: session.user.name ?? "Usuario",
+            email: session.user.email ?? `user_${userId}@example.com`,
+          },
+        }));
+
     const body = await req.json();
 
     const { id_cliente, cobranzas } = body;
@@ -190,10 +263,14 @@ export async function POST(req: NextRequest) {
             observaciones: c.observaciones || null,
             activa: true,
             id_rendicion: null,
+            createdById: user.id,
+             updatedById: user.id,
           },
           include: {
             cliente: true,
             inmueble: { include: { ubicacion: true } },
+            createdBy: true,
+            updatedBy: true,
           },
         });
       })

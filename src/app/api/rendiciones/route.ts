@@ -1,3 +1,4 @@
+// src/app/api/rendiciones/route.ts
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 // Importamos herramientas del framework Next.js para manejar requests/responses HTTP
@@ -10,8 +11,9 @@ import { db } from "@/lib/db";
 import { Prisma } from "@prisma/client";
 
 // Funciones para generar archivos (EXCEL y PDF)
-import { generarExcelRendicion } from "@/lib/excelGenerator";
-import { generarPDFRecibo } from "@/lib/pdfGenerator";
+import { generarExcelRendicion , CobranzaForExcel} from "@/lib/excelGenerator";
+
+import { auth } from "../../../../auth";
 
 
 // ========================================================
@@ -61,36 +63,265 @@ async function calcularSaldoAnterior(id_inmueble: number, fechaActual: Date) {
 // ========================================================
 // GET — Listar todas las rendiciones completas
 // ========================================================
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    /*
-      Busca todas las rendiciones en la base de datos,
-      incluyendo:
 
-      - datos del inmueble
-      - todas las cobranzas de esa rendición
-        - cliente
-        - inmueble y su ubicación
-        - recibo
-    */
-    const rendiciones = await db.rendicion.findMany({
-      orderBy: { id_rendicion: "desc" },
-      include: {
-        inmueble: true,
-        cobranzas: { 
-          include: { 
-            cliente: true,
-            inmueble: { include: { ubicacion: true }},
-            recibo: true
+    const { searchParams } = new URL(req.url);
+
+    // Parámetros de paginación 
+const page = Number(searchParams.get("page") || 1);
+const pageSize = Number(searchParams.get("pageSize") || 5);
+const skip = (page - 1) * pageSize;
+const take = pageSize;
+
+
+    const year = searchParams.get("year");
+  const month = searchParams.get("month");
+  const cliente = searchParams.get("cliente");
+
+
+    const where: any = {};
+
+// FILTRO POR CLIENTE
+if (cliente) {
+  const clienteNumber = Number(cliente);
+
+  where.cobranzas = {
+    some: {
+      ...(isNaN(clienteNumber)
+        ? {
+            cliente: {
+              OR: [
+                { nombre: { contains: cliente, mode: "insensitive" } },
+                { apellido: { contains: cliente, mode: "insensitive" } },
+              ],
+            },
           }
+        : { id_cliente: clienteNumber }),
+    },
+  };
+}
+
+// FILTRO POR FECHA (MES y AÑO) DE COBRANZAS
+if (year && month) {
+  const y = Number(year);
+  const m = Number(month);
+  where.cobranzas = {
+    some: {
+      ...where.cobranzas?.some,
+      fecha_cobranza: {
+        gte: new Date(y, m - 1, 1),
+        lte: new Date(y, m, 0, 23, 59, 59),
+      },
+    },
+  };
+} else if (year) {
+  const y = Number(year);
+  where.cobranzas = {
+    some: {
+      ...where.cobranzas?.some,
+      fecha_cobranza: {
+        gte: new Date(y, 0, 1),
+        lte: new Date(y, 11, 31, 23, 59, 59),
+      },
+    },
+  };
+} else if (month) {
+  const m = Number(month);
+  const currentYear = new Date().getFullYear();
+  where.cobranzas = {
+    some: {
+      ...where.cobranzas?.some,
+      fecha_cobranza: {
+        gte: new Date(currentYear, m - 1, 1),
+        lte: new Date(currentYear, m, 0, 23, 59, 59),
+      },
+    },
+  };
+}
+
+
+
+
+
+   const [rendiciones, total] = await Promise.all([
+  db.rendicion.findMany({
+  where,
+  skip,
+  take,
+  orderBy: { id_rendicion: "desc" },
+  select: {
+    id_rendicion: true,
+    fecha: true,
+    monto_total: true,
+    pagado: true,
+    createdAt: true,
+    updatedAt: true,
+
+    inmueble: {
+      select: {
+        id_inmueble: true,
+        titulo: true,
+        ubicacion: {
+          select: {
+            direccion: true,
+            ciudad: true,
+            provincia: true,
+          },
         },
       },
+    },
+
+    cobranzas: {
+      select: {
+        id_cobranza: true,
+        monto: true,
+        concepto: true,
+        fecha_cobranza: true,
+        pagado: true,
+
+        cliente: {
+          select: {
+            id_cliente: true,
+            nombre: true,
+            apellido: true,
+          },
+        },
+
+        recibo: {
+          select: {
+            id_recibo: true,
+            total: true,
+            descripcion: true,
+          },
+        },
+      },
+    },
+
+    createdBy: {
+      select: { id: true, name: true, email: true },
+    },
+
+    updatedBy: {
+      select: { id: true, name: true, email: true },
+    },
+  },
+}),
+
+
+  db.rendicion.count({ where }), 
+  
+]);
+
+const ipcs = await db.ipc.findMany();
+
+const ipcMap = new Map(
+  ipcs.map(i => [`${i.mes}-${i.anio}`, Number(i.valor)])
+);
+
+   const mapped = rendiciones.map(r => ({
+  id_rendicion: r.id_rendicion,
+  fecha: r.fecha,
+  monto_total: Number(r.monto_total),
+
+  pagado: r.pagado,
+
+
+  // ✅ MAPEAR INMUEBLE CORRECTAMENTE
+    inmueble: r.inmueble
+    ? {
+        id_inmueble: r.inmueble.id_inmueble,
+
+        nombre:
+          r.inmueble.titulo ??
+          `Inmueble ${r.inmueble.id_inmueble}`,
+
+        direccionCompleta: [
+          r.inmueble.ubicacion?.direccion,
+          r.inmueble.ubicacion?.ciudad,
+          r.inmueble.ubicacion?.provincia,
+        ]
+          .filter(Boolean)
+          .join(", "),
+      }
+    : null,
+
+
+
+  cobranzas: r.cobranzas.map(c => {
+
+    const montoBase = Number(c.monto ?? 0);
+
+
+
+  return {
+
+    id_cobranza: c.id_cobranza,
+
+    monto: montoBase,
+
+    ipcValor: null,
+    montoActualizado: montoBase,
+
+    concepto: c.concepto,
+
+    fecha_cobranza: c.fecha_cobranza,
+
+    pagado: c.pagado,
+
+    cliente: c.cliente
+      ? {
+          id_cliente: c.cliente.id_cliente,
+          nombre: c.cliente.nombre,
+          apellido: c.cliente.apellido,
+        }
+      : null,
+
+    recibo: c.recibo
+      ? {
+          id_recibo: c.recibo.id_recibo,
+          total: Number(c.recibo.total),
+          descripcion: c.recibo.descripcion,
+        }
+      : null,
+
+  };
+
+}),
+
+
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt,
+
+    // ✅ MAPEAR USUARIO CORRECTAMENTE
+    createdBy: r.createdBy
+      ? {
+          id_usuario: r.createdBy.id,
+          nombre: r.createdBy.name || r.createdBy.email,
+        }
+      : null,
+
+    updatedBy: r.updatedBy
+      ? {
+          id_usuario: r.updatedBy.id,
+          nombre: r.updatedBy.name || r.updatedBy.email,
+        }
+      : null,
+  }));
+
+
+    return NextResponse.json({
+      data: mapped,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
     });
 
-    return NextResponse.json(rendiciones);
-
   } catch (e) {
+
     console.error("Error en GET /rendiciones:", e);
+
     return NextResponse.json(
       { error: "No se pudieron obtener las rendiciones" },
       { status: 500 }
@@ -100,205 +331,393 @@ export async function GET() {
 
 
 
+
 // ========================================================
 // POST — Crear rendición + generar Excel de descarga automática
 // ========================================================
 export async function POST(req: NextRequest) {
   try {
-    // Leemos el JSON enviado desde el frontend
-    const { cobranzas, fecha_rendicion, mes_ipc, anio_ipc } = await req.json();
 
-    // Validaciones básicas
-    if (!Array.isArray(cobranzas) || cobranzas.length === 0)
-      return NextResponse.json({ error: "Seleccioná cobranzas" }, { status: 400 });
+    const body = await req.json();
 
-    // Convertimos los IDs a número
-    const idsCobranzas = cobranzas.map((id: any) => Number(id)).filter(Boolean);
-
-    if (idsCobranzas.length === 0)
-      return NextResponse.json({ error: "IDs de cobranzas inválidos" }, { status: 400 });
+    const cobranzasIdsRaw = body.cobranzas;
+    const fecha_rendicion = body.fecha_rendicion;
+    const mes_ipc = body.mes_ipc ? Number(body.mes_ipc) : null;
+    const anio_ipc = body.anio_ipc ? Number(body.anio_ipc) : null;
 
 
     // ========================================================
-    // Buscar cobranzas válidas
-    // (que no estén rendidas y existan)
+    // VALIDACIONES
     // ========================================================
-    const seleccionadas = await db.cobranza.findMany({
-      where: { id_cobranza: { in: idsCobranzas }, id_rendicion: null },
-      include: { 
-        cliente: true,
-        inmueble: { include: { ubicacion: true } },
-        recibo: true,
-      },
-    });
-
-    if (seleccionadas.length === 0)
+    if (!Array.isArray(cobranzasIdsRaw) || cobranzasIdsRaw.length === 0) {
       return NextResponse.json(
-        { error: "Las cobranzas ya fueron rendidas o no existen" },
-        { status: 404 }
-      );
-
-
-    // ========================================================
-    // Validar que todas las cobranzas pertenezcan al MISMO inmueble
-    // ========================================================
-    const inmuebles = [...new Set(seleccionadas.map(c => c.id_inmueble).filter(Boolean))];
-
-    if (inmuebles.length !== 1)
-      return NextResponse.json(
-        { error: "Las cobranzas deben pertenecer al mismo inmueble" },
+        { error: "Seleccioná cobranzas válidas" },
         { status: 400 }
       );
+    }
 
+    const idsCobranzas = cobranzasIdsRaw
+      .map((id: any) => Number(id))
+      .filter((id: number) => !isNaN(id));
 
-    // ========================================================
-    // Calcular total de la rendición
-    // ========================================================
-    const total = seleccionadas.reduce((acc, c) => acc + Number(c.monto ?? 0), 0);
-
-    const totalFinal = new Prisma.Decimal(total.toFixed(2));
-
-
-    // ========================================================
-    // Calcular número y fecha de rendición
-    // ========================================================
-    const fecha = fecha_rendicion ? new Date(fecha_rendicion) : new Date();
-
-    const { numero, periodo } = calcularNumeroRendicion(fecha);
-
-
-    // ========================================================
-    // Saldo anterior del inmueble
-    // ========================================================
-    const saldoAnterior = await calcularSaldoAnterior(inmuebles[0]!, fecha);
-
-
-    // ========================================================
-    // Crear la rendición en DB
-    // ========================================================
-    const rend = await db.rendicion.create({
-      data: {
-        id_inmueble: inmuebles[0]!,
-        fecha,
-        monto_total: totalFinal,
-        cobranzas: {
-          connect: idsCobranzas.map(id => ({ id_cobranza: id })),
-        },
-        mes_ipc: mes_ipc ?? null,
-        anio_ipc: anio_ipc ?? null,
-      },
-    });
-
-
-    // ========================================================
-    // GENERAR PDFs INDIVIDUALES DE RECIBOS
-    // ========================================================
-    for (const c of seleccionadas) {
-      if (!c.genera_recibo) continue; // si no genera, lo saltamos
-
-      try {
-        await generarPDFRecibo({
-          id_cobranza: c.id_cobranza,
-          monto: Number(c.monto ?? 0),
-          total: Number(c.monto ?? 0),
-          numero_recibo: c.numero_recibo ?? undefined,
-          cliente: {
-            nombre: c.cliente?.nombre ?? "",
-            email: c.cliente?.email ?? null,
-            telefono: c.cliente?.telefono ?? null,
-          },
-          inmueble: c.inmueble ?? undefined,
-        });
-      } catch (err) {
-        console.error(`Error generando PDF de cobranza ${c.id_cobranza}:`, err);
-      }
+    if (idsCobranzas.length === 0) {
+      return NextResponse.json(
+        { error: "IDs inválidos" },
+        { status: 400 }
+      );
     }
 
 
     // ========================================================
-    // PREPARAR DATOS PARA EL EXCEL DE RENDICIÓN
+    // SESSION
     // ========================================================
-    const ipcValor = 1; // Ajuste opcional de IPC
+    const session = await auth();
 
-    const cobranzasExcel = seleccionadas.map(c => {
-      const montoBase = Number(c.monto ?? 0);
-      const totalCobr = c.pagado ? montoBase : 0;
-      const aCobrar = montoBase - totalCobr;
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        { error: "No autenticado" },
+        { status: 401 }
+      );
+    }
 
-      const unFunc =
-        c.inmueble
-          ? `${c.inmueble.ubicacion?.direccion || ''}: ${c.inmueble.titulo || ''}`
-          : '';
+    const userId = session.user.id;
 
-      return {
-        id_cobranza: c.id_cobranza,
-        id_inmueble: c.id_inmueble,
-        id_contrato: c.id_contrato,
-        cliente: {
-          nombre: c.cliente?.nombre ?? "",
-          email: c.cliente?.email ?? null,
-          telefono: c.cliente?.telefono ?? null,
+    const user =
+      (await db.user.findUnique({ where: { id: userId } })) ??
+      (await db.user.create({
+        data: {
+          id: userId,
+          name: session.user.name ?? "Usuario",
+          email: session.user.email ?? `user_${userId}@example.com`,
         },
-        inmueble: c.inmueble
-          ? {
-              titulo: c.inmueble.titulo,
-              ubicacion: {
-                direccion: c.inmueble.ubicacion?.direccion || '',
-              },
-            }
-          : undefined,
+      }));
 
-        concepto: c.concepto,
-        monto: montoBase,
-        fecha_cobranza: c.fecha_cobranza
-          ? new Date(c.fecha_cobranza).toISOString().substring(0, 10)
-          : '',
-        numero_recibo: c.numero_recibo ?? c.recibo?.id_recibo ?? null,
-        genera_recibo: c.genera_recibo,
-        pagado: c.pagado,
-        observaciones: c.observaciones,
 
-        total_cobrar: montoBase,
-        total_cobrado: totalCobr,
-        a_cobrar: aCobrar,
 
-        unFuncional: unFunc,
-        contratoStr: c.id_contrato ? `Contrato ${c.id_contrato}` : '',
-        ipcAumento: '',
-        ipcValor,
-      };
+    // ========================================================
+    // BUSCAR COBRANZAS
+    // ========================================================
+    const seleccionadas = await db.cobranza.findMany({
+
+      where: {
+        id_cobranza: { in: idsCobranzas },
+        id_rendicion: null,
+      },
+
+      include: {
+        cliente: true,
+        inmueble: {
+          include: { ubicacion: true },
+        },
+        recibo: true,
+      },
+
     });
 
 
+
+    if (seleccionadas.length === 0) {
+      return NextResponse.json(
+        { error: "Las cobranzas ya fueron rendidas o no existen" },
+        { status: 404 }
+      );
+    }
+
+
+
     // ========================================================
-    // Generar Excel → devuelve un buffer
+    // VALIDAR MISMO INMUEBLE
     // ========================================================
-    const buffer = await generarExcelRendicion(
-      numero,
-      fecha.toISOString().substring(0, 10),
-      cobranzasExcel,
-      { mes: mes_ipc ?? undefined, anio: anio_ipc ?? undefined, valor: ipcValor },
-      saldoAnterior
+    const inmuebles = [
+      ...new Set(
+        seleccionadas
+          .map(c => c.id_inmueble)
+          .filter(Boolean)
+      ),
+    ];
+
+    if (inmuebles.length !== 1) {
+      return NextResponse.json(
+        { error: "Todas las cobranzas deben pertenecer al mismo inmueble" },
+        { status: 400 }
+      );
+    }
+
+    const id_inmueble = inmuebles[0]!;
+
+
+
+    // ========================================================
+    // FECHA + NUMERO RENDICION
+    // ========================================================
+    const fecha = fecha_rendicion
+      ? new Date(fecha_rendicion)
+      : new Date();
+
+    const { numero } = calcularNumeroRendicion(fecha);
+
+
+
+    // ========================================================
+    // IPC 
+    // ========================================================
+    let ipcValor: number | null = null;
+
+    if (mes_ipc != null && anio_ipc != null) {
+      const ipc = await db.ipc.findFirst({
+        where: {
+          mes: Number(mes_ipc),
+          anio: Number(anio_ipc),
+        },
+      });
+
+      if (!ipc) {
+        throw new Error(`No existe IPC para ${mes_ipc}/${anio_ipc}`);
+      }
+
+      ipcValor = Number(ipc.valor);
+
+      // ✅ por si viene como 12 en vez de 0.12
+      if (ipcValor > 1) {
+        ipcValor = ipcValor / 100;
+      }
+    }
+
+
+
+
+    // ========================================================
+    // GENERAR DATA EXCEL
+    // ========================================================
+    const cobranzasExcel: CobranzaForExcel[] =
+      seleccionadas.map(c => {
+
+        const montoBase = Number(c.monto ?? 0);
+
+        const aumentoIPC =
+          ipcValor != null
+            ? montoBase * ipcValor
+            : 0;
+
+        const totalCobrar =
+          montoBase + aumentoIPC;
+
+        const totalCobrado =
+          c.pagado
+            ? totalCobrar
+            : 0;
+
+        const saldo =
+          totalCobrar - totalCobrado;
+
+        return {
+
+          id_cobranza: c.id_cobranza,
+
+          id_inmueble: c.id_inmueble ?? null,
+
+          id_contrato: c.id_contrato ?? null,
+
+          cliente: {
+            nombre: c.cliente?.nombre ?? "",
+            apellido: c.cliente?.apellido ?? "",
+            email: c.cliente?.email ?? null,
+            telefono: c.cliente?.telefono ?? null,
+          },
+
+          inmueble: c.inmueble
+            ? {
+                titulo: c.inmueble.titulo,
+                ubicacion: {
+                  direccion:
+                    c.inmueble.ubicacion?.direccion ?? "",
+                },
+              }
+            : undefined,
+
+          concepto: c.concepto ?? "",
+
+          monto: montoBase,
+
+          fecha_cobranza:
+            c.fecha_cobranza
+              ?.toISOString()
+              .substring(0, 10) ?? "",
+
+          numero_recibo:
+            c.numero_recibo ?? null,
+
+          genera_recibo:
+            c.genera_recibo ?? false,
+
+          pagado:
+            Boolean(c.pagado),
+
+          observaciones:
+            c.observaciones ?? null,
+
+          total_cobrar:
+            Number(totalCobrar.toFixed(2)),
+
+          total_cobrado:
+            Number(totalCobrado.toFixed(2)),
+
+          a_cobrar:
+            Number(saldo.toFixed(2)),
+
+          ipcValor,
+
+          ipcAumento:
+            ipcValor != null
+              ? `IPC ${mes_ipc}/${anio_ipc}`
+              : "",
+
+          unFuncional:
+            c.inmueble
+              ? `${c.inmueble.ubicacion?.direccion ?? ""} - ${c.inmueble.titulo ?? ""}`
+              : "",
+
+        };
+
+      });
+
+
+
+
+
+    // ========================================================
+      // TOTAL 
+      // ========================================================
+      const totalBase = seleccionadas.reduce(
+        (acc, c) => acc + Number(c.monto ?? 0),
+        0
+      );
+
+      const totalConIPC =
+        ipcValor != null
+          ? totalBase + totalBase * ipcValor
+          : totalBase;
+
+      const totalFinal = Number(totalConIPC.toFixed(2));
+
+
+
+
+    // ========================================================
+    // SALDO ANTERIOR
+    // ========================================================
+    const saldoAnterior =
+      await calcularSaldoAnterior(
+        id_inmueble,
+        fecha
+      );
+
+
+
+    // ========================================================
+    // TRANSACCION (MUY IMPORTANTE)
+    // ========================================================
+    const rend =
+      await db.$transaction(async tx => {
+
+        const nueva =
+          await tx.rendicion.create({
+
+            data: {
+
+              id_inmueble,
+
+              fecha,
+
+              monto_total: totalFinal,
+
+              mes_ipc,
+              anio_ipc,
+
+              createdById: user.id,
+              updatedById: user.id,
+
+            },
+
+          });
+
+
+        // vincular cobranzas + guardar monto actualizado
+        for (const c of cobranzasExcel) {
+          await tx.cobranza.update({
+            where: { id_cobranza: c.id_cobranza },
+            data: {
+              id_rendicion: nueva.id_rendicion,
+            },
+          });
+        }
+
+        return nueva;
+      });
+
+
+
+
+    // ========================================================
+    // GENERAR EXCEL
+    // ========================================================
+    const buffer =
+      await generarExcelRendicion(
+
+        numero,
+
+        fecha.toISOString().substring(0, 10),
+
+        cobranzasExcel,
+
+        {
+          mes: mes_ipc ?? null,
+          anio: anio_ipc ?? null,
+          valor: ipcValor ?? null,
+        },
+
+      );
+
+
+
+    // ========================================================
+    // RESPONSE
+    // ========================================================
+    return new NextResponse(
+      new Uint8Array(buffer),
+      {
+        status: 200,
+        headers: {
+          "Content-Type":
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+
+          "Content-Disposition":
+            `attachment; filename=Rendicion_${rend.id_rendicion}.xlsx`,
+
+          // 👇 AGREGÁ ESTO
+          "X-Rendicion-Id": String(rend.id_rendicion),
+        },
+      }
     );
 
 
-    // ========================================================
-    // Devolver Excel como archivo descargable
-    // ========================================================
-    return new NextResponse(new Uint8Array(buffer), {
-      status: 200,
-      headers: {
-        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "Content-Disposition": `attachment; filename=Rendicion_${rend.id_rendicion}.xlsx`,
-      },
-    });
+  } catch (error: any) {
 
+    console.error(
+      "Error POST rendiciones:",
+      error
+    );
 
-  } catch (e: any) {
-    console.error("💥 Error en POST /rendiciones:", e);
     return NextResponse.json(
-      { error: "Error al registrar la rendición", detail: e.message || String(e) },
+      {
+        error:
+          "Error creando rendición",
+        detail:
+          error.message ??
+          String(error),
+      },
       { status: 500 }
     );
+
   }
 }

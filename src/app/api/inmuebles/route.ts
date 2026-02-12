@@ -96,10 +96,9 @@ export async function GET(req: NextRequest) {
           },
 
           imagenes: {
-            where: { principal: true },
-            take: 1,
-            select: { url: true },
-          },
+              orderBy: { principal: 'desc' },          // principal primero (true > false)
+              select: { url: true, principal: true },  // puedes traer principal si lo necesitas después
+            },
 
           // Auditoría completa (como en tu versión original)
           createdBy: { select: { id: true, name: true, email: true } },

@@ -183,9 +183,25 @@ setInmuebles(inmueblesList);
       } finally {
         setLoading(false);
       }
-    };
-    fetchData();
-  }, []);
+
+      const clientesJson = await clientesRes.json();
+      const inmueblesJson = await inmueblesRes.json();
+      const templatesData = await templatesRes.json();
+
+      setClientes(Array.isArray(clientesJson) ? clientesJson : clientesJson.data ?? []);
+      setInmuebles(Array.isArray(inmueblesJson) ? inmueblesJson : inmueblesJson.data ?? []);
+      setTemplates(templatesData.templates || []);
+
+    } catch (err) {
+      setError('Error al cargar datos');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  fetchData();
+}, []);
+
 
   useEffect(() => {
     const fetchCliente = async (id: number | undefined, setCliente: (cliente: Cliente | null) => void) => {

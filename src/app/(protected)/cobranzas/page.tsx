@@ -1,12 +1,15 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+// src/app/(protected)/cobranzas/page.tsx
+
 'use client'; 
 // Indica que este archivo se ejecuta del lado del cliente (React).
 // Es necesario para usar hooks como useState o useEffect.
 
-import { useState, useEffect } from 'react';
-import { DollarSign, PlusCircle, AlertCircle, Trash2 } from 'lucide-react';
+import { useState, useEffect, JSXElementConstructor, Key, ReactElement, ReactNode, ReactPortal } from 'react';
+import { DollarSign, PlusCircle, AlertCircle, Trash2, FileSignature, Filter, Calendar, User, X, Home, CheckCircle, XCircle, Edit3  } from 'lucide-react';
 // Iconos SVG importados como componentes React.
 
-import ConfirmationModal from '@/components/ui/confirmation-modal';
+import ConfirmationModal from '@/components/ui/Modal';
 // Modal de confirmación para eliminar cobranzas.
 
 import Header from '@/components/ui/Header';
@@ -18,20 +21,27 @@ import toast, { Toaster } from 'react-hot-toast';
 import { useRouter } from "next/navigation";
 // Hook de Next.js para navegación del lado del cliente.
 
+import Loading from '@/components/ui/Loading';
+
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
+import Modal from "@/components/ui/Modal";
+
+import { useQuery, useMutation, useQueryClient, keepPreviousData  } from '@tanstack/react-query';
 
 // ---------------------------
 // TIPOS (interfaces TypeScript)
 // ---------------------------
 
 interface UserInfo {
-  id: string;
-  name: string;
+  id_usuario: string;
+  nombre: string;
 }
 // Info del usuario que creó o actualizó una cobranza.
 
 interface Cliente {
   id_cliente: number;
   nombre: string;
+  apellido: string;
 }
 // Representa un cliente. Se usa en filtros y relaciones.
 
@@ -56,25 +66,32 @@ interface Cobranza {
   updatedBy?: UserInfo | null;
 }
 
+interface CobranzasResponse {
+  cobranzas: Cobranza[];
+  total: number;
+}
+
 
 export default function CobranzasPage() {
   const router = useRouter();
 
-  // Estado donde se guardarán las cobranzas obtenidas de la API
-  const [cobranzas, setCobranzas] = useState<Cobranza[]>([]);
+  const handleCrear = () => router.push('/cobranzas/alta');
 
-  // Lista de clientes para usar en filtros
-  const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalConfig, setModalConfig] = useState<{
+    title: string;
+    message: string;
+    variant?: "success" | "error" | "warning" | "info" | "danger";
+    onConfirm?: () => void;
+  }>({
+    title: "",
+    message: "",
+  });
 
-  // Estado para errores globales
-  const [error, setError] = useState<string | null>(null);
+  //clientes
+  const [clienteSearch, setClienteSearch] = useState('');
+  const [showClienteDropdown, setShowClienteDropdown] = useState(false);
 
-  // Loading para indicar carga de datos
-  const [loading, setLoading] = useState(false);
-
-  // Control del modal de eliminación
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-  const [itemToDelete, setItemToDelete] = useState<Cobranza | null>(null);
 
 
   // ---------------------------
@@ -82,55 +99,34 @@ export default function CobranzasPage() {
   // ---------------------------
 
   const [page, setPage] = useState(1);      // Página actual
-  const [pageSize] = useState(10);          // Cantidad por página
-  const [total, setTotal] = useState(0);    // Total de cobranzas
+  const [pageSize] = useState(5);          // Cantidad por página
 
   // Filtros del usuario
   const [filterYear, setFilterYear] = useState('');
   const [filterMonth, setFilterMonth] = useState('');
   const [filterCliente, setFilterCliente] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
 
-
-  // ----------------------------------------
-  // Cargar lista de clientes una sola vez
-  // ----------------------------------------
-  useEffect(() => {
-    fetchClientes();
-  }, []);
-
-
-  // ----------------------------------------
-  // Cargar cobranzas cuando cambia:
-  // página, año, mes, cliente
-  // ----------------------------------------
-  useEffect(() => {
-    fetchCobranzas();
-  }, [page, filterYear, filterMonth, filterCliente]);
-
-
-
-  // ========================================
-  // FUNCIÓN: obtener clientes desde la API
-  // ========================================
-  const fetchClientes = async () => {
-    try {
+  const {
+    data: clientes = [],
+    isLoading: clientesLoading,
+  } = useQuery({
+    queryKey: ['clientes'],
+    queryFn: async () => {
       const res = await fetch('/api/clientes');
-      const data = await res.json();
-      setClientes(data || []);
-    } catch {
-      setError('No se pudieron cargar los clientes');
-    }
-  };
+      if (!res.ok) throw new Error('Error al cargar clientes');
+      return res.json();
+    },
+  });
 
-
-  // ========================================
-  // FUNCIÓN: obtener cobranzas (paginadas + filtros)
-  // ========================================
-  const fetchCobranzas = async () => {
-    try {
-      setLoading(true);
-
-      // Construimos query params dinámicamente
+  const {
+    data,
+    isLoading,
+    isFetching,
+    error,
+  } = useQuery<CobranzasResponse>({
+    queryKey: ['cobranzas', page, filterYear, filterMonth, filterCliente],
+    queryFn: async () => {
       const query = new URLSearchParams({
         page: String(page),
         pageSize: String(pageSize),
@@ -140,29 +136,83 @@ export default function CobranzasPage() {
       if (filterMonth) query.append("mes", filterMonth);
       if (filterCliente) query.append("cliente", filterCliente);
 
-      // Llamado a la API
       const res = await fetch(`/api/cobranzas?${query.toString()}`);
-      if (!res.ok) throw new Error();
+      if (!res.ok) throw new Error('Error al cargar cobranzas');
 
-      const data = await res.json();
+      return res.json();
+    },
+    placeholderData: keepPreviousData, 
+    refetchOnWindowFocus: false,
+    staleTime: 1000 * 60 * 5, // 5 minutos (opcional pero recomendado)
+  });
 
-      // Guardamos datos en estado
-      setCobranzas(data.cobranzas);
-      setTotal(data.total);
-      setError(null);
-    } catch {
-      setError('No se pudieron cargar las cobranzas');
-    } finally {
-      setLoading(false);
-    }
+  const cobranzas: Cobranza[] = data?.cobranzas ?? [];
+
+  //  Función para agrupar
+  const agruparCobranzas = () => {
+    const grupos: Record<string, { 
+      clienteId: number;
+      clienteNombre: string;
+      mesAno: string;          
+      total: number;
+      cantidad: number;
+      activas: number;
+      cobranzas: Cobranza[];
+    }> = {};
+
+    cobranzas.forEach(c => {
+      // Si no hay cliente, saltamos o agrupamos como "Sin cliente"
+      if (!c.cliente) return;
+
+      const fecha = new Date(c.fecha_cobranza);
+      const mes = fecha.toLocaleString('es-AR', { month: 'long' });
+      const ano = fecha.getFullYear();
+      const mesAno = `${mes.charAt(0).toUpperCase() + mes.slice(1)} ${ano}`;
+      
+      // Clave única: clienteId + mesAno
+      const key = `${c.id_cliente}-${mesAno}`;
+
+      if (!grupos[key]) {
+        grupos[key] = {
+          clienteId: c.id_cliente,
+          clienteNombre: `${c.cliente.nombre} ${c.cliente.apellido}`,
+          mesAno,
+          total: 0,
+          cantidad: 0,
+          activas: 0,
+          cobranzas: [],
+        };
+      }
+
+      grupos[key].total += c.monto;
+      grupos[key].cantidad += 1;
+      if (c.activa) grupos[key].activas += 1;
+      grupos[key].cobranzas.push(c);
+    });
+
+    // Convertir a array y ordenar 
+    return Object.values(grupos).sort((a, b) => {
+      // Ordenar por fecha descendente (último mes primero)
+      const fechaA = new Date(a.cobranzas[0]?.fecha_cobranza || '');
+      const fechaB = new Date(b.cobranzas[0]?.fecha_cobranza || '');
+      return fechaB.getTime() - fechaA.getTime();
+    });
   };
+
+  // Usar la agrupación
+  const gruposCobranzas = agruparCobranzas();
+
+  const total = data?.total ?? 0;
+
+  const queryClient = useQueryClient();
+
 
 
   // ========================================
   // FUNCIÓN: toggle del campo "activa"
   // ========================================
-  const toggleActiva = async (cobranza: Cobranza) => {
-    try {
+  const toggleActivaMutation = useMutation({
+    mutationFn: async (cobranza: Cobranza) => {
       const res = await fetch(`/api/cobranzas/${cobranza.id_cobranza}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -170,56 +220,79 @@ export default function CobranzasPage() {
       });
 
       if (!res.ok) throw new Error();
-
-      // Refrescamos el estado sin volver a pegar a la API
-      setCobranzas(prev =>
-        prev.map(c =>
-          c.id_cobranza === cobranza.id_cobranza
-            ? { ...c, activa: !c.activa }
-            : c
-        )
-      );
-
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cobranzas'] });
       toast.success("Estado actualizado");
-    } catch {
+    },
+    onError: () => {
       toast.error("No se pudo cambiar el estado");
-    }
-  };
+    },
+  });
+
 
 
   // ========================================
   // FUNCIÓN: abrir modal para eliminar
   // ========================================
   const handleDelete = (cobranza: Cobranza) => {
-    setItemToDelete(cobranza);
-    setDeleteModalOpen(true);
-  };
-
-
-  // ========================================
-  // FUNCIÓN: confirmar eliminación
-  // ========================================
-  const confirmDelete = async () => {
-    if (!itemToDelete) return;
-
-    try {
-      const res = await fetch(`/api/cobranzas/${itemToDelete.id_cobranza}`, {
-        method: 'DELETE',
-      });
-
-      if (!res.ok) throw new Error();
-
-      // Recargamos listado después de eliminar
-      fetchCobranzas();
-      toast.success('Cobranza eliminada correctamente');
-
-    } catch {
-      toast.error('Error al eliminar la cobranza');
-    } finally {
-      setDeleteModalOpen(false);
-      setItemToDelete(null);
+    if (cobranza.activa) {
+      toast.error("No se puede eliminar una cobranza activa. Primero desactívela.");
+      return;
     }
+
+    setModalConfig({
+      title: "Eliminar cobranza",
+      message: "¿Estás seguro? Esta acción no se puede deshacer.",
+      variant: "danger",
+      onConfirm: async () => {
+        try {
+          const res = await fetch(`/api/cobranzas/${cobranza.id_cobranza}`, {
+            method: "DELETE",
+          });
+
+          if (!res.ok) throw new Error();
+
+          queryClient.invalidateQueries({ queryKey: ['cobranzas'] });
+
+          setModalConfig({
+            title: "Eliminada",
+            message: "La cobranza se eliminó correctamente.",
+            variant: "success",
+            onConfirm: () => setModalOpen(false),
+          });
+
+          setModalOpen(true);
+        } catch {
+          setModalConfig({
+            title: "Error",
+            message: "No se pudo eliminar la cobranza.",
+            variant: "error",
+          });
+          setModalOpen(true);
+        }
+      },
+    });
+
+    setModalOpen(true);
   };
+
+
+
+
+  const clientesFiltrados = clientes.filter((c: { nombre: any; apellido: any; }) => {
+    const fullName = `${c.nombre} ${c.apellido}`.toLowerCase();
+    return fullName.includes(clienteSearch.toLowerCase());
+  });
+
+
+  if (isLoading) {
+  return (
+    <div className="min-h-screen flex items-center justify-center">
+      <Loading message="Cargando cobranzas..." size="lg" />
+    </div>
+  );
+}
 
 
   return (
@@ -238,73 +311,213 @@ export default function CobranzasPage() {
               <p className="text-sm text-gray-500">Administra y controla los pagos registrados</p>
             </div>
           </div>
-
-          <div className="px-4 py-2 rounded-lg bg-[#fef9e7] text-sm font-medium text-gray-600">
-            {total} registros
+          <div className="flex items-center gap-3 px-4 py-2 rounded-lg bg-[#fef9e7]">
+            <div className="w-2 h-2 rounded-full animate-pulse bg-[#fcc238]" />
+          <span className="text-sm font-medium text-gray-600">
+            {total} cobranza{total !== 1 ? 's' : ''}
+          </span>
           </div>
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-6 py-8">
+        {error && (
+            <Alert className="mb-6 bg-[#fef9e7] border-l-4 border-[#fcc238]">
+              <AlertCircle className="h-4 w-4 text-yellow-500" />
+              <AlertTitle>Error</AlertTitle>
+              <AlertDescription>
+                {(error as Error).message}
+              </AlertDescription>
+            </Alert>
+          )}
 
         {/* BOTÓN CREAR */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-          <a
-            href="/cobranzas/alta"
-            className="group p-6 rounded-xl font-medium text-white flex items-center gap-4 transition-all hover:shadow-lg hover:scale-[1.02] active:scale-[0.98]"
-            style={{ backgroundColor: '#63bae9' }}
+         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+          <button
+            onClick={handleCrear}
+            className="group relative p-6 rounded-xl font-medium flex items-center gap-4 
+                      transition-all hover:shadow-lg hover:scale-[1.02] active:scale-[0.98]
+                      bg-[#63bae9] overflow-hidden"
           >
-            <div className="w-12 h-12 rounded-lg bg-white bg-opacity-20 flex items-center justify-center group-hover:rotate-12 transition-transform">
-              <PlusCircle className="w-6 h-6" />
+            {/* Overlay hover */}
+            <div className="absolute inset-0 bg-gradient-to-r from-white/0 to-white/25 
+                            opacity-0 group-hover:opacity-100 transition-opacity"></div>
+
+            {/* Contenido */}
+            <div className="relative flex items-center gap-4">
+              {/* Cuadrado blanco */}
+              <div className="w-14 h-14 rounded-xl bg-white flex items-center justify-center 
+                              group-hover:rotate-12 transition-transform duration-300 shadow-md">
+                <FileSignature className="w-7 h-7 text-[#63bae9]" strokeWidth={2} />
+              </div>
+
+              {/* Texto */}
+              <div className="flex-1 text-left text-white">
+                <div className="text-lg font-bold mb-1">
+                  Registrar Cobranza
+                </div>
+                <div className="text-sm opacity-90">
+                  Agrega una nueva cobranza
+                </div>
+              </div>
             </div>
-            <div className="text-left">
-              <div className="text-lg font-semibold">Crear Nueva Cobranza</div>
-              <div className="text-sm opacity-90">Registrar una nueva cobranza</div>
-            </div>
-          </a>
+          </button>
         </div>
 
-        {/* FILTROS */}
-        <div className="bg-white p-5 rounded-xl shadow-sm border mb-6">
-          <h3 className="text-lg font-semibold text-gray-700 mb-4">Filtrar cobranzas</h3>
+        {/* FILTROS - mismo estilo que en contratos */}
+          <div className="bg-white rounded-2xl shadow-lg border border-gray-200 mb-8 overflow-hidden">
+            <div className="p-6 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-[#63bae9]/10 flex items-center justify-center">
+                    <Filter className="w-5 h-5 text-[#63bae9]" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-[#686363]">Búsqueda y Filtros</h3>
+                    <p className="text-sm text-[#969696]">Encuentra cobranzas específicas</p>
+                  </div>
+                </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <button
+                  onClick={() => setShowFilters(!showFilters)}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#63bae9] text-white font-medium hover:bg-[#4a9fd4] transition-all shadow-md hover:shadow-lg active:scale-95"
+                >
+                  <Filter className="w-4 h-4" />
+                  {showFilters ? 'Ocultar Filtros' : 'Mostrar Filtros'}
+                </button>
+              </div>
+            </div>
 
-            <select
-              className="border rounded-lg p-3 shadow-sm focus:ring-2 focus:ring-[#63bae9]"
-              value={filterYear}
-              onChange={(e) => setFilterYear(e.target.value)}
-            >
-              <option value="">📅 Año (opcional)</option>
-              {Array.from({ length: 6 }, (_, i) => 2020 + i).map(y => (
-                <option key={y} value={y}>{y}</option>
-              ))}
-            </select>
+            <div className={`transition-all duration-300 ease-in-out overflow-hidden ${showFilters ? 'max-h-[1200px] opacity-100' : 'max-h-0 opacity-0'}`}>
+              <div className="p-6 bg-gray-50">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
 
-            <select
-              className="border rounded-lg p-3 shadow-sm focus:ring-2 focus:ring-[#63bae9]"
-              value={filterMonth}
-              onChange={(e) => setFilterMonth(e.target.value)}
-            >
-              <option value="">🗓️ Mes (opcional)</option>
-              {[...Array(12)].map((_, i) => (
-                <option key={i+1} value={i+1}>{i+1}</option>
-              ))}
-            </select>
+                  {/* Año */}
+                  <div>
+                    <label className="block text-sm font-bold text-[#686363] mb-2">
+                      Año
+                    </label>
+                    <div className="relative">
+                      <select
+                        value={filterYear}
+                        onChange={(e) => {
+                          setFilterYear(e.target.value);
+                          setPage(1);
+                        }}
+                        className="w-full px-4 py-3 pl-11 rounded-xl border-2 border-gray-200 focus:border-[#63bae9] focus:outline-none focus:ring-0 transition-all text-[#686363] appearance-none bg-white"
+                      >
+                        <option value="" disabled hidden>Seleccione un año</option>
+                        {Array.from(
+                          { length: new Date().getFullYear() - 2020 + 1 },
+                          (_, i) => 2020 + i
+                        ).map(year => (
+                          <option key={year} value={year}>
+                            {year}
+                          </option>
+                        ))}
+                      </select>
+                      <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#969696] pointer-events-none" />
+                    </div>
+                  </div>
 
-            <select
-              className="border rounded-lg p-3 shadow-sm focus:ring-2 focus:ring-[#63bae9]"
-              value={filterCliente}
-              onChange={(e) => setFilterCliente(e.target.value)}
-            >
-              <option value="">👤 Cliente (opcional)</option>
-              {clientes.map(c => (
-                <option key={c.id_cliente} value={c.id_cliente}>{c.nombre}</option>
-              ))}
-            </select>
+                  {/* Mes */}
+                  <div>
+                    <label className="block text-sm font-bold text-[#686363] mb-2">
+                      Mes
+                    </label>
+                    <div className="relative">
+                      <select
+                        value={filterMonth}
+                        onChange={(e) => {
+                          setFilterMonth(e.target.value);
+                          setPage(1);
+                        }}
+                        className="w-full px-4 py-3 pl-11 rounded-xl border-2 border-gray-200 focus:border-[#63bae9] focus:outline-none focus:ring-0 transition-all text-[#686363] appearance-none bg-white"
+                      >
+                        <option value="" disabled hidden>Seleccione un mes</option>
+                        {Array.from({ length: 12 }, (_, i) => i + 1).map(mes => (
+                          <option key={mes} value={mes}>
+                            {mes.toString().padStart(2, '0')}
+                          </option>
+                        ))}
+                      </select>
+                      <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#969696] pointer-events-none" />
+                    </div>
+                  </div>
 
+                  {/* Cliente */}
+                  <div>
+                    <label className="block text-sm font-bold text-[#686363] mb-2">
+                      Cliente
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        placeholder="Buscar cliente..."
+                        value={clienteSearch}
+                        onChange={(e) => {
+                          setClienteSearch(e.target.value);
+                          setShowClienteDropdown(true);
+                          if (e.target.value.trim() === '') {
+                            setFilterCliente('');
+                          }
+                          setPage(1);
+                        }}
+                        onFocus={() => setShowClienteDropdown(true)}
+                        className="w-full px-4 py-3 pl-11 rounded-xl border-2 border-gray-200 focus:border-[#63bae9] focus:outline-none focus:ring-0 transition-all text-[#686363] placeholder:text-[#969696] bg-white"
+                      />
+                      <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#969696] pointer-events-none" />
+
+                      {showClienteDropdown && clienteSearch && (
+                        <div className="absolute z-30 mt-1 w-full bg-white border-2 border-gray-200 rounded-xl shadow-xl max-h-64 overflow-y-auto divide-y divide-gray-100">
+                          {clientesFiltrados.length === 0 ? (
+                            <div className="p-4 text-sm text-[#969696] text-center">
+                              No hay coincidencias
+                            </div>
+                          ) : (
+                            clientesFiltrados.map((c: { id_cliente: Key | null | undefined; apellido: string | number | bigint | boolean | ReactElement<unknown, string | JSXElementConstructor<any>> | Iterable<ReactNode> | ReactPortal | Promise<string | number | bigint | boolean | ReactPortal | ReactElement<unknown, string | JSXElementConstructor<any>> | Iterable<ReactNode> | null | undefined> | null | undefined; nombre: string | number | bigint | boolean | ReactElement<unknown, string | JSXElementConstructor<any>> | Iterable<ReactNode> | ReactPortal | Promise<string | number | bigint | boolean | ReactPortal | ReactElement<unknown, string | JSXElementConstructor<any>> | Iterable<ReactNode> | null | undefined> | null | undefined; }) => (
+                              <button
+                                key={c.id_cliente}
+                                type="button"
+                                className="w-full text-left px-4 py-3 hover:bg-[#63bae9]/5 transition-colors text-[#686363]"
+                                onClick={() => {
+                                  setFilterCliente(String(c.id_cliente));
+                                  setClienteSearch(`${c.apellido}, ${c.nombre}`);
+                                  setShowClienteDropdown(false);
+                                  setPage(1);
+                                }}
+                              >
+                                {c.apellido}, {c.nombre}
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Botón Limpiar filtros - solo visible si hay algo seleccionado */}
+                {(filterYear || filterMonth || filterCliente || clienteSearch.trim()) && (
+                  <div className="flex justify-end mt-6">
+                    <button
+                      onClick={() => {
+                        setFilterYear('');
+                        setFilterMonth('');
+                        setFilterCliente('');
+                        setClienteSearch('');
+                        setPage(1);
+                      }}
+                      className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium text-[#969696] hover:text-[#686363] hover:bg-white/80 transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                      Limpiar filtros
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
-        </div>
 
         {/* LISTADO */}
         <div className="bg-white rounded-xl shadow-sm border">
@@ -314,90 +527,217 @@ export default function CobranzasPage() {
           </div>
 
           <div className="p-6">
-            {loading ? (
-              <p>Cargando...</p>
-            ) : cobranzas.length === 0 ? (
-              <p className="text-center py-16">No hay cobranzas</p>
-            ) : (
-              <div className="grid gap-4">
-                {[...cobranzas]
-                  .sort((a, b) => Number(b.activa) - Number(a.activa))
-                  .map(c => (
-                    <div
-                      key={c.id_cobranza}
-                      className="border rounded-xl p-5 relative hover:shadow-lg transition-all border-l-4 border-l-[#63bae9]"
-                    >
-                      {/* ESTADO */}
-                      <button
-                        onClick={() => toggleActiva(c)}
-                        className={`absolute top-4 right-4 px-3 py-1 rounded-full text-sm font-semibold ${
-                          c.activa ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600'
-                        }`}
-                      >
-                        {c.activa ? 'Activa' : 'Inactiva'}
-                      </button>
-
-                      {/* INFO PRINCIPAL */}
-                      <p className="text-lg font-bold text-gray-800 mb-2">
-                        {c.concepto} — ${c.monto.toLocaleString()}
-                      </p>
-
-                      <p className="text-sm text-gray-600">
-                        Fecha: {new Date(c.fecha_cobranza).toLocaleDateString()}
-                      </p>
-
-                      <p className="text-sm text-gray-600">
-                        Cliente: {c.cliente?.nombre}
-                      </p>
-
-                      <p className="text-sm text-gray-600">
-                        Medio de pago: {c.medio_pago}
-                      </p>
-
-                      {c.inmueble && (
-                        <p className="text-sm text-gray-600">
-                          Inmueble: {c.inmueble.nombre}
-                        </p>
-                      )}
-
-                      {/* 🆕 HISTORIAL */}
-                      <div className="mt-4 p-3 bg-gray-50 rounded-lg border text-sm text-gray-600">
-                        {c.createdBy && (
-                          <p>Creado por: <span className="font-medium">{c.createdBy.name}</span></p>
-                        )}
-
-                        {c.updatedBy && (
-                          <p>Actualizado por: <span className="font-medium">{c.updatedBy.name}</span></p>
-                        )}
-
-                        {c.createdAt && (
-                          <p>Fecha de creación: {new Date(c.createdAt).toLocaleString()}</p>
-                        )}
-
-                        {c.updatedAt && (
-                          <p>Última actualización: {new Date(c.updatedAt).toLocaleString()}</p>
-                        )}
-                      </div>
-
-                      {/* ACCIONES */}
-                      <div className="mt-4 flex items-center justify-end gap-4">
-                        <button
-                          onClick={() => router.push(`/cobranzas/modificar/${c.id_cobranza}`)}
-                          className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-100 text-blue-700 hover:bg-blue-200 transition"
-                        >
-                          ✏️ Modificar
-                        </button>
-
-                        <button
-                          onClick={() => handleDelete(c)}
-                          className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-red-100 text-red-700 hover:bg-red-200 transition"
-                        >
-                          <Trash2 className="w-4 h-4" /> Eliminar
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+            
+            {isFetching  ? (
+              <div className="py-20 flex justify-center">
+                <Loading message="Actualizando cobranzas..." size="md" />
               </div>
+            ) : cobranzas.length === 0 ? (
+              <p className="text-center py-16 text-gray-500">
+                No hay cobranzas con los filtros seleccionados
+              </p>
+            ) : (
+              <div className="p-6">
+  {isFetching ? (
+    <div className="py-20 flex justify-center">
+      <Loading message="Actualizando cobranzas..." size="md" />
+    </div>
+  ) : gruposCobranzas.length === 0 ? (
+    <p className="text-center py-16 text-gray-500">
+      No hay cobranzas con los filtros seleccionados
+    </p>
+  ) : (
+    <div className="space-y-6">
+      {gruposCobranzas.map(grupo => (
+        <div
+          key={`${grupo.clienteId}-${grupo.mesAno}`}
+          className="group border border-gray-200 rounded-xl overflow-hidden hover:shadow-xl transition-all duration-300 bg-white relative"
+        >
+          {/* Header del grupo - igual estilo que contratos */}
+          <div className="bg-gradient-to-r from-[#63bae9]/5 via-[#63bae9]/3 to-transparent p-6 border-b border-gray-100">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-start gap-4 flex-1 min-w-0">
+                <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-[#63bae9] to-[#63bae9]/80 flex items-center justify-center flex-shrink-0 shadow-sm">
+                  <User className="w-7 h-7 text-white" strokeWidth={2.5} />
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-xl font-bold text-[#686363] mb-1 group-hover:text-[#63bae9] transition-colors">
+                    {grupo.clienteNombre}
+                  </h3>
+                  <p className="text-sm text-[#969696]">
+                    {grupo.mesAno} • {grupo.cantidad} cobranza{grupo.cantidad !== 1 ? 's' : ''}
+                  </p>
+
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <span className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg bg-white border-2 border-[#63bae9]/20 text-[#63bae9]">
+                      ${grupo.total.toLocaleString('es-AR')}
+                    </span>
+
+                    <span
+                      className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border-2 ${
+                        grupo.activas === grupo.cantidad
+                          ? 'bg-green-50 text-green-700 border-green-200'
+                          : grupo.activas === 0
+                          ? 'bg-gray-100 text-[#969696] border-gray-300'
+                          : 'bg-yellow-50 text-yellow-700 border-yellow-200'
+                      }`}
+                    >
+                      {grupo.activas} / {grupo.cantidad} activas
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Acciones del grupo (opcional - por ahora vacío o con botón de exportar) */}
+              <div className="flex items-center gap-2">
+                {/* Podrías poner aquí un botón para exportar el mes o ver resumen */}
+              </div>
+            </div>
+          </div>
+
+          {/* Lista de cobranzas individuales */}
+          <div className="divide-y divide-gray-100">
+          {grupo.cobranzas.map(c => (
+            <div
+              key={c.id_cobranza}
+              className="p-5 hover:bg-gray-50 transition-colors relative border-b border-gray-100 last:border-b-0"
+            >
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                {/* Info principal */}
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-[#686363] group-hover:text-[#63bae9] transition-colors">
+                    {c.concepto}
+                  </p>
+                  <div className="text-sm text-[#969696] mt-1 flex flex-wrap items-center gap-x-4 gap-y-1">
+                    <span className="flex items-center gap-1">
+                      <Calendar className="w-3.5 h-3.5" />
+                      {new Date(c.fecha_cobranza).toLocaleDateString('es-AR', {
+                        day: '2-digit',
+                        month: 'short',
+                        year: 'numeric'
+                      })}
+                    </span>
+                    <span>• {c.medio_pago}</span>
+                    {c.inmueble && <span>• {c.inmueble.nombre}</span>}
+                  </div>
+                </div>
+
+                {/* Monto + estado + acciones */}
+                <div className="flex items-center gap-6 flex-shrink-0">
+                  {/* Monto */}
+                  <span className="text-lg font-bold text-[#63bae9]">
+                    ${c.monto.toLocaleString('es-AR')}
+                  </span>
+
+                  {/* Estado */}
+                  <span
+                    className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
+                      c.activa ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600'
+                    }`}
+                  >
+                    {c.activa ? <CheckCircle className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
+                    {c.activa ? 'Activa' : 'Inactiva'}
+                  </span>
+
+                  {/* Acciones */}
+                  <div className="flex items-center gap-2">
+                    {/* Modificar - SIEMPRE visible */}
+                    <button
+                      onClick={() => router.push(`/cobranzas/modificar/${c.id_cobranza}`)}
+                      className="p-2.5 rounded-lg bg-white border border-gray-200 hover:border-[#63bae9] hover:bg-[#63bae9]/5 transition-colors"
+                      title="Modificar cobranza"
+                    >
+                      <Edit3 className="w-5 h-5 text-[#686363]" />
+                    </button>
+
+                    {/* Eliminar - SOLO si está desactivada */}
+                    {!c.activa && (
+                      <button
+                        onClick={() => handleDelete(c)}
+                        className="p-2.5 rounded-lg bg-white border border-gray-200 hover:border-red-400 hover:bg-red-50 transition-colors"
+                        title="Eliminar cobranza (solo inactivas)"
+                      >
+                        <Trash2 className="w-5 h-5 text-red-600" />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Toggle Activa/Desactiva - siempre visible */}
+                  <button
+                    onClick={() => toggleActivaMutation.mutate(c)}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border-2 text-xs font-medium transition-colors ${
+                      c.activa
+                        ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'
+                        : 'bg-gray-100 text-gray-600 border-gray-300 hover:bg-gray-200'
+                    }`}
+                  >
+                    {c.activa ? 'Desactivar' : 'Activar'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+          </div>
+
+          {/* AUDITORÍA / HISTORIAL - exactamente igual que en contratos, al final de la card grupal */}
+          <div className="pt-4 pb-6 px-6 border-t border-gray-100 bg-gray-50">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs text-[#969696]">
+              {grupo.cobranzas[0]?.createdBy && (
+                <div className="flex items-center gap-2">
+                  <User className="w-3.5 h-3.5" />
+                  <span className="font-medium">Creado por:</span>
+                  <span className="font-bold text-[#686363]">
+                    {grupo.cobranzas[0].createdBy.nombre}
+                  </span>
+                </div>
+              )}
+              {grupo.cobranzas[0]?.createdAt && (
+                <div className="flex items-center gap-2">
+                  <Calendar className="w-3.5 h-3.5" />
+                  <span className="font-medium">Creado:</span>
+                  <span className="font-bold text-[#686363]">
+                    {new Date(grupo.cobranzas[0].createdAt).toLocaleString('es-AR', {
+                      day: '2-digit',
+                      month: 'short',
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    }).replace(',', ' •')}
+                  </span>
+                </div>
+              )}
+              {grupo.cobranzas[0]?.updatedBy && (
+                <div className="flex items-center gap-2">
+                  <User className="w-3.5 h-3.5" />
+                  <span className="font-medium">Actualizado por:</span>
+                  <span className="font-bold text-[#686363]">
+                    {grupo.cobranzas[0].updatedBy.nombre}
+                  </span>
+                </div>
+              )}
+              {grupo.cobranzas[0]?.updatedAt && (
+                <div className="flex items-center gap-2">
+                  <Calendar className="w-3.5 h-3.5" />
+                  <span className="font-medium">Actualizado:</span>
+                  <span className="font-bold text-[#686363]">
+                    {new Date(grupo.cobranzas[0].updatedAt).toLocaleString('es-AR', {
+                      day: '2-digit',
+                      month: 'short',
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    }).replace(',', ' •')}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  )}
+</div>
             )}
           </div>
 
@@ -424,12 +764,13 @@ export default function CobranzasPage() {
 
       </main>
 
-      <ConfirmationModal
-        isOpen={deleteModalOpen}
-        onClose={() => setDeleteModalOpen(false)}
-        onConfirm={confirmDelete}
-        title="Eliminar Cobranza"
-        message="¿Estás seguro de que deseas eliminar esta cobranza? Esta acción no se puede deshacer."
+      <Modal
+        isOpen={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title={modalConfig.title}
+        message={modalConfig.message}
+        variant={modalConfig.variant}
+        onConfirm={modalConfig.onConfirm}
       />
     </div>
   );

@@ -2,426 +2,535 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import Header from "@/components/ui/Header";
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import Loading from '@/components/ui/Loading';
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
+import Modal from "@/components/ui/Modal";
 
-/* ==========================================================
-   📌 Interfaces para tipar los datos recibidos desde la API
-   ========================================================== */
 interface Cliente {
   id_cliente: number;
   nombre: string;
+  apellido: string;
 }
 
 interface Cobranza {
   id_cobranza: number;
   monto: number;
   concepto: string;
-  cliente: { nombre: string };
+  cliente: { nombre: string; apellido: string };
   genera_recibo: boolean;
   fecha_cobranza?: string;
   mes_ipc?: number;
   anio_ipc?: number;
 }
 
-/* ==========================================================
-   📌 Componente principal de la página
-   ========================================================== */
 export default function AltaRendicionPage() {
-  // Lista de clientes para el filtro
-  const [clientes, setClientes] = useState<Cliente[]>([]);
-  const [loadedClientes, setLoadedClientes] = useState(false); // evita llamar cobranzas antes de cargar clientes
 
-  // Lista de cobranzas filtradas
-  const [cobranzas, setCobranzas] = useState<Cobranza[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
-  // IDs de cobranzas seleccionadas para rendición
+  const router = useRouter();
+
   const [seleccionadas, setSeleccionadas] = useState<number[]>([]);
 
-  // Flags de carga
-  const [loading, setLoading] = useState(false);
-
-  // Filtros
   const [cliente, setCliente] = useState("");
   const [anio, setAnio] = useState("");
   const [mes, setMes] = useState("");
 
-  // Valores de IPC auto–calculados o ingresados
+  const [clienteSearch, setClienteSearch] = useState("");
+  const [clienteOpen, setClienteOpen] = useState(false);
+
   const [mesIPC, setMesIPC] = useState("");
   const [anioIPC, setAnioIPC] = useState("");
 
-  // Lista de años disponibles desde 2020 hasta hoy
   const currentYear = new Date().getFullYear();
   const years = Array.from({ length: currentYear - 2020 + 1 }, (_, i) => 2020 + i);
 
-  /* ==========================================================
-     📌 1) CARGAR CLIENTES DESDE LA API
-     ========================================================== */
-  const cargarClientes = async () => {
-    try {
-      const res = await fetch("/api/clientes");
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalConfig, setModalConfig] = useState<{
+    title: string;
+    message: string;
+    variant?: "success" | "error" | "warning" | "info" | "danger";
+    onConfirm?: () => void;
+  }>({
+    title: "",
+    message: "",
+  });
+
+  const {
+    data: clientes = [],
+    isLoading: loadingClientes,
+  } = useQuery<Cliente[]>({
+    queryKey: ['clientes'],
+    queryFn: async () => {
+      const res = await fetch('/api/clientes');
+      if (!res.ok) throw new Error('Error clientes');
       const data = await res.json();
+      return Array.isArray(data) ? data : data.clientes ?? [];
+    },
+  });
 
-      // La API puede devolver: [clientes] o { clientes: [...] }
-      const lista: Cliente[] = Array.isArray(data)
-        ? data
-        : Array.isArray(data?.clientes)
-        ? data.clientes
-        : [];
+  const clientesFiltrados = clientes.filter(c =>
+    `${c.nombre} ${c.apellido}`
+      .toLowerCase()
+      .includes(clienteSearch.toLowerCase())
+  );
 
-      setClientes(lista);
-    } catch (e) {
-      console.error("❌ Error al cargar clientes:", e);
-      toast.error("Error al cargar clientes");
-    } finally {
-      setLoadedClientes(true);
+  const {
+    data: cobranzas = [],
+    isLoading: loadingCobranzas,
+  } = useQuery<Cobranza[]>({
+    queryKey: ['cobranzas', cliente, anio, mes],
+    enabled: !!cliente,
+    placeholderData: (prev) => prev,
+    queryFn: async () => {
+    const params = new URLSearchParams();
+
+    params.append('sinRendir', '1');     
+    params.append('soloActivas', '1');   
+
+    if (cliente) params.append('cliente', cliente);
+    if (anio) params.append('anio', anio);
+    if (mes) params.append('mes', mes);
+
+    params.append('page', '1');
+    params.append('pageSize', '1000');
+
+    const res = await fetch(`/api/cobranzas?${params}`);
+    if (!res.ok) throw new Error('Error cobranzas');
+    const data = await res.json();
+    return data.cobranzas ?? [];
+  },
+  });
+
+  const queryClient = useQueryClient();
+
+  const guardarMutation = useMutation({
+  mutationFn: async () => {
+
+  const res = await fetch("/api/rendiciones", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      cobranzas: seleccionadas,
+      mes_ipc: mesIPC ? Number(mesIPC) : null,
+      anio_ipc: anioIPC ? Number(anioIPC) : null,
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || "Error creando rendición");
+  }
+
+  // 👇 descargar Excel con el nombre real del backend
+  const blob = await res.blob();
+
+  // leer nombre desde Content-Disposition
+  const contentDisposition = res.headers.get("Content-Disposition");
+
+  let filename = "Rendicion.xlsx";
+
+  if (contentDisposition) {
+    const match = contentDisposition.match(/filename="?(.+?)"?$/);
+    if (match?.[1]) {
+      filename = match[1];
     }
-  };
+  }
 
-  // Se carga una sola vez al montar la página
-  useEffect(() => {
-    cargarClientes();
-  }, []);
+  const url = window.URL.createObjectURL(blob);
 
-  /* ==========================================================
-     📌 2) VALIDACIONES SUAVES mientras el usuario filtra
-     ========================================================== */
-  const validarFiltros = () => {
-    if (anio && Number(anio) < 2020) {
-      toast("⚠ El año es muy bajo, ¿estás segura?");
-    }
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename; // 👈 nombre correcto
+  document.body.appendChild(a);
+  a.click();
 
-    if (mes && (Number(mes) < 1 || Number(mes) > 12)) {
-      toast("⚠ El mes no es válido");
-    }
-  };
+  a.remove();
+  window.URL.revokeObjectURL(url);
 
-  /* ==========================================================
-     📌 3) CARGAR COBRANZAS según los filtros
-     ========================================================== */
-  const cargarCobranzas = async () => {
-    // Evita llamar antes de tener clientes cargados
-    if (!loadedClientes) return;
+  return true;
+},
 
-    validarFiltros();
 
-    // Si no hay filtros → limpio todo
-    if (!cliente && !anio && !mes) {
-      setCobranzas([]);
-      setSeleccionadas([]);
-      setMesIPC("");
-      setAnioIPC("");
-      return;
-    }
+  onSuccess: () => {
+    setModalConfig({
+      title: "Rendición creada",
+      message: "La rendición se creó correctamente.",
+      variant: "success",
+      onConfirm: () => {
+        setModalOpen(false);
+        router.push("/rendiciones");
+      },
+    });
+    setModalOpen(true);
+  },
 
-    try {
-      const params = new URLSearchParams();
+  onError: (e: any) => {
+    setModalConfig({
+      title: "Error",
+      message: e.message,
+      variant: "error",
+    });
+    setModalOpen(true);
+  },
+});
 
-      // Solo cobranzas sin rendir
-      params.append("sinRendir", "1");
 
-      // Filtros dinámicos
-      if (cliente) params.append("cliente", cliente);
-      if (anio) params.append("anio", anio);
-      if (mes) params.append("mes", mes);
-
-      // Evitamos paginación
-      params.append("page", "1");
-      params.append("pageSize", "1000");
-
-      const url = `/api/cobranzas?${params.toString()}`;
-      const res = await fetch(url);
-      const data = await res.json();
-
-      // Normalización de cobranzas
-      const lista: Cobranza[] = Array.isArray(data?.cobranzas)
-        ? data.cobranzas.map((c: any) => ({
-            ...c,
-            fecha_cobranza: c.fecha_cobranza,
-          }))
-        : [];
-
-      setCobranzas(lista);
-      setSeleccionadas([]);
-      setMesIPC("");
-      setAnioIPC("");
-
-      if (lista.length === 0) toast("No hay cobranzas con esos filtros");
-    } catch (e) {
-      console.error("❌ Error al cargar cobranzas:", e);
-      toast.error("Error al cargar cobranzas");
-    }
-  };
-
-  // Refiltra cada vez que cambian los filtros o se cargan clientes
-  useEffect(() => {
-    cargarCobranzas();
-  }, [cliente, anio, mes, loadedClientes]);
-
-  /* ==========================================================
-     📌 4) SELECCIONAR/Deseleccionar UNA COBRANZA
-         + Cálculo automático del IPC sugerido
-     ========================================================== */
   const toggle = (id: number) => {
-    // Agregar o quitar la cobranza
     const next = seleccionadas.includes(id)
       ? seleccionadas.filter((x) => x !== id)
       : [...seleccionadas, id];
 
     setSeleccionadas(next);
 
-    // Obtener cobranzas seleccionadas
     const seleccionadasAhora = cobranzas.filter((c) => next.includes(c.id_cobranza));
 
-    // Si se deseleccionó todo → limpias IPC
     if (seleccionadasAhora.length === 0) {
       setMesIPC("");
       setAnioIPC("");
       return;
     }
 
-    // Tomar solo las fechas existentes
     const fechasValidas = seleccionadasAhora
       .map((c) => (c.fecha_cobranza ? new Date(c.fecha_cobranza) : null))
       .filter(Boolean) as Date[];
 
-    // Si alguna tienen fecha → tomar la más reciente
     if (fechasValidas.length > 0) {
       const masReciente = fechasValidas.reduce((a, b) => (a > b ? a : b));
 
-      setMesIPC(String(masReciente.getMonth() + 1)); // meses empiezan en 0
+      setMesIPC(String(masReciente.getMonth() + 1));
       setAnioIPC(String(masReciente.getFullYear()));
     }
   };
 
-  /* ==========================================================
-     📌 5) VALIDACIONES DURAS al guardar
-     ========================================================== */
   const validarGuardar = () => {
     if (seleccionadas.length === 0) {
-      toast.error("Seleccioná al menos una cobranza");
+      setModalConfig({
+        title: "Validación",
+        message: "Seleccioná al menos una cobranza.",
+        variant: "warning",
+      });
+      setModalOpen(true);
       return false;
     }
 
     if ((mesIPC && !anioIPC) || (!mesIPC && anioIPC)) {
-      toast.error("Si usás IPC, debés completar mes y año");
-      return false;
-    }
-
-    if (anioIPC && Number(anioIPC) < 2020) {
-      toast.error("Año IPC inválido");
-      return false;
-    }
-
-    if (mesIPC && (Number(mesIPC) < 1 || Number(mesIPC) > 12)) {
-      toast.error("Mes IPC inválido");
+      setModalConfig({
+        title: "Validación",
+        message: "Si usás IPC, debés completar mes y año.",
+        variant: "warning",
+      });
+      setModalOpen(true);
       return false;
     }
 
     return true;
   };
 
-  /* ==========================================================
-     📌 6) GUARDAR RENDICIÓN + DESCARGAR AUTOMÁTICAMENTE EL EXCEL
-     ========================================================== */
-  const guardar = async () => {
-    if (!validarGuardar()) return;
+  if (loadingClientes) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <Loading message="Cargando formulario..." size="lg" />
+      </div>
+    );
+  }
 
-    setLoading(true);
-
-    try {
-      const payload = {
-        cobranzas: seleccionadas,
-        fecha_rendicion: new Date(),
-        mes_ipc: mesIPC ? Number(mesIPC) : undefined,
-        anio_ipc: anioIPC ? Number(anioIPC) : undefined,
-      };
-
-      // Enviamos la rendición al backend
-      const res = await fetch("/api/rendiciones", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.error || "Error desconocido");
-      }
-
-      // El backend devuelve un archivo Excel
-      const blob = await res.blob();
-
-      // Fuerzo descarga del archivo
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `Rendicion.xlsx`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.URL.revokeObjectURL(url);
-
-      toast.success("Rendición registrada y Excel descargado");
-
-      // Redirige automáticamente después de descargar
-      setTimeout(() => {
-        window.location.href = "/rendiciones";
-      }, 1000);
-    } catch (e: any) {
-      console.error("❌ Error al guardar rendición:", e);
-      toast.error(e.message || "Error al guardar rendición");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // ==========================================================
-  // RENDER
-  // ==========================================================
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen" style={{ backgroundColor: '#f8f9fa' }}>
       <Header />
-      <div className="max-w-4xl mx-auto px-6 py-10">
-        <h1 className="text-3xl font-bold mb-6 text-gray-700">Nueva Rendición</h1>
 
-        <div className="bg-white p-6 rounded-xl shadow space-y-6">
-          {/* FILTROS */}
-          <h2 className="font-semibold text-lg">Filtrar Cobranzas</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="text-sm font-medium">Cliente</label>
-              <select
-                className="mt-1 w-full border rounded-lg px-3 py-2"
-                value={cliente}
-                onChange={(e) => setCliente(e.target.value)}
-              >
-                <option value="">Todos</option>
-                {clientes.map((c) => (
-                  <option key={c.id_cliente} value={String(c.id_cliente)}>
-                    {c.nombre}
-                  </option>
-                ))}
-              </select>
+      <div
+        className="bg-gradient-to-br from-white to-gray-50"
+        style={{ borderBottom: '1px solid #e5e7eb' }}
+      >
+        <div className="max-w-4xl mx-auto px-6 py-10">
+          <div className="flex items-start gap-6">
+            <div className="p-4 rounded-2xl shadow-sm" style={{ backgroundColor: '#63bae9' }}>
+              {/* Podrías poner aquí un ícono más específico si tenés uno para rendiciones */}
+              <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
             </div>
-
-            <div>
-              <label className="text-sm font-medium">Año</label>
-              <select
-                className="mt-1 w-full border rounded-lg px-3 py-2"
-                value={anio}
-                onChange={(e) => setAnio(e.target.value)}
-              >
-                <option value="">Todos</option>
-                {years.map((y) => (
-                  <option key={y} value={String(y)}>
-                    {y}
-                  </option>
-                ))}
-              </select>
+            <div className="flex-1">
+              <h1 className="text-4xl font-bold mb-2" style={{ color: '#686363' }}>
+                Nueva Rendición
+              </h1>
+              <p className="text-base" style={{ color: '#969696' }}>
+                Completa los filtros, selecciona las cobranzas y ajusta IPC si es necesario
+              </p>
             </div>
-
-            <div>
-              <label className="text-sm font-medium">Mes</label>
-              <select
-                className="mt-1 w-full border rounded-lg px-3 py-2"
-                value={mes}
-                onChange={(e) => setMes(e.target.value)}
-              >
-                <option value="">Todos</option>
-                {[...Array(12)].map((_, i) => (
-                  <option key={i + 1} value={String(i + 1)}>
-                    {new Date(0, i).toLocaleString("es-AR", { month: "long" })}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* IPC */}
-          <h2 className="font-semibold text-lg mt-6">Ajuste IPC (opcional)</h2>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-sm font-medium">Mes IPC</label>
-              <select
-                className="mt-1 w-full border rounded-lg px-3 py-2"
-                value={mesIPC}
-                onChange={(e) => setMesIPC(e.target.value)}
-              >
-                <option value="">Ninguno</option>
-                {[...Array(12)].map((_, i) => (
-                  <option key={i + 1} value={String(i + 1)}>
-                    {new Date(0, i).toLocaleString("es-AR", { month: "long" })}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="text-sm font-medium">Año IPC</label>
-              <select
-                className="mt-1 w-full border rounded-lg px-3 py-2"
-                value={anioIPC}
-                onChange={(e) => setAnioIPC(e.target.value)}
-              >
-                <option value="">Ninguno</option>
-                {years.map((y) => (
-                  <option key={y} value={String(y)}>
-                    {y}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* LISTA COBRANZAS */}
-          <h2 className="font-semibold text-lg mt-6">Seleccionar Cobranzas</h2>
-          <div className="space-y-3">
-            {cobranzas.map((c) => (
-              <label
-                key={c.id_cobranza}
-                className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer"
-              >
-                <input
-                  type="checkbox"
-                  checked={seleccionadas.includes(c.id_cobranza)}
-                  onChange={() => toggle(c.id_cobranza)}
-                />
-                <div>
-                  <div className="font-semibold">{c.cliente.nombre}</div>
-                  <div className="text-sm text-gray-500">
-                    {c.concepto} — ${c.monto}
-                    {c.fecha_cobranza && (
-                      <span className="ml-2 text-xs text-gray-400">
-                        ({new Date(c.fecha_cobranza).toLocaleDateString("es-AR")})
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </label>
-            ))}
-          </div>
-
-          {/* BOTONES */}
-          <div className="flex justify-between mt-6 gap-4">
-            <button
-              onClick={() => (window.location.href = "/rendiciones")}
-              className="w-1/2 px-6 py-3 rounded-lg text-gray-700 bg-gray-200 hover:bg-gray-300"
-            >
-              Cancelar
-            </button>
-
-            <button
-              onClick={guardar}
-              disabled={loading}
-              className="w-1/2 px-6 py-3 rounded-lg text-white bg-[#63bae9] hover:opacity-90"
-            >
-              {loading ? "Guardando..." : "Guardar Rendición"}
-            </button>
           </div>
         </div>
       </div>
+
+      <div className="max-w-4xl mx-auto px-6 py-10">
+        {error && (
+          <Alert className="mb-6" variant="destructive">
+            <AlertTitle>Error</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
+        <div className="bg-white p-8 rounded-2xl shadow-sm border" style={{ borderColor: '#e5e7eb' }}>
+          {loadingClientes && (
+              <div className="mb-8">
+                <Loading message="Cargando formulario..." size="lg" />
+              </div>
+            )}
+
+          {!loadingClientes && (
+            <>
+              <h2 className="font-bold text-xl mb-6" style={{ color: '#686363' }}>
+                Filtrar Cobranzas
+              </h2>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+                <div>
+                  <label className="block text-sm font-semibold mb-2" style={{ color: '#686363' }}>
+                    Cliente
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={clienteSearch}
+                      onChange={(e) => {
+                        setClienteSearch(e.target.value);
+                        setClienteOpen(true);
+                      }}
+                      onFocus={() => setClienteOpen(true)}
+                      placeholder="Buscar cliente..."
+                      className="w-full px-4 py-3 rounded-xl border-2 transition-all duration-200 focus:outline-none focus:border-[#63bae9]"
+                      style={{
+                        borderColor: cliente ? '#63bae9' : '#e5e7eb',
+                        backgroundColor: cliente ? '#f0f9ff' : 'white',
+                      }}
+                    />
+
+                    {clienteOpen && clienteSearch && (
+                      <div className="absolute z-10 w-full bg-white border rounded-xl shadow-lg max-h-60 overflow-auto mt-1">
+                        {clientesFiltrados.length === 0 ? (
+                          <div className="px-4 py-3 text-gray-500">Sin resultados</div>
+                        ) : (
+                          clientesFiltrados.map(c => (
+                            <div
+                              key={c.id_cliente}
+                              onClick={() => {
+                                setCliente(String(c.id_cliente));
+                                setClienteSearch(`${c.nombre} ${c.apellido}`);
+                                setClienteOpen(false);
+
+                                setSeleccionadas([]);
+                              }}
+                              className="px-4 py-3 hover:bg-gray-50 cursor-pointer transition-colors"
+                            >
+                              {c.nombre} {c.apellido}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold mb-2" style={{ color: '#686363' }}>
+                    Año
+                  </label>
+                  <select
+                    className="w-full px-4 py-3 rounded-xl border-2 transition-all duration-200 focus:outline-none focus:border-[#63bae9]"
+                    value={anio}
+                    onChange={(e) => setAnio(e.target.value)}
+                    style={{
+                      borderColor: anio ? '#63bae9' : '#e5e7eb',
+                      backgroundColor: anio ? '#f0f9ff' : 'white',
+                    }}
+                  >
+                    <option value="">Todos</option>
+                    {years.map((y) => (
+                      <option key={y} value={String(y)}>{y}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold mb-2" style={{ color: '#686363' }}>
+                    Mes
+                  </label>
+                  <select
+                    className="w-full px-4 py-3 rounded-xl border-2 transition-all duration-200 focus:outline-none focus:border-[#63bae9]"
+                    value={mes}
+                    onChange={(e) => setMes(e.target.value)}
+                    style={{
+                      borderColor: mes ? '#63bae9' : '#e5e7eb',
+                      backgroundColor: mes ? '#f0f9ff' : 'white',
+                    }}
+                  >
+                    <option value="">Todos</option>
+                    {[...Array(12)].map((_, i) => (
+                      <option key={i + 1} value={String(i + 1)}>
+                        {new Date(0, i).toLocaleString("es-AR", { month: "long" })}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <h2 className="font-bold text-xl mb-6 mt-12" style={{ color: '#686363' }}>
+                Ajuste IPC 
+              </h2>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
+                <div>
+                  <label className="block text-sm font-semibold mb-2" style={{ color: '#686363' }}>
+                    Mes IPC
+                  </label>
+                  <select
+                    className="w-full px-4 py-3 rounded-xl border-2 transition-all duration-200 focus:outline-none focus:border-[#63bae9]"
+                    value={mesIPC}
+                    onChange={(e) => setMesIPC(e.target.value)}
+                    style={{
+                      borderColor: mesIPC ? '#63bae9' : '#e5e7eb',
+                      backgroundColor: mesIPC ? '#f0f9ff' : 'white',
+                    }}
+                  >
+                    <option value="">Ninguno</option>
+                    {[...Array(12)].map((_, i) => (
+                      <option key={i + 1} value={String(i + 1)}>
+                        {new Date(0, i).toLocaleString("es-AR", { month: "long" })}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold mb-2" style={{ color: '#686363' }}>
+                    Año IPC
+                  </label>
+                  <select
+                    className="w-full px-4 py-3 rounded-xl border-2 transition-all duration-200 focus:outline-none focus:border-[#63bae9]"
+                    value={anioIPC}
+                    onChange={(e) => setAnioIPC(e.target.value)}
+                    style={{
+                      borderColor: anioIPC ? '#63bae9' : '#e5e7eb',
+                      backgroundColor: anioIPC ? '#f0f9ff' : 'white',
+                    }}
+                  >
+                    <option value="">Ninguno</option>
+                    {years.map((y) => (
+                      <option key={y} value={String(y)}>{y}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <h2 className="font-bold text-xl mb-6 mt-12" style={{ color: '#686363' }}>
+                Seleccionar Cobranzas
+              </h2>
+
+              <div className="space-y-4">
+                {cliente && loadingCobranzas && (
+                    <Loading message="Cargando cobranzas..." size="sm" />
+                  )}
+
+                {!cliente && (
+                  <div className="text-center py-8 text-gray-400 bg-gray-50 rounded-xl">
+                    Seleccioná un cliente para ver sus cobranzas
+                  </div>
+                )}
+
+                {cliente && !loadingCobranzas && cobranzas.length === 0 && (
+                  <div className="text-center py-8 text-gray-500 bg-gray-50 rounded-xl">
+                    Este cliente no tiene cobranzas pendientes
+                  </div>
+                )}
+
+                {!loadingCobranzas && cobranzas.map((c) => {
+                  const isSelected = seleccionadas.includes(c.id_cobranza);
+                  return (
+                    <label
+                      key={c.id_cobranza}
+                      className={`flex items-start gap-4 p-5 border-2 rounded-xl cursor-pointer transition-all duration-200 ${
+                        isSelected 
+                          ? 'bg-[#f0f9ff] border-[#63bae9]' 
+                          : 'bg-white border-gray-200 hover:border-gray-300'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggle(c.id_cobranza)}
+                        className="mt-1.5 w-5 h-5"
+                      />
+                      <div className="flex-1">
+                        <div className="font-semibold text-lg" style={{ color: '#686363' }}>
+                          {c.cliente.nombre} {c.cliente.apellido}
+                        </div>
+                        <div className="text-gray-600 mt-1">
+                          {c.concepto} — <span className="font-bold" style={{ color: '#63bae9' }}>
+                            ${c.monto.toLocaleString('es-AR')}
+                          </span>
+                          {c.fecha_cobranza && (
+                            <span className="ml-3 text-sm text-gray-400">
+                              ({new Date(c.fecha_cobranza).toLocaleDateString("es-AR")})
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+
+              <div className="flex justify-between mt-12 gap-6">
+                <button
+                  onClick={() => router.push("/rendiciones")}
+                  className="w-1/2 px-8 py-4 rounded-xl text-lg font-semibold text-gray-700 bg-white border-2 border-gray-200 hover:bg-gray-50 transition-all"
+                >
+                  Cancelar
+                </button>
+
+                <button
+                  onClick={() => {
+                    if (!validarGuardar()) return;
+
+                    setModalConfig({
+                      title: "Confirmar rendición",
+                      message: `¿Deseás rendir ${seleccionadas.length} cobranzas?`,
+                      variant: "warning",
+                      onConfirm: () => {
+                        guardarMutation.mutate();
+                        setModalOpen(false);
+                      },
+                    });
+
+                    setModalOpen(true);
+                  }}
+                  disabled={guardarMutation.isPending || seleccionadas.length === 0}
+                  className="w-1/2 px-8 py-4 rounded-xl text-lg font-bold text-white flex items-center justify-center gap-3 transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={{ backgroundColor: '#fcc238' }}
+                >
+                  {guardarMutation.isPending ? 'Guardando...' : 'Guardar Rendición'}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      <Modal
+        isOpen={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title={modalConfig.title}
+        message={modalConfig.message}
+        variant={modalConfig.variant}
+        onConfirm={modalConfig.onConfirm}
+      />
     </div>
   );
 }

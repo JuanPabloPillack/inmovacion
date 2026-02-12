@@ -3,6 +3,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { auth } from "../../../../../auth";
 
 /* =====================================================
    GET — obtener una cobranza por ID
@@ -21,7 +22,9 @@ export async function GET(req: NextRequest, { params }: any) {
       where: { id_cobranza },
       include: {
         cliente: true, // une información del cliente
-        inmueble: { include: { ubicacion: true } }, // inmueble + ubicación asociada
+        inmueble: { include: { ubicacion: true } }, 
+        createdBy: { select: { id: true, name: true, email: true } },
+        updatedBy: { select: { id: true, name: true, email: true } },
       },
     });
 
@@ -35,6 +38,18 @@ export async function GET(req: NextRequest, { params }: any) {
     // Creamos un objeto "mapeado" para enriquecer los datos
     const mapped = {
       ...cobranza,
+        createdBy: cobranza.createdBy
+          ? {
+              id_usuario: cobranza.createdBy.id,
+              nombre: cobranza.createdBy.name || cobranza.createdBy.email,
+            }
+          : null,
+        updatedBy: cobranza.updatedBy
+          ? {
+              id_usuario: cobranza.updatedBy.id,
+              nombre: cobranza.updatedBy.name || cobranza.updatedBy.email,
+            }
+          : null,
       inmueble: cobranza.inmueble
         ? {
             ...cobranza.inmueble,
@@ -61,42 +76,86 @@ export async function GET(req: NextRequest, { params }: any) {
 
 /* =====================================================
    DELETE — eliminar una cobranza por ID
+   (solo si está INACTIVA)
    ===================================================== */
 export async function DELETE(req: NextRequest, { params }: any) {
   const id_cobranza = Number(params.id);
 
   // Validación del ID
-  if (isNaN(id_cobranza))
-    return NextResponse.json({ error: "ID inválido." }, { status: 400 });
+  if (isNaN(id_cobranza)) {
+    return NextResponse.json(
+      { error: "ID inválido." },
+      { status: 400 }
+    );
+  }
 
   try {
-    // Primero verificamos que la cobranza exista
-    const cobranza = await db.cobranza.findUnique({ where: { id_cobranza } });
+    // Buscamos la cobranza
+    const cobranza = await db.cobranza.findUnique({
+      where: { id_cobranza },
+    });
 
-    if (!cobranza)
+    if (!cobranza) {
       return NextResponse.json(
         { error: "Cobranza no encontrada." },
         { status: 404 }
       );
+    }
 
-    // Eliminamos el registro de la BD
-    await db.cobranza.delete({ where: { id_cobranza } });
+    // 🚫 REGLA DE NEGOCIO: no se puede eliminar si está activa
+    if (cobranza.activa) {
+      return NextResponse.json(
+        { error: "No se puede eliminar una cobranza activa. Primero desactívela." },
+        { status: 409 } // conflicto de estado
+      );
+    }
 
-    return NextResponse.json({ message: "Eliminada correctamente." });
+    // ✅ Eliminamos solo si está inactiva
+    await db.cobranza.delete({
+      where: { id_cobranza },
+    });
+
+    return NextResponse.json({
+      message: "Cobranza eliminada correctamente.",
+    });
   } catch (error) {
     console.error("❌ Error DELETE /cobranzas/[id]:", error);
     return NextResponse.json(
-      { error: "Error al eliminar." },
+      { error: "Error al eliminar la cobranza." },
       { status: 500 }
     );
   }
 }
+
 
 /* =====================================================
    PUT — actualizar una cobranza existente
    ===================================================== */
 export async function PUT(req: NextRequest, { params }: any) {
   const id_cobranza = Number(params.id);
+
+  const session = await auth();
+
+  if (!session?.user?.id) {
+    return NextResponse.json(
+      { error: "No autenticado" },
+      { status: 401 }
+    );
+  }
+
+  const userId = session.user.id;
+
+  const user =
+    (await db.user.findUnique({ where: { id: userId } })) ??
+    (await db.user.create({
+      data: {
+        id: userId,
+        name: session.user.name ?? "Usuario",
+        email: session.user.email ?? `user_${userId}@example.com`,
+      },
+    }));
+
+
 
   if (isNaN(id_cobranza))
     return NextResponse.json({ error: "ID inválido." }, { status: 400 });
@@ -151,6 +210,9 @@ export async function PUT(req: NextRequest, { params }: any) {
     }
 
     if ("activa" in body) dataToUpdate.activa = Boolean(body.activa);
+
+    dataToUpdate.updatedById = user.id;
+
 
     // Ejecutamos la actualización
     const updated = await db.cobranza.update({

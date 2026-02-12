@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // app/api/rendiciones/[id]/excel/route.ts
 
 // Importamos utilidades del runtime de Next.js
@@ -7,7 +8,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 
 // Función que genera el archivo Excel
-import { generarExcelRendicion } from "@/lib/excelGenerator";
+import { generarExcelRendicion, IPCData } from "@/lib/excelGenerator";
 
 /* --------------------------------------------------------------------------
    FUNCION HELPER → calcularSaldoAnterior
@@ -79,23 +80,35 @@ export async function GET(
       );
 
     /* ----------------------------------------------------------------------
-       3) Calcular IPC si la rendición tiene mes_ipc y anio_ipc configurados
-       ---------------------------------------------------------------------- */
-    const ipcDataRaw =
-      rend.mes_ipc && rend.anio_ipc
-        ? await db.ipc.findFirst({
-            where: {
-              mes: rend.mes_ipc,
-              anio: rend.anio_ipc,
-            },
-          })
-        : null;
+   3) Calcular IPC si la rendición tiene mes_ipc y anio_ipc configurados
+      ---------------------------------------------------------------------- */
+    // 🔥 FIX DEFINITIVO IPC
+    let ipcDataRaw = null;
 
-    const ipc = {
-      mes: rend.mes_ipc,
-      anio: rend.anio_ipc,
-      valor: ipcDataRaw?.valor?.toNumber() ?? null, // null si no existe
-    };
+    if (rend.mes_ipc != null && rend.anio_ipc != null) {
+
+      ipcDataRaw = await db.ipc.findFirst({
+        where: {
+          mes: Number(rend.mes_ipc),
+          anio: Number(rend.anio_ipc),
+        },
+      });
+
+    }
+
+    // objeto ipc final
+    const ipc: IPCData = {
+        mes: rend.mes_ipc ?? null,
+        anio: rend.anio_ipc ?? null,
+        valor:
+          ipcDataRaw?.valor != null
+            ? Number(ipcDataRaw.valor)   // ✅ SIN dividir
+            : null,
+      };
+
+
+
+
 
     /* ----------------------------------------------------------------------
        4) Calcular S A L D O   A N T E R I O R
@@ -111,84 +124,110 @@ export async function GET(
        Calculamos derivados: total_cobrar, total_cobrado, a_cobrar, etc.
        ---------------------------------------------------------------------- */
     const cobranzasForExcel = rend.cobranzas.map((c) => {
-      const montoBase = Number(c.monto);
 
-      // Aplicación del IPC si corresponde
-      const totalCobrar =
-        ipc.valor && ipc.valor !== 1
-          ? Number((montoBase * ipc.valor).toFixed(2))
+        const montoBase = Number(c.monto ?? 0);
+
+      // ✅ IPC correcto (valor congelado en DB)
+      const montoActualizado =
+        (c as any).monto_actualizado != null
+          ? Number((c as any).monto_actualizado)
           : montoBase;
 
-      const totalCobr = c.pagado ? totalCobrar : 0;
-      const aCobrar = totalCobrar - totalCobr;
+      const totalCobrar = montoActualizado;
 
-      // Ejemplo: "San Martín 123: Dpto 4B"
-      const unFunc = c.inmueble
-        ? `${c.inmueble.ubicacion?.direccion || ""}: ${
-            c.inmueble.titulo || ""
-          }`.trim()
-        : "";
+      const totalCobr =
+        c.pagado
+          ? totalCobrar
+          : 0;
 
-      // Placeholder si no hay relación real con contratos
-      const contratoStr = c.id_contrato ? `Contrato ${c.id_contrato}` : "";
+      const aCobrar =
+        totalCobrar - totalCobr;
 
-      // Texto para indicar ajuste por IPC
-      const ipcAumentoStr =
-        ipc.valor && ipc.valor !== 1
-          ? `IPC ${ipc.anio ?? ""} - Ajuste ${(
-              (ipc.valor - 1) *
-              100
-            ).toFixed(2)}%`
+
+        const unFunc = c.inmueble
+          ? `${c.inmueble.ubicacion?.direccion || ""}: ${
+              c.inmueble.titulo || ""
+            }`.trim()
           : "";
 
-      return {
-        id_cobranza: c.id_cobranza,
-        id_inmueble: c.id_inmueble,
-        id_contrato: c.id_contrato,
+        const contratoStr =
+          c.id_contrato
+            ? `Contrato ${c.id_contrato}`
+            : "";
 
-        cliente: {
-          nombre: c.cliente.nombre,
-          email: c.cliente.email,
-          telefono: c.cliente.telefono,
-        },
+        const ipcAumentoStr =
+          ipc.valor != null
+            ? `IPC ${ipc.mes}/${ipc.anio}`
+            : "";
 
-        inmueble: c.inmueble
-          ? {
-              titulo: c.inmueble.titulo,
-              ubicacion: {
-                direccion: c.inmueble.ubicacion?.direccion || "",
-              },
-            }
-          : undefined,
+        return {
 
-        concepto: c.concepto,
-        monto: montoBase,
-        fecha_cobranza: c.fecha_cobranza.toISOString().substring(0, 10),
-        numero_recibo: c.numero_recibo ?? c.recibo?.id_recibo ?? null,
-        genera_recibo: c.genera_recibo,
-        pagado: c.pagado,
-        observaciones: c.observaciones,
+          id_cobranza: c.id_cobranza,
+          id_inmueble: c.id_inmueble,
+          id_contrato: c.id_contrato,
 
-        // Derivados
-        total_cobrar: totalCobrar,
-        total_cobrado: totalCobr,
-        a_cobrar: aCobrar,
-        unFuncional: unFunc,
-        contratoStr,
-        ipcAumento: ipcAumentoStr,
-        ipcValor: ipc.valor,
-      };
-    });
+          cliente: {
+              nombre: c.cliente.nombre ?? "",
+              apellido: c.cliente.apellido ?? "",
+              email: c.cliente.email ?? "",
+              telefono: c.cliente.telefono ?? "",
+            },
+          inmueble: c.inmueble
+            ? {
+                titulo: c.inmueble.titulo,
+                ubicacion: {
+                  direccion:
+                    c.inmueble.ubicacion?.direccion || "",
+                },
+              }
+            : undefined,
+
+          concepto: c.concepto,
+          monto: montoBase,
+
+          fecha_cobranza:
+            c.fecha_cobranza
+              .toISOString()
+              .substring(0, 10),
+
+          numero_recibo:
+            c.numero_recibo ??
+            c.recibo?.id_recibo ??
+            null,
+
+          genera_recibo: c.genera_recibo,
+          pagado: c.pagado,
+          observaciones: c.observaciones,
+
+          total_cobrar: totalCobrar,
+          total_cobrado: totalCobr,
+          a_cobrar: aCobrar,
+
+          unFuncional: unFunc,
+          contratoStr,
+
+          ipcAumento: ipcAumentoStr,
+
+          ipcValor: ipc.valor,
+
+        };
+
+      });
+
+            console.log("IPC usado:", ipc);
+console.log("ipc.valor:", ipc?.valor);
+console.log("cobranzasForExcel:", cobranzasForExcel);
+
 
     /* ----------------------------------------------------------------------
        6) Generar el Excel FINAL
        ---------------------------------------------------------------------- */
     const excelBuffer = await generarExcelRendicion(
+
       rend.id_rendicion, // nombre del archivo
       rend.fecha.toISOString().substring(0, 10),
       cobranzasForExcel,
-      ipc,
-      saldoAnterior
+      ipc
     );
 
     const uint8Array = new Uint8Array(excelBuffer);

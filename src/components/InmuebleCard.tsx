@@ -1,18 +1,28 @@
+// src/components/InmuebleCard.tsx
 "use client";
 import Image from "next/image";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import type { InmuebleDTO } from "@/types/inmuebles";
-import { ChevronLeft, ChevronRight } from "lucide-react";
-
 import type { FiltrosInmueble } from "@/types/filtros";
+import {
+  ChevronLeft,
+  ChevronRight,
+  BedDouble,
+  Bath,
+  Car,
+  Ruler,
+  MapPin,
+  Clock,
+  Home,
+} from "lucide-react";
+
 
 interface Props {
   inmueble: InmuebleDTO;
-  filtrosAplicados?: FiltrosInmueble; // 👈 se agregan los filtros aquí
+  filtrosAplicados?: FiltrosInmueble;
 }
 
 export default function InmuebleCard({ inmueble, filtrosAplicados }: Props) {
-  // Ordenar imágenes: principal primero
   const orderedImages = useMemo(() => {
     if (!inmueble.imagenes?.length) return [];
     return [...inmueble.imagenes].sort((a, b) =>
@@ -21,137 +31,288 @@ export default function InmuebleCard({ inmueble, filtrosAplicados }: Props) {
   }, [inmueble.imagenes]);
 
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
-  const images = orderedImages.map((img) => img.url);
+  const images = orderedImages
+    .slice(0, 10) // ⬅️ máximo 10 imágenes en el card
+    .map((img) => img.url);
 
-  const handlePrevImage = () =>
-    setCurrentImageIndex((prev) => (prev > 0 ? prev - 1 : images.length - 1));
+    const hasImages = images.length > 0;
 
-  const handleNextImage = () =>
-    setCurrentImageIndex((prev) => (prev < images.length - 1 ? prev + 1 : 0));
 
-  const direccion = inmueble.ubicacion?.direccion ?? "Desconocida";
-  const barrio = inmueble.ubicacion?.barrio?.nombre ?? "Desconocido";
-  const ciudad = inmueble.ubicacion?.ciudad ?? "Desconocida";
-  const provincia = inmueble.ubicacion?.provincia ?? "Desconocida";
+  const handlePrev = useCallback(() => {
+  setCurrentImageIndex((prev) =>
+    prev > 0 ? prev - 1 : images.length - 1
+  );
+  }, [images.length]);
+
+  const handleNext = useCallback(() => {
+    setCurrentImageIndex((prev) =>
+      prev < images.length - 1 ? prev + 1 : 0
+    );
+  }, [images.length]);
+
+  const precioFormatted = inmueble.precio
+    ? new Intl.NumberFormat("es-AR", {
+        style: "currency",
+        currency: "ARS",
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+      }).format(inmueble.precio)
+    : "Consultar precio";
+
+  const ubicacionTexto = [
+    inmueble.ubicacion?.direccion,
+    inmueble.ubicacion?.barrio?.nombre,
+    inmueble.ubicacion?.barrio?.localidad?.nombre,
+    inmueble.ubicacion?.provincia,
+  ]
+    .filter(Boolean)
+    .join(", ");
+
+  // Función auxiliar para manejar singular/plural
+  const pluralizar = (
+    cantidad: number | null | undefined,
+    singular: string,
+    plural: string
+  ) => {
+    if (cantidad == null) return plural; // para N/A o null → plural por convención
+    return cantidad === 1 ? singular : plural;
+  };
+
+  useEffect(() => {
+    images.forEach((src) => {
+      const img = new window.Image();
+      img.src = src;
+    });
+  }, [images]);
+
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-8 bg-gray-100 p-6 rounded-xl shadow-md">
+    <div
+      className="
+        group relative bg-white rounded-2xl shadow-md overflow-hidden 
+        border border-gray-200 hover:shadow-xl hover:border-[#63bae9]/40 
+        transition-all duration-300
+      "
+    >
+      <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] h-full">
+        {/* IMAGEN – lado izquierdo, más grande */}
+        <div className="relative h-72 lg:h-auto overflow-hidden">
+          <Image
+            src={images[currentImageIndex] || inmueble.fotoPrincipal || "/placeholder-large.jpg"}
+            alt={inmueble.titulo || "Propiedad inmobiliaria"}
+            fill
+            priority={currentImageIndex === 0}
+            loading={currentImageIndex === 0 ? "eager" : "lazy"}
+            className="object-cover transition-transform duration-700 group-hover:scale-[1.06]"
+            sizes="(max-width: 1024px) 100vw, 55vw"
+          />
 
-      {/* 🖼 Galería */}
-      <div className="relative w-full md:col-span-2 h-80 md:h-96 rounded-md overflow-hidden">
-        <Image
-          src={images[currentImageIndex] || inmueble.fotoPrincipal || "/placeholder.jpg"}
-          alt={inmueble.titulo || "Imagen de inmueble"}
-          fill
-          className="object-cover"
-        />
 
-        {images.length > 1 && (
-          <>
-            <button
-              onClick={handlePrevImage}
-              className="absolute left-2 top-1/2 -translate-y-1/2 bg-white shadow-md rounded-full p-2 hover:bg-blue-500 hover:text-white transition"
-            >
-              <ChevronLeft className="w-6 h-6" />
-            </button>
+          {/* Overlay + controles galería */}
+          <div
+            className="
+              absolute inset-0 bg-gradient-to-t from-black/50 via-transparent 
+              to-transparent opacity-0 group-hover:opacity-100 
+              transition-opacity duration-400
+            "
+          />
 
-            <button
-              onClick={handleNextImage}
-              className="absolute right-2 top-1/2 -translate-y-1/2 bg-white shadow-md rounded-full p-2 hover:bg-blue-500 hover:text-white transition"
-            >
-              <ChevronRight className="w-6 h-6" />
-            </button>
+          {hasImages && images.length > 1 && (
+            <>
+              <button
+                onClick={handlePrev}
+                className="
+                  absolute left-4 top-1/2 -translate-y-1/2 
+                  bg-white/90 backdrop-blur-md text-gray-800 
+                  p-3 rounded-full shadow-lg 
+                  hover:bg-[#63bae9] hover:text-white 
+                  transition-all duration-200 opacity-80 hover:opacity-100
+                "
+                aria-label="Imagen anterior"
+              >
+                <ChevronLeft className="w-6 h-6" />
+              </button>
 
-            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex space-x-2">
-              {images.map((_, index) => (
-                <span
-                  key={index}
-                  className={`w-2 h-2 rounded-full ${
-                    index === currentImageIndex ? "bg-blue-500" : "bg-gray-300"
-                  }`}
-                />
-              ))}
-            </div>
-          </>
-        )}
-      </div>
+              <button
+                onClick={handleNext}
+                className="
+                  absolute right-4 top-1/2 -translate-y-1/2 
+                  bg-white/90 backdrop-blur-md text-gray-800 
+                  p-3 rounded-full shadow-lg 
+                  hover:bg-[#63bae9] hover:text-white 
+                  transition-all duration-200 opacity-80 hover:opacity-100
+                "
+                aria-label="Imagen siguiente"
+              >
+                <ChevronRight className="w-6 h-6" />
+              </button>
 
-      {/* 📄 Detalles */}
-      <div className="bg-white p-4 rounded-md flex flex-col justify-between">
-
-        <div>
-          <h2 className="text-2xl font-semibold mb-2">{inmueble.titulo}</h2>
-
-          {inmueble.detalles && inmueble.detalles.trim() !== "" && (
-            <p className="text-gray-700 mb-2">{inmueble.detalles}</p>
+              <div className="absolute bottom-5 left-1/2 -translate-x-1/2 flex gap-2.5">
+                {images.map((_, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setCurrentImageIndex(idx)}
+                    className={`
+                      w-3 h-3 rounded-full transition-all duration-300 
+                      ${idx === currentImageIndex
+                        ? "bg-[#63bae9] scale-125 shadow-md"
+                        : "bg-white/80 hover:bg-white"}
+                    `}
+                    aria-label={`Ir a imagen ${idx + 1}`}
+                  />
+                ))}
+              </div>
+            </>
           )}
+        </div>
 
-          <p className="text-gray-700 mt-1">
-            Dirección: {direccion}, {ciudad}, {provincia}
-          </p>
+        {/* CONTENIDO – lado derecho */}
+        <div className="p-6 lg:p-8 flex flex-col gap-5 lg:gap-6">
+          <div>
+            <h2
+              className="
+                text-xl lg:text-2xl font-bold text-gray-800 
+                group-hover:text-[#63bae9] transition-colors 
+                line-clamp-2 mb-2
+              "
+            >
+              {inmueble.titulo}
+            </h2>
 
-          <p className="text-gray-700 mt-1">
-            Superficie Total: {inmueble.superficie_total} m² | Cubierta:{" "}
-            {inmueble.superficie_cubierta ?? "N/A"} m²
-          </p>
+            {ubicacionTexto ? (
+              <div className="flex items-center gap-2 text-gray-600 text-sm">
+                <MapPin className="w-4.5 h-4.5 flex-shrink-0" />
+                <span className="line-clamp-1">{ubicacionTexto}</span>
+              </div>
+            ) : (
+              <div className="text-sm text-gray-500">Ubicación no especificada</div>
+            )}
+          </div>
 
-          <p className="text-gray-700 mt-1">
-            Baños: {inmueble.cantidad_banos ?? "N/A"} | Dormitorios:{" "}
-            {inmueble.cantidad_dormitorios ?? "N/A"} | Cocheras:{" "}
-            {inmueble.cantidad_cocheras ?? "N/A"} | Pisos:{" "}
-            {inmueble.cantidad_pisos ?? "N/A"}
-          </p>
+          {/* PRECIO destacado */}
+          <div
+            className="
+              text-3xl lg:text-4xl font-extrabold text-[#63bae9] 
+              tracking-tight flex items-baseline gap-2
+            "
+          >
+            {precioFormatted}
+            <span className="text-xl font-normal text-gray-500">ARS</span>
+          </div>
 
-          <p className="text-gray-700 mt-1">
-            Antigüedad: {inmueble.antiguedad ?? "N/A"} años
-          </p>
+          {/* Características */}
+          <div className="grid grid-cols-4 gap-5 py-5 border-y border-gray-100 text-center">
+            <div>
+              <Ruler className="w-6 h-6 mx-auto mb-2 text-gray-500" />
+              <div className="font-semibold text-lg">
+                {inmueble.superficie_total || "—"} m²
+              </div>
+              <div className="text-xs text-gray-500 mt-0.5">Total</div>
+            </div>
 
-          <p className="text-gray-700 mt-1 font-semibold">
-            Precio: ${inmueble.precio?.toLocaleString() || "N/A"}
-          </p>
+            <div>
+              <Home className="w-6 h-6 mx-auto mb-2 text-gray-500" />
+              <div className="font-semibold text-lg">
+                {inmueble.superficie_cubierta || "—"} m²
+              </div>
+              <div className="text-xs text-gray-500 mt-0.5">Cubierta</div>
+            </div>
 
-          {/* 🔵 Filtros aplicados */}
-          {filtrosAplicados && (
-            <div className="mt-4">
-              <h4 className="font-semibold text-gray-800 text-lg mb-2">
-                Filtros aplicados
-              </h4>
+            <div>
+              <BedDouble className="w-6 h-6 mx-auto mb-2 text-gray-500" />
+              <div className="font-semibold text-lg">
+                {inmueble.cantidad_dormitorios ?? "—"}
+              </div>
+              <div className="text-xs text-gray-500 mt-0.5">Dorm.</div>
+            </div>
 
-              <div className="flex flex-wrap gap-2">
-                {Object.entries(filtrosAplicados).map(([key, value]) =>
-                  value ? (
-                    <span
-                      key={key}
-                      className="bg-blue-100 text-blue-600 px-3 py-1 rounded-full text-sm font-medium"
+            <div>
+              <Bath className="w-6 h-6 mx-auto mb-2 text-gray-500" />
+              <div className="font-semibold text-lg">
+                {inmueble.cantidad_banos ?? "—"}
+              </div>
+              <div className="text-xs text-gray-500 mt-0.5">
+                {pluralizar(inmueble.cantidad_banos, "Baño", "Baños")}
+              </div>
+            </div>
+          </div>
+
+          {/* Info adicional + contacto */}
+          <div className="space-y-3 text-sm text-gray-700 mt-auto">
+            {inmueble.antiguedad && (
+              <div className="flex items-center gap-2.5">
+                <Clock className="w-5 h-5 text-gray-500" />
+                <span>Antigüedad: {inmueble.antiguedad} años</span>
+              </div>
+            )}
+
+            {inmueble.cantidad_cocheras != null && (
+              <div className="flex items-center gap-2.5">
+                <Car className="w-5 h-5 text-gray-500" />
+                <span>
+                  {inmueble.cantidad_cocheras}{" "}
+                  {pluralizar(inmueble.cantidad_cocheras, "cochera", "cocheras")}
+                </span>
+              </div>
+            )}
+
+            <div className="pt-4 mt-2 border-t border-gray-100">
+              <div className="flex items-center justify-between text-sm">
+                <div className="flex items-center gap-3">
+                  <div
+                    className="
+                      w-10 h-10 rounded-full bg-[#63bae9]/10 
+                      flex items-center justify-center text-[#63bae9] font-bold
+                    "
+                  >
+                    GB
+                  </div>
+                  <div>
+                    <p className="font-medium text-gray-800">
+                      GBS y Asociados
+                    </p>
+                    <a
+                      href="https://instagram.com/gbsyasociados"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[#63bae9] hover:underline text-xs"
                     >
-                      {key}: {value}
-                    </span>
-                  ) : null
+                      @gbsyasociados
+                    </a>
+                  </div>
+                </div>
+
+                <span className="flex items-center gap-2 text-gray-700">
+                <span className="text-lg">📞</span>
+                +54 343 6205284
+              </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Filtros aplicados (opcional) */}
+          {filtrosAplicados && Object.values(filtrosAplicados).some(Boolean) && (
+            <div className="pt-3">
+              <p className="text-xs text-gray-500 mb-2">Filtros:</p>
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(filtrosAplicados).map(
+                  ([k, v]) =>
+                    v && (
+                      <span
+                        key={k}
+                        className="
+                          px-3 py-1 bg-[#63bae9]/10 text-[#63bae9] 
+                          text-xs rounded-full border border-[#63bae9]/20
+                        "
+                      >
+                        {k}: {v}
+                      </span>
+                    )
                 )}
               </div>
             </div>
           )}
         </div>
-
-        {/* Contacto */}
-        <div className="mt-4">
-          <h3 className="text-lg font-semibold">Contacto</h3>
-          <p className="text-gray-700 flex items-center">
-            <span className="mr-2">📞</span> +54 343-6205284
-          </p>
-          <p className="text-gray-700 mt-2 flex items-center">
-            <span className="mr-2">📷</span>
-            <a
-              href="https://instagram.com/gbsyasociados"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-blue-600 hover:underline"
-            >
-              gbsyasociados
-            </a>
-          </p>
-        </div>
-
       </div>
     </div>
   );
