@@ -1,3 +1,4 @@
+
 // src/app/(protected)/rendiciones/page.tsx
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
