@@ -547,7 +547,7 @@ const handleSubmit = (e: React.FormEvent) => {
             className="w-full px-4 py-2.5 border rounded-lg"
             required
           >
-            <option value="">Seleccione un tipo</option>
+            <option value="" disabled hidden>Seleccione un tipo</option>
             {tipos.map((t) => (
               <option key={t.id_tipo_inmueble} value={t.id_tipo_inmueble}>
                 {t.nombre}
@@ -567,7 +567,7 @@ const handleSubmit = (e: React.FormEvent) => {
             onChange={(e) => setSelectedOperacion(Number(e.target.value))}
             className="w-full px-4 py-2.5 border rounded-lg"
           >
-            <option value="">Seleccione una operación</option>
+            <option value="" disabled hidden>Seleccione una operación</option>
             {operaciones.map((o) => (
               <option key={o.id_operacion} value={o.id_operacion}>
                 {o.nombre}
@@ -588,7 +588,7 @@ const handleSubmit = (e: React.FormEvent) => {
             className="w-full px-4 py-2.5 border rounded-lg"
             required
           >
-            <option value="">Seleccione un estado</option>
+            <option value="" disabled hidden>Seleccione un estado</option>
             {estados.map((e) => (
               <option key={e.id_estado} value={e.id_estado}>
                 {e.nombre}
@@ -609,7 +609,7 @@ const handleSubmit = (e: React.FormEvent) => {
             className="w-full px-4 py-2.5 border rounded-lg"
             required
           >
-            <option value="">Seleccione un propietario</option>
+            <option value="" disabled hidden>Seleccione un propietario</option>
             {clientes.map((c) => (
               <option key={c.id_cliente} value={c.id_cliente}>
                 {c.nombre} {c.apellido}

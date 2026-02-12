@@ -459,30 +459,35 @@ export async function POST(req: NextRequest) {
 
 
     // ========================================================
-    // IPC 
-    // ========================================================
-    let ipcValor: number | null = null;
+// IPC 
+// ========================================================
+let ipcValor: number | null = null;
 
-    if (mes_ipc != null && anio_ipc != null) {
-      const ipc = await db.ipc.findFirst({
-        where: {
-          mes: Number(mes_ipc),
-          anio: Number(anio_ipc),
-        },
-      });
+if (mes_ipc != null && anio_ipc != null) {
+  const ipc = await db.ipc.findFirst({
+    where: {
+      mes: Number(mes_ipc),
+      anio: Number(anio_ipc),
+    },
+  });
 
-      if (!ipc) {
-        throw new Error(`No existe IPC para ${mes_ipc}/${anio_ipc}`);
-      }
+  if (!ipc) {
+    return NextResponse.json(
+      {
+        error: `No existe IPC cargado para ${mes_ipc}/${anio_ipc}`,
+        code: "IPC_NOT_FOUND",
+      },
+      { status: 400 }
+    );
+  }
 
-      ipcValor = Number(ipc.valor);
+  ipcValor = Number(ipc.valor);
 
-      // ✅ por si viene como 12 en vez de 0.12
-      if (ipcValor > 1) {
-        ipcValor = ipcValor / 100;
-      }
-    }
-
+  // ✅ por si viene como 12 en vez de 0.12
+  if (ipcValor > 1) {
+    ipcValor = ipcValor / 100;
+  }
+}
 
 
 

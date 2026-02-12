@@ -63,18 +63,25 @@ export default function IpcManagementPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<IpcData | null>(null);
 
-  const deleteIpcMutation = useMutation({
+ const deleteIpcMutation = useMutation({
   mutationFn: async (id: number) => {
     const res = await fetch(`/api/rendiciones/ipc?id=${id}`, {
       method: 'DELETE',
     });
+
     if (!res.ok) throw new Error();
   },
+
   onSuccess: () => {
     toast.success('Dato de IPC eliminado');
+
+    // ✅ ESTO ES LO QUE TE FALTA
+    queryClient.invalidateQueries({ queryKey: ['ipc'] });
+
     setModalOpen(false);
     setItemToDelete(null);
   },
+
   onError: () => {
     toast.error('No se pudo eliminar el IPC');
   },
@@ -286,17 +293,17 @@ const years = Array.from(
   // 📌 Formatear número del IPC con decimales
   // ============================================================
   const formatValor = (valor: number | string | null) => {
-    if (valor === null || valor === undefined) return 'N/A';
+  if (valor === null || valor === undefined) return 'N/A';
 
-    const num = typeof valor === 'string' ? parseFloat(valor) : valor;
+  const num = typeof valor === 'string' ? parseFloat(valor) : valor;
 
-    return isNaN(num)
-      ? 'N/A'
-      : num.toLocaleString('es-ES', {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2,
-        });
-  };
+  if (isNaN(num)) return 'N/A';
+
+  return (num * 100).toLocaleString('es-ES', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+};
 
 
   const filteredData = filterYear

@@ -31,6 +31,7 @@ export async function GET(req: NextRequest) {
     const operacionId = searchParams.get("operacionId");
     const precioMin   = searchParams.get("precioMin");
     const precioMax   = searchParams.get("precioMax");
+    const archivadoParam = searchParams.get("archivado");
     const page        = Number(searchParams.get("page") ?? "1");
     const pageSize    = Number(searchParams.get("pageSize") ?? "20");
 
@@ -46,8 +47,12 @@ export async function GET(req: NextRequest) {
       if (precioMax) where.precio.lte = toDecimalOrUndefined(precioMax);
     }
 
-    // Opcional: filtrar por defecto solo no archivados
-    // where.archivado = false;
+    if (archivadoParam !== null) {
+  where.archivado = archivadoParam === "true";
+} else {
+  // por defecto solo mostrar activos
+  where.archivado = false;
+}
 
     const [inmuebles, total] = await Promise.all([
       db.inmueble.findMany({
@@ -96,9 +101,12 @@ export async function GET(req: NextRequest) {
           },
 
           imagenes: {
-              orderBy: { principal: 'desc' },          // principal primero (true > false)
-              select: { url: true, principal: true },  // puedes traer principal si lo necesitas después
-            },
+  select: {
+    id: true,
+    url: true,
+    principal: true
+  }
+},
 
           // Auditoría completa (como en tu versión original)
           createdBy: { select: { id: true, name: true, email: true } },
@@ -111,38 +119,49 @@ export async function GET(req: NextRequest) {
       db.inmueble.count({ where }),
     ]);
 
-    const formatted = inmuebles.map((i) => ({
-      ...i,
-      superficie_total: Number(i.superficie_total),
-      superficie_cubierta: i.superficie_cubierta
-        ? Number(i.superficie_cubierta)
-        : null,
-      precio: i.precio ? Number(i.precio) : null,
+    const formatted = inmuebles.map((i) => {
+  const imagenes = i.imagenes ?? [];
 
-      // Mismo mapeo que tenías antes → la grilla verá exactamente lo mismo
-      createdBy: i.createdBy
-        ? {
-            id_usuario: String(i.createdBy.id),
-            nombre:
-              i.createdBy.name ||
-              i.createdBy.email ||
-              "Usuario desconocido",
-          }
-        : undefined,
+  const fotoPrincipal =
+    imagenes.find((img) => img.principal)?.url ||
+    imagenes[0]?.url ||
+    "/placeholder.jpg";
 
-      updatedBy: i.updatedBy
-        ? {
-            id_usuario: String(i.updatedBy.id),
-            nombre:
-              i.updatedBy.name ||
-              i.updatedBy.email ||
-              "Usuario desconocido",
-          }
-        : undefined,
+  return {
+    ...i,
+    fotoPrincipal,
+    imagenes,
 
-      createdAt: i.createdAt?.toISOString(),
-      updatedAt: i.updatedAt?.toISOString(),
-    }));
+    superficie_total: Number(i.superficie_total),
+    superficie_cubierta: i.superficie_cubierta
+      ? Number(i.superficie_cubierta)
+      : null,
+    precio: i.precio ? Number(i.precio) : null,
+
+    createdBy: i.createdBy
+      ? {
+          id_usuario: String(i.createdBy.id),
+          nombre:
+            i.createdBy.name ||
+            i.createdBy.email ||
+            "Usuario desconocido",
+        }
+      : undefined,
+
+    updatedBy: i.updatedBy
+      ? {
+          id_usuario: String(i.updatedBy.id),
+          nombre:
+            i.updatedBy.name ||
+            i.updatedBy.email ||
+            "Usuario desconocido",
+        }
+      : undefined,
+
+    createdAt: i.createdAt?.toISOString(),
+    updatedAt: i.updatedAt?.toISOString(),
+  };
+});
 
     return NextResponse.json({
       data: formatted,

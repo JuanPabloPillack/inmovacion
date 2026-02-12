@@ -13,8 +13,6 @@ import Header from '@/components/ui/Header';
 import InmuebleCard from '@/components/InmuebleCard';
 import Filtros from '@/components/Filtros';
 
-import toast, { Toaster } from 'react-hot-toast';
-
 import type { InmuebleDTO } from '@/types/inmuebles';
 import type { FiltrosInmueble } from '@/types/filtros';
 import Loading from '@/components/ui/Loading';
@@ -46,6 +44,7 @@ export default function PropiedadesPage() {
     const params = new URLSearchParams({
       page: paginaActivos.toString(),
       pageSize: inmueblesPorPagina.toString(),
+      archivado: "false",
       ...(filtros.tipoId && { tipoId: filtros.tipoId.toString() }),
       ...(filtros.estadoId && { estadoId: filtros.estadoId.toString() }),
       ...(filtros.operacionId && { operacionId: filtros.operacionId.toString() }),
@@ -80,13 +79,40 @@ export default function PropiedadesPage() {
   const inmuebles: InmuebleLocal[] =
   data?.data?.map((i: InmuebleDTO) => ({
     ...i,
-    archivadoLocal: i.estado?.nombre?.toLowerCase() !== 'disponible',
+    archivadoLocal: Boolean(i.archivado),
   })) ?? [];
 
 const totalActivos = data?.total ?? 0;
 const totalPagesActivos = data?.totalPages ?? 1;
 
+const fetchArchivados = async () => {
+  const params = new URLSearchParams({
+    page: paginaArchivados.toString(),
+    pageSize: inmueblesPorPagina.toString(),
 
+    archivado: "true",
+
+    ...(filtros.tipoId && { tipoId: filtros.tipoId.toString() }),
+    ...(filtros.estadoId && { estadoId: filtros.estadoId.toString() }),
+    ...(filtros.operacionId && { operacionId: filtros.operacionId.toString() }),
+    ...(filtros.precioMin && { precioMin: filtros.precioMin.toString() }),
+    ...(filtros.precioMax && { precioMax: filtros.precioMax.toString() }),
+  });
+
+  const res = await fetch(`/api/inmuebles?${params.toString()}`);
+
+  if (!res.ok) throw new Error();
+
+  return res.json();
+};
+
+const {
+  data: dataArchivados,
+} = useQuery({
+  queryKey: ['inmueblesArchivados', paginaArchivados],
+  queryFn: fetchArchivados,
+  placeholderData: (prev) => prev,
+});
   
 
 
@@ -107,13 +133,6 @@ const totalPagesActivos = data?.totalPages ?? 1;
 
     if (!res.ok) throw new Error();
   },
-  onSuccess: () => {
-    toast.success('Estado actualizado');
-    queryClient.invalidateQueries({ queryKey: ['inmuebles'] });
-  },
-  onError: () => {
-    toast.error('Error al actualizar');
-  },
 });
 
 
@@ -128,47 +147,149 @@ const totalPagesActivos = data?.totalPages ?? 1;
     message: "",
   });
 
-  const handleEliminar = (id: number) => {
-    setModalConfig({
-      title: "Eliminar propiedad",
-      message: "¿Estás seguro? Esta acción no se puede deshacer.",
-      variant: "danger",
-      onConfirm: async () => {
-        try {
-          const res = await fetch(`/api/inmuebles/${id}`, { method: "DELETE" });
-          if (!res.ok) throw new Error();
-
-          toast.success("Propiedad eliminada");
-          queryClient.invalidateQueries({ queryKey: ['inmuebles'] });
-          setModalOpen(false);
-        } catch {
-          toast.error("No se pudo eliminar la propiedad");
-        }
-      },
+  const deleteMutation = useMutation({
+  mutationFn: async (id: number) => {
+    const res = await fetch(`/api/inmuebles/${id}`, {
+      method: "DELETE",
     });
-    setModalOpen(true);
-  };
 
+    if (!res.ok) {
+      throw new Error("ERROR_DELETE");
+    }
+
+    // si es 204 no hay body
+    if (res.status === 204) {
+      return { archived: false };
+    }
+
+    // si es soft delete viene JSON
+    return await res.json();
+  },
+
+  onSuccess: async (data) => {
+
+    // 🔥 Forzar refetch inmediato
+    await queryClient.refetchQueries({ queryKey: ["inmuebles"] });
+    await queryClient.refetchQueries({ queryKey: ["inmueblesArchivados"] });
+
+    setModalConfig({
+      title: data?.archived
+        ? "Propiedad archivada"
+        : "Propiedad eliminada",
+      message: data?.archived
+        ? "No se pudo eliminar porque tiene relaciones. Se archivó correctamente."
+        : "Propiedad eliminada correctamente",
+      variant: "success",
+    });
+
+    setModalOpen(true);
+  },
+
+  onError: () => {
+    setModalConfig({
+      title: "Error",
+      message: "No se pudo eliminar la propiedad",
+      variant: "error",
+    });
+
+    setModalOpen(true);
+  },
+});
+
+const handleEliminar = (id: number) => {
+  setModalConfig({
+    title: "Eliminar propiedad",
+    message: "¿Estás seguro? Esta acción no se puede deshacer.",
+    variant: "danger",
+    onConfirm: () => {
+      setModalOpen(false);
+      deleteMutation.mutate(id);
+    },
+  });
+
+  setModalOpen(true);
+};
+
+  const handleToggleArchivar = (id: number, archivado: boolean) => {
+  setModalConfig({
+    title: archivado ? "Activar propiedad" : "Archivar propiedad",
+    message: archivado
+      ? "¿Querés activar esta propiedad?"
+      : "¿Querés archivar esta propiedad?",
+    variant: archivado ? "success" : "warning",
+    onConfirm: async () => {
+      try {
+        await toggleArchivarMutation.mutateAsync({
+          id,
+          archivado,
+        });
+
+        // ✅ Actualizar estado local inmediatamente
+        queryClient.setQueryData(['inmuebles', paginaActivos, filtros], (oldData: any) => {
+          if (!oldData) return oldData;
+          return {
+            ...oldData,
+            data: oldData.data.map((i: InmuebleLocal) =>
+              i.id_inmueble === id ? { ...i, archivadoLocal: !archivado } : i
+            ),
+          };
+        });
+
+        queryClient.setQueryData(['inmueblesArchivados', paginaArchivados], (oldData: any) => {
+          if (!oldData) return oldData;
+          return {
+            ...oldData,
+            data: oldData.data.map((i: InmuebleLocal) =>
+              i.id_inmueble === id ? { ...i, archivadoLocal: !archivado } : i
+            ),
+          };
+        });
+
+        setModalConfig({
+          title: "Éxito",
+          message: archivado
+            ? "Propiedad activada correctamente"
+            : "Propiedad archivada correctamente",
+          variant: "success",
+        });
+
+        // Refetch opcional para asegurarnos de la consistencia
+        await queryClient.invalidateQueries({ queryKey: ['inmuebles'] });
+        await queryClient.invalidateQueries({ queryKey: ['inmueblesArchivados'] });
+
+      } catch {
+        setModalConfig({
+          title: "Error",
+          message: "No se pudo actualizar la propiedad",
+          variant: "error",
+        });
+      }
+    },
+  });
+
+  setModalOpen(true);
+};
   // =====================================================================
   // FILTRADO Y PAGINACIÓN LOCAL (solo para separar activos/archivados)
   // =====================================================================
 
   const activos = inmuebles.filter((i) => !i.archivadoLocal);
-  const archivados = inmuebles.filter((i) => i.archivadoLocal);
-  const totalPagesArchivados = Math.ceil(
-  archivados.length / inmueblesPorPagina
-);
+  const archivados: InmuebleLocal[] =
+  dataArchivados?.data?.map((i: InmuebleDTO) => ({
+    ...i,
+    archivadoLocal: true,
+  })) ?? [];
+  
+const totalArchivados = dataArchivados?.total ?? 0;
 
+const totalPagesArchivados =
+  dataArchivados?.totalPages ?? 1;
 
-  const activosPagina = activos.slice(
-    (paginaActivos - 1) * inmueblesPorPagina,
-    paginaActivos * inmueblesPorPagina
-  );
+const totalGeneral = totalActivos + totalArchivados;
 
-  const archivadosPagina = archivados.slice(
-    (paginaArchivados - 1) * inmueblesPorPagina,
-    paginaArchivados * inmueblesPorPagina
-  );
+  const activosPagina = activos;
+
+  const archivadosPagina = archivados;
 
   // =====================================================================
   // ============================= RENDER ================================
@@ -190,7 +311,6 @@ const totalPagesActivos = data?.totalPages ?? 1;
   return (
     <div className="min-h-screen bg-gray-50">
       <Header />
-      <Toaster position="top-right" />
       {/* HEADER */}
       <header className="bg-white border-b border-gray-200 shadow-sm">
         <div className="max-w-7xl mx-auto px-6 py-6 flex items-center justify-between">
@@ -208,7 +328,7 @@ const totalPagesActivos = data?.totalPages ?? 1;
           <div className="flex items-center gap-3 px-4 py-2 rounded-lg bg-[#fef9e7]">
             <div className="w-2 h-2 rounded-full animate-pulse bg-[#fcc238]" />
             <span className="text-sm font-medium text-gray-600">
-              {totalActivos} {totalActivos === 1 ? 'propiedad' : 'propiedades'}
+              {totalGeneral} {totalGeneral === 1 ? 'propiedad' : 'propiedades'}
             </span>
           </div>
         </div>
@@ -373,10 +493,10 @@ const totalPagesActivos = data?.totalPages ?? 1;
                         {/* ARCHIVAR → cuando NO está archivado */}
                         <button
                           onClick={() =>
-                            toggleArchivarMutation.mutate({
-                              id: i.id_inmueble,
-                              archivado: i.archivadoLocal,
-                            })
+                            handleToggleArchivar(
+                              i.id_inmueble,
+                              i.archivadoLocal
+                            )
                           }
                           className="px-4 py-2 text-sm rounded-md font-medium bg-red-100 text-red-700 hover:bg-red-200 transition"
                         >
@@ -521,10 +641,10 @@ const totalPagesActivos = data?.totalPages ?? 1;
                         {/* ACTIVAR → cuando SÍ está archivado */}
                         <button
                           onClick={() =>
-                            toggleArchivarMutation.mutate({
-                              id: i.id_inmueble,
-                              archivado: i.archivadoLocal,
-                            })
+                            handleToggleArchivar(
+                              i.id_inmueble,
+                              i.archivadoLocal
+                            )
                           }
                           className="px-4 py-2 text-sm rounded-md font-medium bg-green-100 text-green-700 hover:bg-green-200 transition"
                         >

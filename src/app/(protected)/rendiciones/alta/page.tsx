@@ -351,7 +351,7 @@ export default function AltaRendicionPage() {
                       backgroundColor: anio ? '#f0f9ff' : 'white',
                     }}
                   >
-                    <option value="">Todos</option>
+                    <option value="" disabled hidden>Todos</option>
                     {years.map((y) => (
                       <option key={y} value={String(y)}>{y}</option>
                     ))}
@@ -371,7 +371,7 @@ export default function AltaRendicionPage() {
                       backgroundColor: mes ? '#f0f9ff' : 'white',
                     }}
                   >
-                    <option value="">Todos</option>
+                    <option value="" disabled hidden>Todos</option>
                     {[...Array(12)].map((_, i) => (
                       <option key={i + 1} value={String(i + 1)}>
                         {new Date(0, i).toLocaleString("es-AR", { month: "long" })}
@@ -399,7 +399,7 @@ export default function AltaRendicionPage() {
                       backgroundColor: mesIPC ? '#f0f9ff' : 'white',
                     }}
                   >
-                    <option value="">Ninguno</option>
+                    <option value="" disabled hidden>Ninguno</option>
                     {[...Array(12)].map((_, i) => (
                       <option key={i + 1} value={String(i + 1)}>
                         {new Date(0, i).toLocaleString("es-AR", { month: "long" })}
@@ -421,7 +421,7 @@ export default function AltaRendicionPage() {
                       backgroundColor: anioIPC ? '#f0f9ff' : 'white',
                     }}
                   >
-                    <option value="">Ninguno</option>
+                    <option value="" disabled hidden>Ninguno</option>
                     {years.map((y) => (
                       <option key={y} value={String(y)}>{y}</option>
                     ))}

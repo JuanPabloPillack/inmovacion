@@ -390,7 +390,7 @@ useEffect(() => {
                 value={anio}
                 onChange={(e) => setAnio(e.target.value)}
               >
-                <option value="">Todos</option>
+                <option value="" disabled hidden>Todos</option>
                 {years.map((y) => (
                   <option key={y} value={String(y)}>
                     {y}
@@ -406,7 +406,7 @@ useEffect(() => {
                 value={mes}
                 onChange={(e) => setMes(e.target.value)}
               >
-                <option value="">Todos</option>
+                <option value="" disabled hidden>Todos</option>
                 {[...Array(12)].map((_, i) => (
                   <option key={i + 1} value={String(i + 1)}>
                     {new Date(0, i).toLocaleString("es-AR", { month: "long" })}
@@ -430,7 +430,7 @@ useEffect(() => {
                   setIpcManual(true);
                 }}
               >
-                <option value="">Ninguno</option>
+                <option value="" disabled hidden>Ninguno</option>
                 {[...Array(12)].map((_, i) => (
                   <option key={i + 1} value={String(i + 1)}>
                     {new Date(0, i).toLocaleString("es-AR", { month: "long" })}
@@ -449,7 +449,7 @@ useEffect(() => {
                   setIpcManual(true);
                 }}
               >
-                <option value="">Ninguno</option>
+                <option value="" disabled hidden>Ninguno</option>
                 {years.map((y) => (
                   <option key={y} value={String(y)}>
                     {y}
