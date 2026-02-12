@@ -282,13 +282,10 @@ export default function InmuebleCard({ inmueble, filtrosAplicados }: Props) {
                   </div>
                 </div>
 
-                <a
-                  href="tel:+543436205284"
-                  className="flex items-center gap-2 text-gray-700 hover:text-[#63bae9]"
-                >
-                  <span className="text-lg">📞</span>
-                  +54 343 6205284
-                </a>
+                <span className="flex items-center gap-2 text-gray-700">
+                <span className="text-lg">📞</span>
+                +54 343 6205284
+              </span>
               </div>
             </div>
           </div>
