@@ -779,23 +779,30 @@ const total = data?.total ?? 0;
             )}
 
              {/* PAGINACIÓN */}
-        <div className="flex justify-center mt-6 gap-4">
-          <button
-            disabled={page === 1}
-            onClick={() => setPage(prev => prev - 1)}
-            className="px-4 py-2 rounded-lg bg-gray-200 disabled:opacity-30"
-          >
-            Anterior
-          </button>
+<div className="flex flex-col sm:flex-row justify-between items-center pt-6 gap-4 border-t border-gray-200">
+  <button
+    onClick={() => setPage(page - 1)}
+    disabled={page === 1}
+    className="flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-[#63bae9] to-[#4a9fd4] text-white font-semibold shadow-md hover:shadow-lg transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+  >
+    <ArrowLeft className="w-5 h-5" />
+    Anterior
+  </button>
 
-          <button
-            disabled={page * pageSize >= total}
-            onClick={() => setPage(prev => prev + 1)}
-            className="px-4 py-2 rounded-lg bg-gray-200 disabled:opacity-30"
-          >
-            Siguiente
-          </button>
-        </div>
+  <span className="text-sm font-bold text-[#686363] px-4 py-2 rounded-lg bg-gray-100">
+    Página {page} de {Math.ceil(total / pageSize) || 1}
+  </span>
+
+  <button
+    onClick={() => setPage(page + 1)}
+    disabled={page >= Math.ceil(total / pageSize)}
+    className="flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-[#63bae9] to-[#4a9fd4] text-white font-semibold shadow-md hover:shadow-lg transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+  >
+    Siguiente
+    <ArrowLeft className="w-5 h-5 transform rotate-180" />
+  </button>
+</div>
+
 
 
         </div>

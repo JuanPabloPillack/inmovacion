@@ -6,7 +6,7 @@
 // Es necesario para usar hooks como useState o useEffect.
 
 import { useState, useEffect, JSXElementConstructor, Key, ReactElement, ReactNode, ReactPortal } from 'react';
-import { DollarSign, PlusCircle, AlertCircle, Trash2, FileSignature, Filter, Calendar, User, X, Home, CheckCircle, XCircle, Edit3  } from 'lucide-react';
+import { DollarSign, PlusCircle, AlertCircle, Trash2, FileSignature, Filter, Calendar, User, X, Home, CheckCircle, XCircle, Edit3, ArrowLeft  } from 'lucide-react';
 // Iconos SVG importados como componentes React.
 
 import ConfirmationModal from '@/components/ui/Modal';
@@ -14,9 +14,6 @@ import ConfirmationModal from '@/components/ui/Modal';
 
 import Header from '@/components/ui/Header';
 // Componente visual para el encabezado de la página.
-
-import toast, { Toaster } from 'react-hot-toast';
-// Biblioteca para notificaciones visuales.
 
 import { useRouter } from "next/navigation";
 // Hook de Next.js para navegación del lado del cliente.
@@ -211,24 +208,38 @@ export default function CobranzasPage() {
   // ========================================
   // FUNCIÓN: toggle del campo "activa"
   // ========================================
-  const toggleActivaMutation = useMutation({
-    mutationFn: async (cobranza: Cobranza) => {
-      const res = await fetch(`/api/cobranzas/${cobranza.id_cobranza}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ activa: !cobranza.activa }),
-      });
+const toggleActivaMutation = useMutation({
+  mutationFn: async (cobranza: Cobranza) => {
+    const res = await fetch(`/api/cobranzas/${cobranza.id_cobranza}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ activa: !cobranza.activa }),
+    });
 
-      if (!res.ok) throw new Error();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['cobranzas'] });
-      toast.success("Estado actualizado");
-    },
-    onError: () => {
-      toast.error("No se pudo cambiar el estado");
-    },
-  });
+    if (!res.ok) throw new Error();
+  },
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ['cobranzas'] });
+    // Abrimos modal de éxito
+    setModalConfig({
+      title: "Estado actualizado",
+      message: "El estado de la cobranza se actualizó correctamente.",
+      variant: "success",
+      onConfirm: () => setModalOpen(false),
+    });
+    setModalOpen(true);
+  },
+  onError: () => {
+    setModalConfig({
+      title: "Error",
+      message: "No se pudo cambiar el estado de la cobranza.",
+      variant: "error",
+      onConfirm: () => setModalOpen(false),
+    });
+    setModalOpen(true);
+  },
+});
+
 
 
 
@@ -236,46 +247,53 @@ export default function CobranzasPage() {
   // FUNCIÓN: abrir modal para eliminar
   // ========================================
   const handleDelete = (cobranza: Cobranza) => {
-    if (cobranza.activa) {
-      toast.error("No se puede eliminar una cobranza activa. Primero desactívela.");
-      return;
-    }
-
+  if (cobranza.activa) {
     setModalConfig({
-      title: "Eliminar cobranza",
-      message: "¿Estás seguro? Esta acción no se puede deshacer.",
-      variant: "danger",
-      onConfirm: async () => {
-        try {
-          const res = await fetch(`/api/cobranzas/${cobranza.id_cobranza}`, {
-            method: "DELETE",
-          });
-
-          if (!res.ok) throw new Error();
-
-          queryClient.invalidateQueries({ queryKey: ['cobranzas'] });
-
-          setModalConfig({
-            title: "Eliminada",
-            message: "La cobranza se eliminó correctamente.",
-            variant: "success",
-            onConfirm: () => setModalOpen(false),
-          });
-
-          setModalOpen(true);
-        } catch {
-          setModalConfig({
-            title: "Error",
-            message: "No se pudo eliminar la cobranza.",
-            variant: "error",
-          });
-          setModalOpen(true);
-        }
-      },
+      title: "No se puede eliminar",
+      message: "No se puede eliminar una cobranza activa. Primero desactívela.",
+      variant: "warning",
+      onConfirm: () => setModalOpen(false),
     });
-
     setModalOpen(true);
-  };
+    return;
+  }
+
+  setModalConfig({
+    title: "Eliminar cobranza",
+    message: "¿Estás seguro? Esta acción no se puede deshacer.",
+    variant: "danger",
+    onConfirm: async () => {
+      try {
+        const res = await fetch(`/api/cobranzas/${cobranza.id_cobranza}`, {
+          method: "DELETE",
+        });
+        if (!res.ok) throw new Error();
+
+        queryClient.invalidateQueries({ queryKey: ['cobranzas'] });
+
+        setModalConfig({
+          title: "Eliminada",
+          message: "La cobranza se eliminó correctamente.",
+          variant: "success",
+          onConfirm: () => setModalOpen(false),
+        });
+
+        setModalOpen(true);
+      } catch {
+        setModalConfig({
+          title: "Error",
+          message: "No se pudo eliminar la cobranza.",
+          variant: "error",
+          onConfirm: () => setModalOpen(false),
+        });
+        setModalOpen(true);
+      }
+    },
+  });
+
+  setModalOpen(true);
+};
+
 
 
 
@@ -298,7 +316,6 @@ export default function CobranzasPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <Header />
-      <Toaster position="top-right" />
 
       <header className="bg-white border-b shadow-sm">
         <div className="max-w-7xl mx-auto px-6 py-6 flex items-center justify-between">
@@ -744,23 +761,30 @@ export default function CobranzasPage() {
         </div>
 
         {/* PAGINACIÓN */}
-        <div className="flex justify-center mt-6 gap-4">
-          <button
-            disabled={page === 1}
-            onClick={() => setPage(prev => prev - 1)}
-            className="px-4 py-2 rounded-lg bg-gray-200 disabled:opacity-30"
-          >
-            Anterior
-          </button>
+<div className="flex flex-col sm:flex-row justify-between items-center pt-6 gap-4 border-t border-gray-200">
+  <button
+    onClick={() => setPage(page - 1)}
+    disabled={page === 1}
+    className="flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-[#63bae9] to-[#4a9fd4] text-white font-semibold shadow-md hover:shadow-lg transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+  >
+    <ArrowLeft className="w-5 h-5" />
+    Anterior
+  </button>
+  
+  <span className="text-sm font-bold text-[#686363] px-4 py-2 rounded-lg bg-gray-100">
+    Página {page} de {Math.ceil(total / pageSize) || 1}
+  </span>
+  
+  <button
+    onClick={() => setPage(page + 1)}
+    disabled={page >= Math.ceil(total / pageSize)}
+    className="flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-[#63bae9] to-[#4a9fd4] text-white font-semibold shadow-md hover:shadow-lg transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+  >
+    Siguiente
+    <ArrowLeft className="w-5 h-5 transform rotate-180" />
+  </button>
+</div>
 
-          <button
-            disabled={page * pageSize >= total}
-            onClick={() => setPage(prev => prev + 1)}
-            className="px-4 py-2 rounded-lg bg-gray-200 disabled:opacity-30"
-          >
-            Siguiente
-          </button>
-        </div>
 
       </main>
 

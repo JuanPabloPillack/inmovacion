@@ -4,7 +4,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Home, PlusCircle, AlertCircle, User, Calendar, FileSignature } from 'lucide-react';
+import { Home, PlusCircle, AlertCircle, User, Calendar, FileSignature, ArrowLeft } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
@@ -127,13 +127,13 @@ const fetchArchivados = async () => {
   return res.json();
 };
 
-const {
-  data: dataArchivados,
-} = useQuery({
-  queryKey: ['inmueblesArchivados', paginaArchivados],
+const { data: dataArchivados } = useQuery({
+  queryKey: ['inmueblesArchivados', paginaArchivados, filtros],
   queryFn: fetchArchivados,
   placeholderData: (prev) => prev,
+  enabled: status !== 'loading',
 });
+
   
 
 
@@ -405,13 +405,15 @@ const totalGeneral = totalActivos + totalArchivados;
 
         {/* FILTROS */}
         <Filtros
-          filtros={filtros}
-          setFiltros={setFiltros}
-          onApply={() => {
-            setPaginaActivos(1);
-            setPaginaArchivados(1);
-          }}
-        />
+  filtros={filtros}
+  setFiltros={setFiltros}
+  onApply={() => {
+    setPaginaActivos(1);
+    setPaginaArchivados(1);
+  }}
+/>
+
+
         {/* LISTADO ACTIVOS */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 mt-8">
           <div className="p-6 border-b border-gray-200 flex items-center justify-between">
@@ -713,44 +715,56 @@ const totalGeneral = totalActivos + totalArchivados;
                   ))}
                 </div>
               )}
-              {/* PAGINACIÓN ARCHIVADOS */}
-              {totalPagesArchivados > 1 && (
-                <div className="flex justify-center items-center gap-3 mt-6">
-                  <button
-                    onClick={() =>
-                      setPaginaArchivados((p) => Math.max(p - 1, 1))
-                    }
-                    disabled={paginaArchivados === 1}
-                    className="px-3 py-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 disabled:opacity-50"
-                  >
-                    ← Anterior
-                  </button>
-                  {[...Array(totalPagesArchivados)].map((_, index) => (
-                    <button
-                      key={index}
-                      onClick={() => setPaginaArchivados(index + 1)}
-                      className={`px-3 py-2 rounded-lg ${
-                        paginaArchivados === index + 1
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                      }`}
-                    >
-                      {index + 1}
-                    </button>
-                  ))}
-                  <button
-                    onClick={() =>
-                      setPaginaArchivados((p) =>
-                        Math.min(p + 1, totalPagesArchivados)
-                      )
-                    }
-                    disabled={paginaArchivados === totalPagesArchivados}
-                    className="px-3 py-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 disabled:opacity-50"
-                  >
-                    Siguiente →
-                  </button>
-                </div>
-              )}
+              {/* PAGINACIÓN ACTIVOS */}
+{totalPagesActivos > 1 && (
+  <div className="flex flex-col sm:flex-row justify-between items-center pt-6 gap-4 border-t border-gray-200">
+    <button
+      onClick={() => setPaginaActivos(paginaActivos - 1)}
+      disabled={paginaActivos === 1}
+      className="flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-[#63bae9] to-[#4a9fd4] text-white font-semibold shadow-md hover:shadow-lg transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+    >
+      <ArrowLeft className="w-5 h-5" />
+      Anterior
+    </button>
+    <span className="text-sm font-bold text-[#686363] px-4 py-2 rounded-lg bg-gray-100">
+      Página {paginaActivos} de {totalPagesActivos}
+    </span>
+    <button
+      onClick={() => setPaginaActivos(paginaActivos + 1)}
+      disabled={paginaActivos >= totalPagesActivos}
+      className="flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-[#63bae9] to-[#4a9fd4] text-white font-semibold shadow-md hover:shadow-lg transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+    >
+      Siguiente
+      <ArrowLeft className="w-5 h-5 transform rotate-180" />
+    </button>
+  </div>
+)}
+
+{/* PAGINACIÓN ARCHIVADOS */}
+{totalPagesArchivados > 1 && (
+  <div className="flex flex-col sm:flex-row justify-between items-center pt-6 gap-4 border-t border-gray-200">
+    <button
+      onClick={() => setPaginaArchivados(paginaArchivados - 1)}
+      disabled={paginaArchivados === 1}
+      className="flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-[#63bae9] to-[#4a9fd4] text-white font-semibold shadow-md hover:shadow-lg transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+    >
+      <ArrowLeft className="w-5 h-5" />
+      Anterior
+    </button>
+    <span className="text-sm font-bold text-[#686363] px-4 py-2 rounded-lg bg-gray-100">
+      Página {paginaArchivados} de {totalPagesArchivados}
+    </span>
+    <button
+      onClick={() => setPaginaArchivados(paginaArchivados + 1)}
+      disabled={paginaArchivados >= totalPagesArchivados}
+      className="flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-[#63bae9] to-[#4a9fd4] text-white font-semibold shadow-md hover:shadow-lg transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+    >
+      Siguiente
+      <ArrowLeft className="w-5 h-5 transform rotate-180" />
+    </button>
+  </div>
+)}
+
             </div>
           </div>
         )}
