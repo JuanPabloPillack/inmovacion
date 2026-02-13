@@ -92,7 +92,7 @@ export async function PUT(
         apellido: body.apellido?.trim() || null,
         email: body.email?.trim() || null,
         telefono: body.telefono?.trim() || null,
-        dumero_documento: body.numeroDocumento?.trim() || null,
+        numero_documento: body.numeroDocumento?.trim() || null,
         tipoDocumentoId: body.tipoDocumentoId
           ? Number(body.tipoDocumentoId)
           : null,

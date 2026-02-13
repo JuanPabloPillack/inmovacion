@@ -96,7 +96,16 @@ export async function GET(req: NextRequest) {
       take,
       where,
       include: {
-        cliente: true,
+        cliente: {
+  include: {
+    tiposCliente: {
+      include: {
+        tipoCliente: true,
+      },
+    },
+  },
+},
+
         inmueble: { include: { ubicacion: true } },
         createdBy: { select: { id: true, name: true, email: true } },
         updatedBy: { select: { id: true, name: true, email: true } },
@@ -267,7 +276,16 @@ export async function POST(req: NextRequest) {
              updatedById: user.id,
           },
           include: {
-            cliente: true,
+            cliente: {
+  include: {
+    tiposCliente: {
+      include: {
+        tipoCliente: true,
+      },
+    },
+  },
+},
+
             inmueble: { include: { ubicacion: true } },
             createdBy: true,
             updatedBy: true,

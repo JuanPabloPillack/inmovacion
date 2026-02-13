@@ -16,10 +16,13 @@ interface Cliente {
   id_cliente: number;
   nombre: string;
   apellido: string;
-  tipoCliente?: {
-    nombre: string;
-  };
+  tiposCliente?: {
+    tipoCliente: {
+      nombre: string;
+    };
+  }[];
 }
+
 
 interface Contrato {
   id_contrato: number;
@@ -116,7 +119,10 @@ export default function EditarCobranzaPage() {
 
   setSelectedCliente(cobranzaData.id_cliente);
 
-  const cliente = clientes.find((c) => c.id_cliente === cobranzaData.id_cliente);
+  const cliente = clientes.find(
+  (c) => Number(c.id_cliente) === Number(cobranzaData.id_cliente)
+);
+
   if (cliente) {
     setClienteSearch(`${cliente.apellido}, ${cliente.nombre}`);
   }
@@ -155,15 +161,18 @@ export default function EditarCobranzaPage() {
   });
 
   // Tipo cliente
-  useEffect(() => {
-    if (!selectedCliente || !clientes.length) return;
+useEffect(() => {
+  if (!selectedCliente || !clientes.length) return;
 
-    const cliente = clientes.find(
-      (c) => c.id_cliente === selectedCliente
-    );
+  const cliente = clientes.find(
+    (c) => c.id_cliente === selectedCliente
+  );
 
-    setTipoCliente(cliente?.tipoCliente?.nombre || '');
-  }, [selectedCliente, clientes]);
+  setTipoCliente(
+    cliente?.tiposCliente?.[0]?.tipoCliente?.nombre || ''
+  );
+}, [selectedCliente, clientes]);
+
 
 
   const validar = () => {

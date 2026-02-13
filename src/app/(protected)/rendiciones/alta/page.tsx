@@ -15,7 +15,9 @@ interface Cliente {
   id_cliente: number;
   nombre: string;
   apellido: string;
+  activo: boolean;
 }
+
 
 interface Cobranza {
   id_cobranza: number;
@@ -73,11 +75,14 @@ export default function AltaRendicionPage() {
     },
   });
 
-  const clientesFiltrados = clientes.filter(c =>
+const clientesFiltrados = clientes
+  .filter(c => c.activo) // 👈 SOLO ACTIVOS
+  .filter(c =>
     `${c.nombre} ${c.apellido}`
       .toLowerCase()
       .includes(clienteSearch.toLowerCase())
   );
+
 
   const {
     data: cobranzas = [],

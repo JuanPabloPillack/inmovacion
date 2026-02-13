@@ -17,10 +17,17 @@ interface Cliente {
   id_cliente: number;
   nombre: string;
   apellido: string;
-  tipoCliente?: {
-  nombre: string;
- };
+  activo: boolean;
+
+  tiposCliente?: {
+    tipoCliente: {
+      id_tipo_cliente: number;
+      nombre: string;
+    };
+  }[];
 }
+
+
 
 interface Contrato {
   id_contrato: number;
@@ -190,10 +197,23 @@ export default function NuevaCobranzaPage() {
 
 
   // Actualizar tipo de cliente
-  useEffect(() => {
-    const cliente = clientes.find((c: { id_cliente: string | number; }) => c.id_cliente === selectedCliente);
-    setTipoCliente(cliente?.tipoCliente?.nombre || '');
-  }, [selectedCliente, clientes]);
+useEffect(() => {
+  const cliente = clientes.find(
+    (c: any) => c.id_cliente === selectedCliente
+  );
+
+  if (!cliente || !cliente.tiposCliente || cliente.tiposCliente.length === 0) {
+    setTipoCliente('');
+    return;
+  }
+
+  // tomar el primer tipo (o podés concatenar varios)
+  const tipo = cliente.tiposCliente[0]?.tipoCliente?.nombre || '';
+
+  setTipoCliente(tipo);
+
+}, [selectedCliente, clientes]);
+
 
   // Handlers
   const handleCobranzaChange = (index: number, field: string, value: any) => {
@@ -277,10 +297,13 @@ export default function NuevaCobranzaPage() {
   }
 
 
-  const clientesFiltrados = clientes.filter((c: { nombre: any; apellido: any; }) => {
+  const clientesFiltrados = clientes
+  .filter((c: any) => c.activo === true) // 👈 SOLO ACTIVOS
+  .filter((c: any) => {
     const fullName = `${c.nombre} ${c.apellido}`.toLowerCase();
     return fullName.includes(clienteSearch.toLowerCase());
   });
+
 
 
   return (

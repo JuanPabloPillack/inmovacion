@@ -6,9 +6,16 @@ export async function GET() {
   try {
     const clientes = await db.cliente.findMany({
       orderBy: { id_cliente: "desc" },
-      include: { tiposCliente: true, tipoDocumento: true }, // ✅ nombres correctos
-    });
+      include: {
+        tipoDocumento: true,
 
+        tiposCliente: {
+          include: {
+            tipoCliente: true, // 👈 ESTO ES LA CLAVE
+          },
+        },
+      },
+    });
     return NextResponse.json(clientes);
   } catch (error) {
     console.error("Error al obtener clientes:", error);
@@ -94,7 +101,7 @@ export async function POST(req: Request) {
     apellido: body.apellido?.trim() || null,
     email: body.email?.trim() || null,
     telefono: body.telefono?.trim() || null,
-    dumero_documento: body.numeroDocumento?.trim() || null,
+    numero_documento: body.numeroDocumento?.trim() || null,
     descripcion: body.descripcion || null,
     tipoDocumentoId: body.tipoDocumentoId
       ? Number(body.tipoDocumentoId)

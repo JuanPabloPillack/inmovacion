@@ -137,7 +137,7 @@ export default function ClienteDetallePage() {
               {/* 🔥 CORREGIDO: dumero_documento */}
               <Data
                 label="Número de documento"
-                value={cliente.dumero_documento}
+                value={cliente.numero_documento}
               />
 
               {/* 🔥 CORREGIDO: relación N:N */}

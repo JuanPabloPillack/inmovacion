@@ -117,7 +117,7 @@ model Cliente {
   email           String?           @db.VarChar(100)
   telefono        String?           @db.VarChar(50)
 
-  dumero_documento String?          @db.VarChar(50)
+  numero_documento String?          @db.VarChar(50)
   tipoDocumentoId Int?
   tipoDocumento   TipoDocumento?    @relation(fields: [tipoDocumentoId], references: [id_tipo_documento])
 
@@ -137,15 +137,16 @@ model Cliente {
 }
 
 model ClienteTipo {
-  clienteId      Int
-  tipoClienteId  Int
+  clienteId     Int @map("clienteid")
+  tipoClienteId Int @map("tipoclienteid")
 
-  cliente        Cliente     @relation(fields: [clienteId], references: [id_cliente])
-  tipoCliente    TipoCliente @relation(fields: [tipoClienteId], references: [id_tipo_cliente])
+  cliente       Cliente     @relation(fields: [clienteId], references: [id_cliente])
+  tipoCliente   TipoCliente @relation(fields: [tipoClienteId], references: [id_tipo_cliente])
 
   @@id([clienteId, tipoClienteId])
   @@map("cliente_tipo_cliente")
 }
+
 
 
 model TipoDocumento {
