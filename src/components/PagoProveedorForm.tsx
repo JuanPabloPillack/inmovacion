@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import { useEffect } from "react";
@@ -6,28 +5,21 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 
-import {
-  Form,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormControl,
-  FormMessage,
-} from "@/components/ui/form";
-
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
 import {
-  Select,
-  SelectTrigger,
-  SelectItem,
-  SelectContent,
-  SelectValue,
-} from "@/components/ui/select";
+  Building2,
+  CreditCard,
+  CheckCircle,
+  FileText,
+  DollarSign,
+  User,
+  AlertCircle,
+} from "lucide-react";
 
 // ==========================
-// VALIDACIÓN DEL FORM
+// VALIDACIÓN
 // ==========================
 const pagoSchema = z.object({
   proveedorId: z.string().min(1, "Seleccione un proveedor"),
@@ -39,14 +31,14 @@ const pagoSchema = z.object({
   comprobante: z.string().optional().or(z.literal("")),
 });
 
-export type PagoProveedorFormValues = z.infer<typeof pagoSchema>;
+type PagoProveedorFormValues = z.infer<typeof pagoSchema>;
 
 interface Props {
   proveedores: any[];
   mediosPago: any[];
   estadosPago: any[];
   modo?: "crear" | "editar";
-  onSubmit: (data: PagoProveedorFormValues) => Promise<void>;
+  onSubmit: (data: any) => void;
   initialData?: Partial<PagoProveedorFormValues>;
   onFormDirtyChange?: (dirty: boolean) => void;
 }
@@ -60,7 +52,12 @@ export default function PagoProveedorForm({
   initialData,
   onFormDirtyChange,
 }: Props) {
-  const form = useForm<PagoProveedorFormValues>({
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isDirty },
+  } = useForm<PagoProveedorFormValues>({
     resolver: zodResolver(pagoSchema),
     defaultValues: {
       proveedorId: initialData?.proveedorId || "",
@@ -74,164 +71,194 @@ export default function PagoProveedorForm({
   });
 
   useEffect(() => {
-    onFormDirtyChange?.(form.formState.isDirty);
-  }, [form.formState.isDirty, onFormDirtyChange]);
+    onFormDirtyChange?.(isDirty);
+  }, [isDirty]);
+
+  const submitHandler = (data: any) => {
+    onSubmit({
+      ...data,
+      proveedorId: Number(data.proveedorId),
+      medioPagoId: Number(data.medioPagoId),
+      estadoPagoId: Number(data.estadoPagoId),
+      importe: Number(data.importe),
+    });
+  };
 
   return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+    <div className="max-w-3xl mx-auto shadow-xl border-0 bg-white/80 backdrop-blur-sm transition-all duration-300 hover:shadow-2xl rounded-xl">
 
-        {/* PROVEEDOR */}
-        <FormField
-          control={form.control}
-          name="proveedorId"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Proveedor</FormLabel>
-              <FormControl>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccione un proveedor" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {proveedores.map((p) => (
-                      <SelectItem
-                        key={p.id_proveedor}
-                        value={String(p.id_proveedor)}
-                      >
-                        {p.nombre_razon_social}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+      {/* HEADER */}
+      <div className="bg-gradient-to-r from-[#63bae9]/5 via-[#fcc238]/5 to-transparent rounded-t-lg border-b border-slate-200/50 p-6">
+        <div className="flex items-center gap-3">
+          <DollarSign className="h-6 w-6 text-[#63bae9]" />
+          <h2 className="text-xl font-semibold text-[#686363]">
+            {modo === "crear" ? "Nuevo Pago a Proveedor" : "Editar Pago"}
+          </h2>
+        </div>
+      </div>
 
-        {/* CONCEPTO */}
-        <FormField
-          control={form.control}
-          name="concepto"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Concepto</FormLabel>
-              <FormControl>
-                <Input placeholder="Ej: Reparación, servicio técnico..." {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+      <div className="p-8">
+        <form onSubmit={handleSubmit(submitHandler)} className="space-y-6">
 
-        {/* IMPORTE */}
-        <FormField
-          control={form.control}
-          name="importe"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Importe</FormLabel>
-              <FormControl>
-                <Input type="number" placeholder="0.00" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-        {/* MEDIO PAGO */}
-        <FormField
-          control={form.control}
-          name="medioPagoId"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Medio de Pago</FormLabel>
-              <FormControl>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccione un medio" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {mediosPago.map((m) => (
-                      <SelectItem
-                        key={m.id_medio_pago}
-                        value={String(m.id_medio_pago)}
-                      >
-                        {m.nombre}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+            {/* Proveedor */}
+            <div>
+              <label className="flex items-center gap-2 text-[#686363] font-medium text-sm sm:text-base mb-2">
+                <Building2 className="h-4 w-4 text-[#63bae9]" />
+                Proveedor *
+              </label>
+              <select
+                {...register("proveedorId")}
+                className="h-12 w-full rounded-xl border border-[#969696]/20 bg-slate-50/50 px-3 focus:border-[#63bae9] focus:ring-2 focus:ring-[#63bae9]/20 text-[#686363]"
+              >
+                <option value="">Seleccionar</option>
+                {proveedores.map((p) => (
+                  <option key={p.id_proveedor} value={p.id_proveedor}>
+                    {p.nombre_razon_social}
+                  </option>
+                ))}
+              </select>
+              {errors.proveedorId && (
+                <p className="text-red-500 text-sm flex items-center gap-1 mt-1">
+                  <AlertCircle className="h-3 w-3" />
+                  {errors.proveedorId.message}
+                </p>
+              )}
+            </div>
 
-        {/* ESTADO */}
-        <FormField
-          control={form.control}
-          name="estadoPagoId"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Estado del Pago</FormLabel>
-              <FormControl>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccione estado" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {estadosPago.map((e) => (
-                      <SelectItem
-                        key={e.id_estado_pago}
-                        value={String(e.id_estado_pago)}
-                      >
-                        {e.nombre}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+            {/* Medio de pago */}
+            <div>
+              <label className="flex items-center gap-2 text-[#686363] font-medium text-sm sm:text-base mb-2">
+                <CreditCard className="h-4 w-4 text-[#63bae9]" />
+                Medio de pago *
+              </label>
+              <select
+                {...register("medioPagoId")}
+                className="h-12 w-full rounded-xl border border-[#969696]/20 bg-slate-50/50 px-3 focus:border-[#63bae9] focus:ring-2 focus:ring-[#63bae9]/20 text-[#686363]"
+              >
+                <option value="">Seleccionar</option>
+                {mediosPago.map((m) => (
+                  <option key={m.id_medio_pago} value={m.id_medio_pago}>
+                    {m.nombre}
+                  </option>
+                ))}
+              </select>
+              {errors.medioPagoId && (
+                <p className="text-red-500 text-sm flex items-center gap-1 mt-1">
+                  <AlertCircle className="h-3 w-3" />
+                  {errors.medioPagoId.message}
+                </p>
+              )}
+            </div>
 
-        {/* RESPONSABLE */}
-        <FormField
-          control={form.control}
-          name="responsable"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Responsable</FormLabel>
-              <FormControl>
-                <Input placeholder="Nombre del responsable" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+            {/* Estado */}
+            <div>
+              <label className="flex items-center gap-2 text-[#686363] font-medium text-sm sm:text-base mb-2">
+                <CheckCircle className="h-4 w-4 text-[#63bae9]" />
+                Estado *
+              </label>
+              <select
+                {...register("estadoPagoId")}
+                className="h-12 w-full rounded-xl border border-[#969696]/20 bg-slate-50/50 px-3 focus:border-[#63bae9] focus:ring-2 focus:ring-[#63bae9]/20 text-[#686363]"
+              >
+                <option value="">Seleccionar</option>
+                {estadosPago.map((e) => (
+                  <option key={e.id_estado_pago} value={e.id_estado_pago}>
+                    {e.nombre}
+                  </option>
+                ))}
+              </select>
+              {errors.estadoPagoId && (
+                <p className="text-red-500 text-sm flex items-center gap-1 mt-1">
+                  <AlertCircle className="h-3 w-3" />
+                  {errors.estadoPagoId.message}
+                </p>
+              )}
+            </div>
 
-        {/* COMPROBANTE */}
-        <FormField
-          control={form.control}
-          name="comprobante"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Comprobante (opcional)</FormLabel>
-              <FormControl>
-                <Input placeholder="URL o detalle del comprobante" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+            {/* Importe */}
+            <div>
+              <label className="flex items-center gap-2 text-[#686363] font-medium text-sm sm:text-base mb-2">
+                <DollarSign className="h-4 w-4 text-[#63bae9]" />
+                Importe *
+              </label>
+              <Input
+                type="number"
+                step="0.01"
+                {...register("importe")}
+                className="h-12 rounded-xl border-[#969696]/20 focus:border-[#63bae9] focus:ring-[#63bae9]/20 bg-slate-50/50"
+              />
+              {errors.importe && (
+                <p className="text-red-500 text-sm flex items-center gap-1 mt-1">
+                  <AlertCircle className="h-3 w-3" />
+                  {errors.importe.message}
+                </p>
+              )}
+            </div>
 
-        <Button type="submit" className="w-full">
-          {modo === "crear" ? "Registrar pago" : "Guardar cambios"}
-        </Button>
-      </form>
-    </Form>
+            {/* Concepto */}
+            <div className="md:col-span-2">
+              <label className="flex items-center gap-2 text-[#686363] font-medium text-sm sm:text-base mb-2">
+                <FileText className="h-4 w-4 text-[#63bae9]" />
+                Concepto *
+              </label>
+              <Input
+                {...register("concepto")}
+                className="h-12 rounded-xl border-[#969696]/20 focus:border-[#63bae9] focus:ring-[#63bae9]/20 bg-slate-50/50"
+              />
+              {errors.concepto && (
+                <p className="text-red-500 text-sm flex items-center gap-1 mt-1">
+                  <AlertCircle className="h-3 w-3" />
+                  {errors.concepto.message}
+                </p>
+              )}
+            </div>
+
+            {/* Responsable */}
+            <div>
+              <label className="flex items-center gap-2 text-[#686363] font-medium text-sm sm:text-base mb-2">
+                <User className="h-4 w-4 text-[#63bae9]" />
+                Responsable *
+              </label>
+              <Input
+                {...register("responsable")}
+                className="h-12 rounded-xl border-[#969696]/20 focus:border-[#63bae9] focus:ring-[#63bae9]/20 bg-slate-50/50"
+              />
+              {errors.responsable && (
+                <p className="text-red-500 text-sm flex items-center gap-1 mt-1">
+                  <AlertCircle className="h-3 w-3" />
+                  {errors.responsable.message}
+                </p>
+              )}
+            </div>
+
+            {/* Comprobante */}
+            <div>
+              <label className="flex items-center gap-2 text-[#686363] font-medium text-sm sm:text-base mb-2">
+                <FileText className="h-4 w-4 text-[#63bae9]" />
+                Comprobante
+              </label>
+              <Input
+                {...register("comprobante")}
+                className="h-12 rounded-xl border-[#969696]/20 focus:border-[#63bae9] focus:ring-[#63bae9]/20 bg-slate-50/50"
+              />
+            </div>
+
+          </div>
+
+          {/* BOTÓN */}
+          <div className="flex justify-end pt-6 border-t border-[#969696]/20">
+            <Button
+              type="submit"
+              className="h-12 px-8 bg-gradient-to-r from-[#63bae9] to-[#63bae9]/90 hover:from-[#63bae9]/90 hover:to-[#63bae9]/80 text-white font-medium rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-[1.02]"
+            >
+              {modo === "crear" ? "Registrar Pago" : "Guardar Cambios"}
+            </Button>
+          </div>
+
+        </form>
+      </div>
+    </div>
   );
 }

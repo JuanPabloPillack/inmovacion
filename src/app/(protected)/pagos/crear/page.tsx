@@ -15,9 +15,18 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 
 import { CheckCircle, ArrowLeft, FileText, AlertCircle } from "lucide-react";
 
-import PagoProveedorForm, {
-  PagoProveedorFormValues,
-} from "@/components/PagoProveedorForm";
+import PagoProveedorForm from "@/components/PagoProveedorForm";
+
+// Define the type locally if not exported from the module
+type PagoProveedorFormValues = {
+  proveedorId: string;
+  medioPagoId: string;
+  estadoPagoId: string;
+  concepto: string;
+  importe: number;
+  comprobante?: string;
+  responsable: string;
+};
 
 export default function CrearPagoProveedorPage() {
   const { data: session, status } = useSession();

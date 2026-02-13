@@ -1,8 +1,3 @@
-// ===============================================
-// Archivo: src/actions/clientes/getClientes.ts
-// Descripción: Obtener todos los clientes con tipoCliente
-// ===============================================
-
 "use server";
 
 import { db } from "@/lib/db";
@@ -12,7 +7,12 @@ export async function getClientes() {
     const clientes = await db.cliente.findMany({
       orderBy: { id_cliente: "desc" },
       include: {
-        tipoCliente: true,
+        tiposCliente: {
+          include: {
+            tipoCliente: true,
+          },
+        },
+        tipoDocumento: true,
       },
     });
 

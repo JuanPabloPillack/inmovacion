@@ -1,8 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+//app/(protected)/proveedores/page.tsx
 // ===============================================
-// Archivo: src/app/(protected)/proveedores/page.tsx
-// Descripción: Gestión de Proveedores (solo activos, con eliminar soft + filtros)
-// Proyecto: inmovacion (GBS y Asociados)
+// Gestión de Proveedores 
 // ===============================================
 
 "use client";
@@ -11,19 +10,10 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 
-// UI
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/Badge";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -31,7 +21,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-// Icons
 import {
   Search,
   Plus,
@@ -42,11 +31,9 @@ import {
   Trash2,
 } from "lucide-react";
 
-// Actions
 import { getProveedores } from "@/actions/proveedores/getProveedores";
 import { softDeleteProveedor } from "@/actions/proveedores/proveedor-actions";
 
-// Components
 import Header from "@/components/ui/Header";
 import Loading from "@/components/ui/Loading";
 import ConfirmationModal from "@/components/ui/Modal";
@@ -60,13 +47,9 @@ export default function ProveedoresPage() {
   const [filterField, setFilterField] = useState("nombre_razon_social");
   const [loading, setLoading] = useState(true);
 
-  // Modal soft delete
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [proveedorId, setProveedorId] = useState<number | null>(null);
 
-  // =======================
-  // RECARGAR PROVEEDORES
-  // =======================
   const refreshProveedores = useCallback(async () => {
     try {
       const data = await getProveedores();
@@ -77,9 +60,6 @@ export default function ProveedoresPage() {
     }
   }, []);
 
-  // =======================
-  // VALIDAR SESIÓN
-  // =======================
   useEffect(() => {
     if (status === "loading") return;
 
@@ -91,26 +71,18 @@ export default function ProveedoresPage() {
     refreshProveedores().finally(() => setLoading(false));
   }, [session, status, router, refreshProveedores]);
 
-  // =======================
-  // CONFIRMAR ELIMINACIÓN
-  // =======================
   const confirmDelete = async () => {
     if (!proveedorId) return;
 
     try {
       await softDeleteProveedor(proveedorId);
       await refreshProveedores();
-    } catch (error) {
-      console.error("Error eliminando proveedor:", error);
     } finally {
       setIsModalOpen(false);
       setProveedorId(null);
     }
   };
 
-  // =======================
-  // FILTRO AVANZADO
-  // =======================
   const filteredProveedores = useMemo(() => {
     const term = searchTerm.toLowerCase();
 
@@ -134,146 +106,55 @@ export default function ProveedoresPage() {
     });
   }, [proveedores, searchTerm, filterField]);
 
-  // =======================
-  // LOADING
-  // =======================
   if (loading) return <Loading message="Cargando proveedores..." />;
 
-  // =======================
-  // TABLA
-  // =======================
-  const TableView = () => (
-    <Card className="shadow-lg border-[#969696]/20">
-      <CardHeader className="pb-4 bg-gradient-to-r from-[#63bae9]/5 to-transparent">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Building className="h-5 w-5 text-[#63bae9]" />
-            <CardTitle className="text-xl text-[#686363]">
-              Lista de Proveedores
-            </CardTitle>
-          </div>
-          <Badge className="bg-[#969696]/10 text-[#686363] border border-[#969696]/30">
-            {filteredProveedores.length} proveedores
-          </Badge>
-        </div>
-      </CardHeader>
-
-      <CardContent>
-        <Table>
-          <TableHeader>
-            <TableRow className="border-[#969696]/20">
-              <TableHead className="text-[#686363] font-medium">Proveedor</TableHead>
-              <TableHead className="text-[#686363] font-medium">CUIT/CUIL</TableHead>
-              <TableHead className="text-[#686363] font-medium">Teléfono</TableHead>
-              <TableHead className="text-[#686363] font-medium">Servicio</TableHead>
-              <TableHead className="text-right text-[#686363] font-medium">Acciones</TableHead>
-            </TableRow>
-          </TableHeader>
-
-          <TableBody>
-            {filteredProveedores.map((p) => (
-              <TableRow
-                key={p.id_proveedor}
-                className="hover:bg-[#63bae9]/5 border-[#969696]/10"
-              >
-                <TableCell>
-                  <span className="font-medium text-[#686363]">
-                    {p.nombre_razon_social}
-                  </span>
-                </TableCell>
-
-                <TableCell className="text-[#686363]">{p.cuit_cuil}</TableCell>
-
-                <TableCell className="text-[#686363]">
-                  {p.telefono_contacto || "Sin teléfono"}
-                </TableCell>
-
-                <TableCell className="text-[#686363]">
-                  {p.tipoServicio?.nombre || "Sin tipo"}
-                </TableCell>
-
-                <TableCell className="text-right">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        className="h-8 w-8 p-0 hover:bg-[#63bae9]/10 text-[#686363]"
-                      >
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-
-                    <DropdownMenuContent align="end" className="border-[#969696]/20">
-
-                      {/* VER DETALLES */}
-                      <DropdownMenuItem
-                        onClick={() =>
-                          router.push(`/proveedores/${p.id_proveedor}`)
-                        }
-                        className="text-[#686363] hover:bg-[#63bae9]/10 hover:text-[#63bae9]"
-                      >
-                        <Eye className="mr-2 h-4 w-4" />
-                        Ver detalles
-                      </DropdownMenuItem>
-
-                      {/* EDITAR */}
-                      <DropdownMenuItem
-                        onClick={() =>
-                          router.push(`/proveedores/editar?id=${p.id_proveedor}`)
-                        }
-                        className="text-[#686363] hover:bg-[#63bae9]/10 hover:text-[#63bae9]"
-                      >
-                        <Edit className="mr-2 h-4 w-4" />
-                        Editar
-                      </DropdownMenuItem>
-
-                      {/* ELIMINAR */}
-                      <DropdownMenuItem
-                        onClick={() => {
-                          setProveedorId(p.id_proveedor);
-                          setIsModalOpen(true);
-                        }}
-                        className="text-red-500 hover:bg-red-500/10"
-                      >
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        Eliminar
-                      </DropdownMenuItem>
-
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </TableCell>
-
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
-  );
-
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-gradient-to-b from-white to-gray-50">
       <Header />
 
-      <div className="container mx-auto px-4 py-8">
-        <div className="mb-8">
-          <div className="flex items-center gap-3 mb-2">
-            <Building className="h-8 w-8 text-[#63bae9]" />
-            <h1 className="text-3xl font-bold text-[#686363]">Gestión de Proveedores</h1>
+      <div className="container mx-auto px-4 py-8 max-w-7xl">
+
+        {/* ================= HEADER ================= */}
+        <div className="mb-10">
+          <div className="flex items-start justify-between gap-4 mb-3">
+            <div className="flex items-center gap-3">
+              <div className="p-3 rounded-xl bg-gradient-to-br from-[#63bae9]/10 to-[#63bae9]/5">
+                <Building className="h-7 w-7 text-[#63bae9]" />
+              </div>
+              <div>
+                <h1 className="text-4xl font-bold text-[#686363]">
+                  Gestión de Proveedores
+                </h1>
+                <p className="text-[#969696] mt-1">
+                  Administra los proveedores activos del sistema
+                </p>
+              </div>
+            </div>
+
+            <Button
+              onClick={() => router.push("/proveedores/crear")}
+              className="gap-2 bg-[#fcc238] text-[#686363] hover:bg-[#fcc238]/90 font-semibold shadow-lg hover:shadow-xl transition-all duration-300 px-6 py-6"
+            >
+              <Plus className="h-5 w-5" />
+              Crear Proveedor
+            </Button>
           </div>
-          <p className="text-[#969696]">Administra los proveedores del sistema</p>
+
+          <div className="h-1 w-16 bg-gradient-to-r from-[#63bae9] to-[#fcc238] rounded-full" />
         </div>
 
-        {/* Buscador + Filtros + Crear */}
-        <Card className="mb-6 border-[#969696]/20">
-          <CardContent className="p-6">
-            <div className="flex flex-col sm:flex-row gap-4 items-center">
+        {/* ================= FILTROS ================= */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mb-8">
+          <div className="flex flex-col lg:flex-row gap-4 items-end">
 
-              {/* SELECT DE CAMPO */}
+            <div className="w-full lg:w-56">
+              <label className="block text-sm font-semibold text-[#686363] mb-2">
+                Buscar por
+              </label>
               <select
                 value={filterField}
                 onChange={(e) => setFilterField(e.target.value)}
-                className="h-10 px-3 rounded-md border border-[#969696]/30 bg-background text-sm text-[#686363] focus:border-[#63bae9]"
+                className="w-full px-4 py-3 rounded-lg border border-[#969696]/20 bg-white text-[#686363] focus:border-[#63bae9] focus:ring-2 focus:ring-[#63bae9]/20 font-medium"
               >
                 <option value="nombre_razon_social">Nombre</option>
                 <option value="cuit_cuil">CUIT/CUIL</option>
@@ -282,34 +163,163 @@ export default function ProveedoresPage() {
                 <option value="direccion">Dirección</option>
                 <option value="tipoServicio">Tipo de servicio</option>
               </select>
+            </div>
 
-              {/* INPUT BUSCAR */}
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#969696] h-4 w-4" />
+            <div className="flex-1">
+              <label className="block text-sm font-semibold text-[#686363] mb-2">
+                Buscar proveedor
+              </label>
+              <div className="relative">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[#969696] h-5 w-5" />
                 <Input
-                  placeholder="Buscar proveedor..."
+                  placeholder="Escribe para buscar..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 border-[#969696]/30 focus:border-[#63bae9] text-[#686363]"
+                  className="pl-12 py-3 border-[#969696]/20 focus:border-[#63bae9] focus:ring-2 focus:ring-[#63bae9]/20 text-[#686363]"
                 />
               </div>
-
-              {/* BOTÓN NUEVO */}
-              <Button
-                onClick={() => router.push("/proveedores/crear")}
-                className="gap-2 bg-[#fcc238] text-[#686363] hover:bg-[#fcc238]/90"
-              >
-                <Plus className="h-4 w-4" />
-                Crear Proveedor
-              </Button>
             </div>
-          </CardContent>
-        </Card>
 
-        <TableView />
+            <Badge className="bg-[#63bae9]/10 text-[#63bae9] border border-[#63bae9]/20 px-4 py-2 rounded-full text-sm font-medium">
+              {filteredProveedores.length} activos
+            </Badge>
+
+          </div>
+        </div>
+
+        {/* ================= TABLA PREMIUM ================= */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+
+          <div className="px-8 py-6 border-b border-gray-100 bg-gradient-to-r from-[#63bae9]/5 to-transparent">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-[#686363]">
+                Lista de Proveedores
+              </h2>
+              <span className="px-3 py-1 rounded-full bg-[#63bae9]/10 text-[#63bae9] text-sm font-medium">
+                {filteredProveedores.length} activos
+              </span>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-100 bg-gray-50">
+                  <th className="px-8 py-4 text-left text-sm font-semibold text-[#686363]">
+                    Proveedor
+                  </th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-[#686363]">
+                    CUIT/CUIL
+                  </th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-[#686363]">
+                    Contacto
+                  </th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-[#686363]">
+                    Servicio
+                  </th>
+                  <th className="px-6 py-4 text-right text-sm font-semibold text-[#686363]">
+                    Acciones
+                  </th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {filteredProveedores.map((p) => (
+                  <tr
+                    key={p.id_proveedor}
+                    className="border-b border-gray-100 hover:bg-[#63bae9]/3 transition-colors duration-200"
+                  >
+                    <td className="px-8 py-5">
+                      <div className="flex flex-col">
+                        <span className="font-semibold text-[#686363]">
+                          {p.nombre_razon_social}
+                        </span>
+                        <span className="text-xs text-[#969696] mt-1">
+                          ID: {p.id_proveedor}
+                        </span>
+                      </div>
+                    </td>
+
+                    <td className="px-6 py-5 text-[#686363]">
+                      {p.cuit_cuil}
+                    </td>
+
+                    <td className="px-6 py-5">
+                      <div className="flex flex-col">
+                        <span className="text-sm text-[#686363]">
+                          {p.correo_contacto || "Sin email"}
+                        </span>
+                        <span className="text-xs text-[#969696] mt-1">
+                          {p.telefono_contacto || "Sin teléfono"}
+                        </span>
+                      </div>
+                    </td>
+
+                    <td className="px-6 py-5">
+                      <span className="inline-flex px-3 py-1 rounded-full text-xs font-semibold bg-[#63bae9]/15 text-[#63bae9]">
+                        {p.tipoServicio?.nombre || "Sin tipo"}
+                      </span>
+                    </td>
+
+                    <td className="px-6 py-5 text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            className="h-9 w-9 p-0 hover:bg-[#63bae9]/10 text-[#686363]"
+                          >
+                            <MoreHorizontal className="h-5 w-5" />
+                          </Button>
+                        </DropdownMenuTrigger>
+
+                        <DropdownMenuContent
+                          align="end"
+                          className="border border-gray-100 shadow-lg"
+                        >
+                          <DropdownMenuItem
+                            onClick={() =>
+                              router.push(`/proveedores/${p.id_proveedor}`)
+                            }
+                            className="hover:bg-[#63bae9]/10 hover:text-[#63bae9]"
+                          >
+                            <Eye className="mr-2 h-4 w-4" />
+                            Ver detalles
+                          </DropdownMenuItem>
+
+                          <DropdownMenuItem
+                            onClick={() =>
+                              router.push(`/proveedores/editar?id=${p.id_proveedor}`)
+                            }
+                            className="hover:bg-[#63bae9]/10 hover:text-[#63bae9]"
+                          >
+                            <Edit className="mr-2 h-4 w-4" />
+                            Editar
+                          </DropdownMenuItem>
+
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setProveedorId(p.id_proveedor);
+                              setIsModalOpen(true);
+                            }}
+                            className="text-[#fcc238] hover:bg-[#fcc238]/10"
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Eliminar
+                          </DropdownMenuItem>
+
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </td>
+
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
       </div>
 
-      {/* Modal de confirmación */}
       <ConfirmationModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}

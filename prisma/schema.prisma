@@ -102,24 +102,29 @@ model VerificationToken {
 
 // ====================== TU ESQUEMA ======================
 model TipoCliente {
-  id_tipo_cliente Int      @id @default(autoincrement())
-  nombre          String   @db.VarChar(50)
-  clientes        Cliente[]
+  id_tipo_cliente Int               @id @default(autoincrement())
+  nombre          String            @db.VarChar(50)
+
+  clientes        ClienteTipo[]
 
   @@map("tipo_cliente")
 }
 
 model Cliente {
-  id_cliente     Int          @id @default(autoincrement())
-  nombre         String       @db.VarChar(100)
-  apellido       String?      @db.VarChar(100)
-  email          String?      @db.VarChar(100)
-  telefono       String?      @db.VarChar(50)
-  tipo_documento String?      @db.VarChar(50)
-  tipoClienteId  Int?
-  tipoCliente    TipoCliente? @relation(fields: [tipoClienteId], references: [id_tipo_cliente])
-  descripcion    String?      @db.Text
-  activo         Boolean      @default(true)
+  id_cliente      Int               @id @default(autoincrement())
+  nombre          String            @db.VarChar(100)
+  apellido        String?           @db.VarChar(100)
+  email           String?           @db.VarChar(100)
+  telefono        String?           @db.VarChar(50)
+
+  dumero_documento String?          @db.VarChar(50)
+  tipoDocumentoId Int?
+  tipoDocumento   TipoDocumento?    @relation(fields: [tipoDocumentoId], references: [id_tipo_documento])
+
+  descripcion     String?           @db.Text
+  activo          Boolean           @default(true)
+
+  tiposCliente    ClienteTipo[]   
 
   inmuebles   Inmueble[]
   contratos_1 Contrato[]   @relation("Cliente1")
@@ -130,6 +135,32 @@ model Cliente {
 
   @@map("clientes")
 }
+
+model ClienteTipo {
+  clienteId      Int
+  tipoClienteId  Int
+
+  cliente        Cliente     @relation(fields: [clienteId], references: [id_cliente])
+  tipoCliente    TipoCliente @relation(fields: [tipoClienteId], references: [id_tipo_cliente])
+
+  @@id([clienteId, tipoClienteId])
+  @@map("cliente_tipo_cliente")
+}
+
+
+model TipoDocumento {
+  id_tipo_documento Int     @id @default(autoincrement())
+  nombre            String  @db.VarChar(50) @unique
+  longitud_min      Int
+  longitud_max      Int
+  solo_numeros      Boolean @default(true)
+  descripcion       String? @db.VarChar(150)
+
+  clientes Cliente[]
+
+  @@map("tipo_documento")
+}
+
 
 model Tipo_inmueble {
   id_tipo_inmueble Int       @id @default(autoincrement())
