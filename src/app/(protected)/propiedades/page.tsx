@@ -35,10 +35,11 @@ const ESTADO_COLORS: Record<string, string> = {
 };
 
 const OPERACION_COLORS: Record<string, string> = {
-  "Venta": "bg-blue-100 text-blue-700",
-  "Alquiler": "bg-indigo-100 text-indigo-700",
-  "Alquiler temporal": "bg-cyan-100 text-cyan-700",
+  "Venta": "bg-emerald-100 text-emerald-700",
+  "Alquiler": "bg-blue-100 text-blue-700",
+  "Alquiler temporal": "bg-violet-100 text-violet-700",
 };
+
 
 // fallback si viene algo raro del back
 const DEFAULT_TAG_COLOR = "bg-gray-100 text-gray-700";
@@ -244,26 +245,6 @@ const handleEliminar = (id: number) => {
 
         await toggleArchivarMutation.mutateAsync({ id, archivado });
 
-        queryClient.setQueryData(['inmuebles', paginaActivos, filtros], (oldData: any) => {
-          if (!oldData) return oldData;
-          return {
-            ...oldData,
-            data: oldData.data.map((i: InmuebleLocal) =>
-              i.id_inmueble === id ? { ...i, archivadoLocal: !archivado } : i
-            ),
-          };
-        });
-
-        queryClient.setQueryData(['inmueblesArchivados', paginaArchivados], (oldData: any) => {
-          if (!oldData) return oldData;
-          return {
-            ...oldData,
-            data: oldData.data.map((i: InmuebleLocal) =>
-              i.id_inmueble === id ? { ...i, archivadoLocal: !archivado } : i
-            ),
-          };
-        });
-
         setModalConfig({
           title: "Éxito",
           message: archivado
@@ -295,7 +276,7 @@ const handleEliminar = (id: number) => {
   // FILTRADO Y PAGINACIÓN LOCAL (solo para separar activos/archivados)
   // =====================================================================
 
-  const activos = inmuebles.filter((i) => !i.archivadoLocal);
+  const activos = inmuebles;
   const archivados: InmuebleLocal[] =
   dataArchivados?.data?.map((i: InmuebleDTO) => ({
     ...i,
@@ -347,12 +328,15 @@ const totalGeneral = totalActivos + totalArchivados;
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-3 px-4 py-2 rounded-lg bg-[#fef9e7]">
-            <div className="w-2 h-2 rounded-full animate-pulse bg-[#fcc238]" />
-            <span className="text-sm font-medium text-gray-600">
-              {totalGeneral} {totalGeneral === 1 ? 'propiedad' : 'propiedades'}
-            </span>
-          </div>
+          {isAuthenticated && (
+            <div className="flex items-center gap-3 px-4 py-2 rounded-lg bg-[#fef9e7]">
+              <div className="w-2 h-2 rounded-full animate-pulse bg-[#fcc238]" />
+              <span className="text-sm font-medium text-gray-600">
+                {totalGeneral} {totalGeneral === 1 ? 'propiedad' : 'propiedades'}
+              </span>
+            </div>
+          )}
+
         </div>
       </header>
       {/* CONTENIDO */}
@@ -416,19 +400,21 @@ const totalGeneral = totalActivos + totalArchivados;
 
         {/* LISTADO ACTIVOS */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 mt-8">
-          <div className="p-6 border-b border-gray-200 flex items-center justify-between">
-            <h2 className="text-2xl font-semibold text-gray-700">
-              Inmuebles Activos
-            </h2>
+          {isAuthenticated && (
+            <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+              <h2 className="text-2xl font-semibold text-gray-700">
+                Inmuebles Activos
+              </h2>
 
-            {/* Contador */}
-            <div className="flex items-center gap-3 px-4 py-2 rounded-lg bg-[#ecfdf5]">
-              <div className="w-2 h-2 rounded-full animate-pulse bg-[#22c55e]" />
-              <span className="text-sm font-medium text-gray-600">
-                {activos.length} {activos.length === 1 ? 'activo' : 'activos'}
-              </span>
+              <div className="flex items-center gap-3 px-4 py-2 rounded-lg bg-[#ecfdf5]">
+                <div className="w-2 h-2 rounded-full animate-pulse bg-[#22c55e]" />
+                <span className="text-sm font-medium text-gray-600">
+                  {activos.length} {activos.length === 1 ? 'activo' : 'activos'}
+                </span>
+              </div>
             </div>
-          </div>
+          )}
+
 
           <div className="p-6">
           {isLoading && activos.length === 0 ? (
@@ -451,10 +437,11 @@ const totalGeneral = totalActivos + totalArchivados;
                     key={i.id_inmueble}
                     className="group border-2 border-gray-200 rounded-xl p-5 hover:shadow-lg transition-all relative border-l-4 border-l-[#63bae9]"
                   >
-                    {/* Tags - solo usuarios logueados */}
-                    {isAuthenticated && (
+                    {/* Tags */}
                       <div className="mb-3 flex flex-wrap items-center gap-2">
-                        {i.estado?.nombre && (
+
+                        {/* Estado → solo logueado */}
+                        {isAuthenticated && i.estado?.nombre && (
                           <span
                             className={`
                               px-3 py-1 text-xs font-semibold rounded-full
@@ -465,19 +452,20 @@ const totalGeneral = totalActivos + totalArchivados;
                           </span>
                         )}
 
+                        {/* Operación → SIEMPRE visible */}
                         {i.operacion?.nombre && (
-                            <span
-                              className={`
-                                px-3 py-1 text-xs font-semibold rounded-full
-                                ${OPERACION_COLORS[i.operacion.nombre] ?? DEFAULT_TAG_COLOR}
-                              `}
-                            >
-                              {i.operacion.nombre}
-                            </span>
-                          )}
+                          <span
+                            className={`
+                              px-3 py-1 text-xs font-semibold rounded-full
+                              ${OPERACION_COLORS[i.operacion.nombre] ?? DEFAULT_TAG_COLOR}
+                            `}
+                          >
+                            {i.operacion.nombre}
+                          </span>
+                        )}
 
                       </div>
-                    )}
+
 
                     <InmuebleCard inmueble={i} />
                     {/* ← Info básica de creación/modificación (solo para logueados) */}
@@ -551,43 +539,30 @@ const totalGeneral = totalActivos + totalArchivados;
               </div>
             )}
             {/* PAGINACIÓN ACTIVOS */}
-            {totalPagesActivos > 1 && (
-              <div className="flex justify-center items-center gap-3 mt-6">
-                <button
-                  onClick={() =>
-                    setPaginaActivos((p) => Math.max(p - 1, 1))
-                  }
-                  disabled={paginaActivos === 1}
-                  className="px-3 py-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 disabled:opacity-50"
-                >
-                  ← Anterior
-                </button>
-                {[...Array(totalPagesActivos)].map((_, index) => (
-                  <button
-                    key={index}
-                    onClick={() => setPaginaActivos(index + 1)}
-                    className={`px-3 py-2 rounded-lg ${
-                      paginaActivos === index + 1
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    }`}
-                  >
-                    {index + 1}
-                  </button>
-                ))}
-                <button
-                  onClick={() =>
-                    setPaginaActivos((p) =>
-                      Math.min(p + 1, totalPagesActivos)
-                    )
-                  }
-                  disabled={paginaActivos === totalPagesActivos}
-                  className="px-3 py-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 disabled:opacity-50"
-                >
-                  Siguiente →
-                </button>
-              </div>
-            )}
+            <div className="flex flex-col sm:flex-row justify-between items-center pt-6 gap-4 border-t border-gray-200">
+              <button
+                onClick={() => setPaginaActivos(paginaActivos - 1)}
+                disabled={paginaActivos === 1}
+                className="flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-[#63bae9] to-[#4a9fd4] text-white font-semibold shadow-md hover:shadow-lg transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+              >
+                <ArrowLeft className="w-5 h-5" />
+                Anterior
+              </button>
+
+              <span className="text-sm font-bold text-[#686363] px-4 py-2 rounded-lg bg-gray-100">
+                Página {paginaActivos} de {Math.ceil(totalActivos / inmueblesPorPagina) || 1}
+              </span>
+
+              <button
+                onClick={() => setPaginaActivos(paginaActivos + 1)}
+                disabled={paginaActivos >= Math.ceil(totalActivos / inmueblesPorPagina)}
+                className="flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-[#63bae9] to-[#4a9fd4] text-white font-semibold shadow-md hover:shadow-lg transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+              >
+                Siguiente
+                <ArrowLeft className="w-5 h-5 transform rotate-180" />
+              </button>
+            </div>
+
           </div>
         </div>
         {/* ARCHIVADOS - Solo para usuarios logueados */}
@@ -715,55 +690,32 @@ const totalGeneral = totalActivos + totalArchivados;
                   ))}
                 </div>
               )}
-              {/* PAGINACIÓN ACTIVOS */}
-{totalPagesActivos > 1 && (
-  <div className="flex flex-col sm:flex-row justify-between items-center pt-6 gap-4 border-t border-gray-200">
-    <button
-      onClick={() => setPaginaActivos(paginaActivos - 1)}
-      disabled={paginaActivos === 1}
-      className="flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-[#63bae9] to-[#4a9fd4] text-white font-semibold shadow-md hover:shadow-lg transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
-    >
-      <ArrowLeft className="w-5 h-5" />
-      Anterior
-    </button>
-    <span className="text-sm font-bold text-[#686363] px-4 py-2 rounded-lg bg-gray-100">
-      Página {paginaActivos} de {totalPagesActivos}
-    </span>
-    <button
-      onClick={() => setPaginaActivos(paginaActivos + 1)}
-      disabled={paginaActivos >= totalPagesActivos}
-      className="flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-[#63bae9] to-[#4a9fd4] text-white font-semibold shadow-md hover:shadow-lg transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
-    >
-      Siguiente
-      <ArrowLeft className="w-5 h-5 transform rotate-180" />
-    </button>
-  </div>
-)}
-
+              
 {/* PAGINACIÓN ARCHIVADOS */}
-{totalPagesArchivados > 1 && (
-  <div className="flex flex-col sm:flex-row justify-between items-center pt-6 gap-4 border-t border-gray-200">
-    <button
-      onClick={() => setPaginaArchivados(paginaArchivados - 1)}
-      disabled={paginaArchivados === 1}
-      className="flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-[#63bae9] to-[#4a9fd4] text-white font-semibold shadow-md hover:shadow-lg transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
-    >
-      <ArrowLeft className="w-5 h-5" />
-      Anterior
-    </button>
-    <span className="text-sm font-bold text-[#686363] px-4 py-2 rounded-lg bg-gray-100">
-      Página {paginaArchivados} de {totalPagesArchivados}
-    </span>
-    <button
-      onClick={() => setPaginaArchivados(paginaArchivados + 1)}
-      disabled={paginaArchivados >= totalPagesArchivados}
-      className="flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-[#63bae9] to-[#4a9fd4] text-white font-semibold shadow-md hover:shadow-lg transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
-    >
-      Siguiente
-      <ArrowLeft className="w-5 h-5 transform rotate-180" />
-    </button>
-  </div>
-)}
+<div className="flex flex-col sm:flex-row justify-between items-center pt-6 gap-4 border-t border-gray-200">
+  <button
+    onClick={() => setPaginaArchivados(paginaArchivados - 1)}
+    disabled={paginaArchivados === 1}
+    className="flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-[#63bae9] to-[#4a9fd4] text-white font-semibold shadow-md hover:shadow-lg transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+  >
+    <ArrowLeft className="w-5 h-5" />
+    Anterior
+  </button>
+
+  <span className="text-sm font-bold text-[#686363] px-4 py-2 rounded-lg bg-gray-100">
+    Página {paginaArchivados} de {Math.ceil(totalArchivados / inmueblesPorPagina) || 1}
+  </span>
+
+  <button
+    onClick={() => setPaginaArchivados(paginaArchivados + 1)}
+    disabled={paginaArchivados >= Math.ceil(totalArchivados / inmueblesPorPagina)}
+    className="flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-[#63bae9] to-[#4a9fd4] text-white font-semibold shadow-md hover:shadow-lg transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+  >
+    Siguiente
+    <ArrowLeft className="w-5 h-5 transform rotate-180" />
+  </button>
+</div>
+
 
             </div>
           </div>

@@ -1,52 +1,79 @@
 // src/app/api/upload/route.ts
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
+
 import { NextResponse } from "next/server";
 import { v2 as cloudinary } from "cloudinary";
 
-// Configuración de Cloudinary
+// ⚠️ Configurar Cloudinary correctamente
 cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME!,
+  api_key: process.env.CLOUDINARY_API_KEY!,
+  api_secret: process.env.CLOUDINARY_API_SECRET!,
 });
-
-// Evita que Next.js intente parsear automáticamente el body, porque eso rompe el upload.
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
 
 export async function POST(req: Request) {
   try {
-    // Obtener el formData enviado desde el cliente
     const formData = await req.formData();
-    const file = formData.get("file") as File;
+    const file = formData.get("file") as File | null;
 
     if (!file) {
-      return NextResponse.json({ error: "No se recibió archivo" }, { status: 400 });
+      return NextResponse.json(
+        { error: "No se recibió archivo" },
+        { status: 400 }
+      );
     }
 
-    // Convertir el archivo a buffer/base64
+    // Validación extra
+    if (!file.type.startsWith("image/")) {
+      return NextResponse.json(
+        { error: "El archivo no es una imagen" },
+        { status: 400 }
+      );
+    }
+
+    // Convertir a buffer
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    // Subir a Cloudinary
-    const uploadRes = await new Promise<any>((resolve, reject) => {
+    // Subir a Cloudinary usando stream
+    const uploadResult = await new Promise<any>((resolve, reject) => {
       const stream = cloudinary.uploader.upload_stream(
-        { folder: "inmuebles", resource_type: "image" }, //folder: "inmuebles" → las imágenes se guardan en esa carpeta.
-        (error, result) => {                             //resource_type: "image" → el archivo se tratará como imagen.
+        {
+          folder: "inmuebles",
+          resource_type: "image",
+        },
+        (error, result) => {
           if (error) reject(error);
           else resolve(result);
         }
       );
+
       stream.end(buffer);
     });
 
-    return NextResponse.json({ url: uploadRes.secure_url }, { status: 200 });
+    if (!uploadResult?.secure_url) {
+      throw new Error("Cloudinary no devolvió secure_url");
+    }
+
+    // ✅ DEVOLVER URL REAL
+    return NextResponse.json(
+      {
+        url: uploadResult.secure_url,
+        public_id: uploadResult.public_id,
+      },
+      { status: 200 }
+    );
+
   } catch (error: any) {
-    console.error("❌ Error en Cloudinary:", error);
-    return NextResponse.json({ error: "Error al subir a Cloudinary" }, { status: 500 });
+    console.error("❌ Error subiendo a Cloudinary:", error);
+
+    return NextResponse.json(
+      {
+        error: "Error al subir imagen",
+        details: error.message,
+      },
+      { status: 500 }
+    );
   }
 }

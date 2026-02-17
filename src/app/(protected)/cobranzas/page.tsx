@@ -9,9 +9,6 @@ import { useState, useEffect, JSXElementConstructor, Key, ReactElement, ReactNod
 import { DollarSign, PlusCircle, AlertCircle, Trash2, FileSignature, Filter, Calendar, User, X, Home, CheckCircle, XCircle, Edit3, ArrowLeft  } from 'lucide-react';
 // Iconos SVG importados como componentes React.
 
-import ConfirmationModal from '@/components/ui/Modal';
-// Modal de confirmación para eliminar cobranzas.
-
 import Header from '@/components/ui/Header';
 // Componente visual para el encabezado de la página.
 
@@ -67,6 +64,16 @@ interface CobranzasResponse {
   cobranzas: Cobranza[];
   total: number;
 }
+
+// ==========================
+// FORMATEADOR DE MONEDA ARS
+// ==========================
+const formatMoney = (value: number) => {
+  return new Intl.NumberFormat('es-AR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
+};
 
 
 export default function CobranzasPage() {
@@ -588,7 +595,7 @@ const toggleActivaMutation = useMutation({
 
                   <div className="mt-3 flex flex-wrap items-center gap-2">
                     <span className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg bg-white border-2 border-[#63bae9]/20 text-[#63bae9]">
-                      ${grupo.total.toLocaleString('es-AR')}
+                      ${formatMoney(grupo.total)}
                     </span>
 
                     <span
@@ -644,7 +651,7 @@ const toggleActivaMutation = useMutation({
                 <div className="flex items-center gap-6 flex-shrink-0">
                   {/* Monto */}
                   <span className="text-lg font-bold text-[#63bae9]">
-                    ${c.monto.toLocaleString('es-AR')}
+                    ${formatMoney(c.monto)}
                   </span>
 
                   {/* Estado */}

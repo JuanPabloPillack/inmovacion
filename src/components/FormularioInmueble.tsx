@@ -22,7 +22,8 @@ import {
 import type { InmuebleEdit } from "@/types/inmuebles";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import Modal from "@/components/ui/Modal";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+
 
 
 // -----------------------------------------------------------
@@ -61,18 +62,47 @@ export default function FormularioInmueble({
   onCancel, //Función para manejar el botón "Cancelar" (cerrar modal, volver atrás, etc)
 }: FormularioInmuebleProps) {
   const router = useRouter();
+  const queryClient = useQueryClient();
+const getInputClass = (fieldName: string) =>
+  `w-full px-4 py-2.5 rounded-lg border focus:outline-none focus:ring-2 focus:ring-offset-1 transition-all ${
+    errores[fieldName]
+      ? "border-red-500 focus:ring-red-500 focus:border-red-500 bg-red-50/30"
+      : "border-gray-300 focus:ring-blue-400 focus:border-blue-400"
+  }`;
 
-  // Referencia al formulario, útil para capturar datos con FormData
-  const formRef = useRef<HTMLFormElement>(null);
+const ErrorMessage = ({ field }: { field: string }) =>
+  errores[field] ? (
+    <p className="text-sm text-red-600 mt-1.5 leading-tight">
+      {errores[field]}
+    </p>
+  ) : null;
+
 
     const clientesQuery = useQuery<Cliente[]>({
   queryKey: ["clientes", "propietarios"],
+
   queryFn: async () => {
-    const res = await fetch("/api/clientes/propietarios");
-    if (!res.ok) throw new Error("Error clientes");
+    const includeId = initialData?.id_cliente;
+
+    const url = includeId
+      ? `/api/clientes/propietarios?includeId=${includeId}`
+      : "/api/clientes/propietarios";
+
+    const res = await fetch(url);
+
+    if (!res.ok) {
+      throw new Error("Error al cargar propietarios");
+    }
+
+
     return res.json();
   },
+
+  staleTime: 1000 * 60 * 5, // 5 min cache profesional
 });
+
+
+
 
 
 const tiposQuery = useQuery<TipoInmueble[]>({
@@ -129,7 +159,8 @@ const isError =
   // Loading para evitar múltiples envíos
   const [loading, setLoading] = useState(false);
 
-
+// 🔥 Estado profesional de errores por campo
+const [errores, setErrores] = useState<Record<string, string>>({});
 
   // Manejo de imágenes: cada imagen tiene URL, si es principal, y el archivo real
   const [imagenes, setImagenes] = useState<ImagenData[]>([]);
@@ -152,6 +183,55 @@ const isError =
   const [selectedTipo, setSelectedTipo] = useState<number | "">(initialData?.id_tipo_inmueble ?? "");
   const [selectedOperacion, setSelectedOperacion] = useState<number | "">(initialData?.id_operacion ?? "");
   const [selectedEstado, setSelectedEstado] = useState<number | "">(initialData?.id_estado ?? "");
+
+  const [formValues, setFormValues] = useState({
+  titulo: initialData?.titulo ?? "",
+  direccion: initialData?.ubicacion?.direccion ?? "",
+  ciudad: initialData?.ubicacion?.ciudad ?? "",
+  provincia: initialData?.ubicacion?.provincia ?? "",
+  superficie_total: initialData?.superficie_total?.toString() ?? "",
+  superficie_cubierta: initialData?.superficie_cubierta?.toString() ?? "",
+  cantidad_ambientes: initialData?.cantidad_ambientes?.toString() ?? "",
+  cantidad_banos: initialData?.cantidad_banos?.toString() ?? "",
+  cantidad_dormitorios: initialData?.cantidad_dormitorios?.toString() ?? "",
+  cantidad_cocheras: initialData?.cantidad_cocheras?.toString() ?? "",
+  cantidad_pisos: initialData?.cantidad_pisos?.toString() ?? "",
+  antiguedad: initialData?.antiguedad?.toString() ?? "",
+  precio: initialData?.precio?.toString() ?? "",
+  detalles: initialData?.detalles ?? "",
+});
+
+
+
+const handleInputChange = (
+  e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+) => {
+  const { name, value } = e.target;
+
+  setFormValues((prev) => ({
+    ...prev,
+    [name]: value,
+  }));
+
+  // limpiar error si existe
+  if (errores[name]) {
+    setErrores((prev) => {
+      const n = { ...prev };
+      delete n[name];
+      return n;
+    });
+  }
+};
+
+
+  useEffect(() => {
+  if (initialData) {
+    setSelectedCliente(initialData.id_cliente ?? "");
+    setSelectedTipo(initialData.id_tipo_inmueble ?? "");
+    setSelectedOperacion(initialData.id_operacion ?? "");
+    setSelectedEstado(initialData.id_estado ?? "");
+  }
+}, [initialData, clientes, tipos, estados, operaciones]);
 
   // Estado local para el texto del barrio
   const [barrioText, setBarrioText] = useState(initialData?.ubicacion?.barrio ?? "");
@@ -234,105 +314,58 @@ const [modalConfig, setModalConfig] = useState<ModalConfig>({
   // -----------------------------------------------------------
   //                     VALIDACIONES
   // -----------------------------------------------------------
- const validarFormulario = (fields: any) => {
-  /* ------------------ SELECTS OBLIGATORIOS ------------------ */
-  if (!selectedCliente) return "Debe seleccionar un propietario.";
-  if (!selectedTipo) return "Debe seleccionar un tipo de propiedad.";
-  if (!selectedEstado) return "Debe seleccionar un estado.";
-  if (!selectedOperacion) return "Debe seleccionar una operación.";
+const validarFormulario = (fields: any) => {
+  const nuevosErrores: Record<string, string> = {};
 
-  /* ------------------ UBICACIÓN ------------------ */
-  if (!fields.direccion || fields.direccion.toString().trim() === "")
-    return "La dirección es obligatoria.";
+  /* SELECTS */
+  if (!selectedCliente)
+    nuevosErrores.id_cliente = "Debe seleccionar un propietario.";
 
-  if (!barrioText || barrioText.trim() === "")
-    return "El barrio es obligatorio.";
+  if (!selectedTipo)
+    nuevosErrores.id_tipo_inmueble = "Debe seleccionar un tipo.";
 
-  /* ------------------ CAMPOS NUMÉRICOS PRINCIPALES ------------------ */
+  if (!selectedEstado)
+    nuevosErrores.id_estado = "Debe seleccionar un estado.";
+
+  if (!selectedOperacion)
+    nuevosErrores.id_operacion = "Debe seleccionar una operación.";
+
+  /* UBICACIÓN */
+  if (!fields.direccion?.toString().trim())
+    nuevosErrores.direccion = "La dirección es obligatoria.";
+
+  if (!fields.ciudad?.toString().trim())
+    nuevosErrores.ciudad = "La ciudad es obligatoria.";
+
+  if (!fields.provincia?.toString().trim())
+    nuevosErrores.provincia = "La provincia es obligatoria.";
+
+  if (!barrioText?.trim())
+    nuevosErrores.barrio = "El barrio es obligatorio.";
+
+  /* NUMÉRICOS */
   const supTotal = Number(fields.superficie_total);
-  if (isNaN(supTotal) || supTotal <= 0)
-    return "La superficie total debe ser mayor a 0.";
-
-  const supCub = fields.superficie_cubierta
-    ? Number(fields.superficie_cubierta)
-    : null;
-
-  if (supCub !== null && (isNaN(supCub) || supCub < 0))
-    return "La superficie cubierta no puede ser negativa.";
-
-  if (supCub !== null && supCub > supTotal)
-    return "La superficie cubierta no puede ser mayor a la superficie total.";
+  if (!fields.superficie_total)
+    nuevosErrores.superficie_total = "Campo obligatorio.";
+  else if (isNaN(supTotal) || supTotal <= 0)
+    nuevosErrores.superficie_total = "Debe ser mayor a 0.";
 
   const precio = Number(fields.precio);
-  if (isNaN(precio) || precio <= 0)
-    return "El precio debe ser mayor a 0.";
+  if (!fields.precio)
+    nuevosErrores.precio = "Campo obligatorio.";
+  else if (isNaN(precio) || precio <= 0)
+    nuevosErrores.precio = "Debe ser mayor a 0.";
 
-  /* ------------------ CAMPOS NUMÉRICOS SECUNDARIOS ------------------ */
-  const validarEnteroNoNegativo = (
-    valor: any,
-    label: string,
-    obligatorio = false
-  ) => {
-    if (valor === "" || valor === undefined || valor === null) {
-      if (obligatorio) return `${label} es obligatorio.`;
-      return null;
-    }
-
-    const n = Number(valor);
-    if (isNaN(n) || n < 0 || !Number.isInteger(n))
-      return `${label} debe ser un número entero mayor o igual a 0.`;
-
-    return null;
-  };
-
-
-   const erroresNumericos =
-  validarEnteroNoNegativo(fields.cantidad_ambientes, "Cantidad de ambientes", true) ||
-  validarEnteroNoNegativo(fields.cantidad_banos, "Cantidad de baños", true) ||
-  validarEnteroNoNegativo(fields.cantidad_dormitorios, "Cantidad de dormitorios", true) ||
-  validarEnteroNoNegativo(fields.cantidad_cocheras, "Cantidad de cocheras") ||
-  validarEnteroNoNegativo(fields.cantidad_pisos, "Cantidad de pisos");
-
-
-  if (erroresNumericos) return erroresNumericos;
-
-  /* ------------------ ANTIGÜEDAD ------------------ */
-  if (fields.antiguedad !== "" && fields.antiguedad !== undefined) {
-    const ant = Number(fields.antiguedad);
-    if (isNaN(ant) || ant < 0 || ant > 150)
-      return "La antigüedad debe estar entre 0 y 150 años.";
-  }
-
-  /* ------------------ IMÁGENES ------------------ */
+  /* IMÁGENES */
   if (imagenes.length === 0)
-    return "Debe subir al menos una imagen.";
+    nuevosErrores.imagenes = "Debe subir al menos una imagen.";
 
   if (!imagenes.some((i) => i.principal))
-    return "Debe seleccionar una imagen principal.";
+    nuevosErrores.imagenes = "Debe elegir una imagen principal.";
 
-  if (imagenes.length > 10)
-    return "No se pueden subir más de 10 imágenes.";
-
-  for (const img of imagenes) {
-    if (img.file) {
-      if (!img.file.type.startsWith("image/"))
-        return "Solo se permiten archivos de imagen.";
-
-      const maxSizeMB = 5;
-      if (img.file.size > maxSizeMB * 1024 * 1024)
-        return `Cada imagen debe pesar menos de ${maxSizeMB}MB.`;
-    }
-  }
-
-  /* ------------------ TEXTO ------------------ */
-  if (fields.titulo && fields.titulo.toString().length > 150)
-    return "El título no puede superar los 150 caracteres.";
-
-  if (fields.detalles && fields.detalles.toString().length > 1000)
-    return "La descripción no puede superar los 1000 caracteres.";
-
-  return null; // ✔ Todo OK
+  return nuevosErrores;
 };
+
 
 
 // -----------------------------------------------------------
@@ -341,15 +374,27 @@ const [modalConfig, setModalConfig] = useState<ModalConfig>({
 
 // 🔹 Función que EJECUTA realmente el guardado
 const ejecutarSubmit = async () => {
-  if (!formRef.current) return;
+  const fields = formValues;
 
-  const formData = new FormData(formRef.current);
-  const fields = Object.fromEntries(formData.entries());
 
   // Si el componente está en modo "submitHandler" externo
   if (submitHandler) {
     try {
-      await submitHandler(formData, imagenes);
+      const formData = new FormData();
+
+        Object.entries(formValues).forEach(([key, value]) => {
+  formData.append(key, value);
+});
+
+// 🔥 AGREGAR ESTOS CAMPOS CRÍTICOS
+formData.append("id_cliente", String(selectedCliente));
+formData.append("id_tipo_inmueble", String(selectedTipo));
+formData.append("id_estado", String(selectedEstado));
+formData.append("id_operacion", String(selectedOperacion));
+formData.append("barrio", barrioText.trim());
+
+
+        await submitHandler(formData, imagenes);
       onSuccess?.();
     } catch (err: any) {
       console.error("Error en submitHandler:", err);
@@ -368,26 +413,50 @@ const ejecutarSubmit = async () => {
   try {
     const uploadedImages: { url: string; principal: boolean }[] = [];
 
-    // Subir imágenes
-    for (const img of imagenes) {
-  if (img.file) {
+for (const img of imagenes) {
+  // Si es archivo nuevo
+  if (img.file instanceof File) {
     const f = new FormData();
     f.append("file", img.file);
 
-    const res = await fetch("/api/upload", { method: "POST", body: f });
-    if (!res.ok) throw new Error("Error al subir imagen");
+    const res = await fetch("/api/upload", {
+      method: "POST",
+      body: f,
+    });
 
-    const data = await res.json();
-    uploadedImages.push({ url: data.url, principal: img.principal });
-  } else {
-    // ⛔ Nunca permitir blobs al backend
-    if (!img.url || img.url.startsWith("blob:")) {
-      throw new Error("Una imagen no fue subida correctamente.");
+    if (!res.ok) {
+      throw new Error("Error al subir imagen a Cloudinary");
     }
 
-    uploadedImages.push({ url: img.url, principal: img.principal });
+    const data = await res.json();
+
+    if (!data.url) {
+      throw new Error("Cloudinary no devolvió URL");
+    }
+
+    uploadedImages.push({
+      url: data.url,
+      principal: Boolean(img.principal),
+    });
+
+  }
+  // Si ya existe (modo edición)
+  else if (img.url && !img.url.startsWith("blob:")) {
+
+    uploadedImages.push({
+      url: img.url,
+      principal: Boolean(img.principal),
+    });
+
   }
 }
+
+// VALIDACIÓN CRÍTICA
+if (uploadedImages.length === 0) {
+  throw new Error("Debe subir al menos una imagen válida.");
+}
+
+
 
 
 
@@ -398,7 +467,7 @@ const ejecutarSubmit = async () => {
     // Payload final
     const payload = {
       ...fields,
-      id_cliente: Number(selectedCliente),
+      id_cliente: selectedCliente ? Number(selectedCliente) : undefined,
       barrio: barrioText.trim(),
       id_tipo_inmueble: Number(selectedTipo),
       id_estado: Number(selectedEstado),
@@ -416,6 +485,7 @@ const ejecutarSubmit = async () => {
 
       precio: Number(fields.precio),
       imagenes: uploadedImages,
+      detalles: fields.detalles || "",
     };
 
     const method = initialData ? "PUT" : "POST";
@@ -432,15 +502,35 @@ const ejecutarSubmit = async () => {
     if (!res.ok) throw new Error("Error al guardar inmueble");
 
     // ✅ Éxito
-    setModalConfig({
-      title: initialData ? "Inmueble modificado" : "Inmueble creado",
-      message: initialData
-        ? "Los cambios se guardaron correctamente."
-        : "El inmueble se creó correctamente.",
-      variant: "success",
-      onConfirm: () => router.push("/propiedades"),
-    });
-    setModalOpen(true);
+setModalConfig({
+  title: initialData ? "Inmueble modificado correctamente" : "Inmueble creado correctamente",
+  message: initialData
+    ? "Los cambios se guardaron con éxito."
+    : "El inmueble se creó con éxito.",
+  variant: "success",
+  onConfirm: async () => {
+    // 1. Invalidar cachés (actualizar listas sin recargar página)
+    await queryClient.invalidateQueries({ queryKey: ["inmuebles"] });
+    await queryClient.invalidateQueries({ queryKey: ["inmueblesArchivados"] });
+
+    // 2. Cerrar el modal
+    setModalOpen(false);
+
+    // 3. Redirigir SOLO después de que el usuario confirme
+    if (initialData) {
+      // Edición → puedes ir al detalle o a la lista
+      router.push(`/inmuebles/${initialData.id_inmueble}`); // o "/inmuebles"
+    } else {
+      // Creación → ir a la lista principal
+      router.push("/inmuebles");
+    }
+
+    // Opcional: ejecutar callback si existe
+    onSuccess?.();
+  },
+});
+
+setModalOpen(true);
 
 
   } catch (error: any) {
@@ -459,24 +549,23 @@ const ejecutarSubmit = async () => {
 // 🔹 Función que VALIDA y PIDE CONFIRMACIÓN
 const handleSubmit = (e: React.FormEvent) => {
   e.preventDefault();
-  if (!formRef.current) return;
 
-  const formData = new FormData(formRef.current);
-  const fields = Object.fromEntries(formData.entries());
+  const fields = formValues;
 
-  // Validaciones previas
-  const error = validarFormulario(fields);
-  if (error) {
-    setModalConfig({
-      title: "Formulario incompleto",
-      message: error,
-      variant: "warning",
-    });
-    setModalOpen(true);
+  const nuevosErrores = validarFormulario(fields);
+
+  if (Object.keys(nuevosErrores).length > 0) {
+    setErrores(nuevosErrores);
+
+    const primerCampo = Object.keys(nuevosErrores)[0];
+    const elemento = document.querySelector(`[name="${primerCampo}"]`);
+    elemento?.scrollIntoView({ behavior: "smooth", block: "center" });
+
     return;
   }
 
-  // Confirmación
+  setErrores({});
+
   setModalConfig({
     title: initialData ? "Confirmar cambios" : "Confirmar creación",
     message: initialData
@@ -485,16 +574,19 @@ const handleSubmit = (e: React.FormEvent) => {
     variant: "info",
     onConfirm: ejecutarSubmit,
   });
+
   setModalOpen(true);
 };
 
-  if (isLoading) {
-    return (
-      <div className="p-8 text-center text-gray-500">
-        Cargando formulario...
-      </div>
-    );
-  }
+
+  if (isLoading && !clientes.length && !tipos.length && !estados.length && !operaciones.length) {
+  // Solo mostrar loading inicial si NUNCA cargaron los datos
+  return (
+    <div className="p-8 text-center text-gray-500">
+      Cargando formulario...
+    </div>
+  );
+}
 
   if (isError) {
     return (
@@ -513,54 +605,46 @@ const handleSubmit = (e: React.FormEvent) => {
   //     RENDER
   // =====================================================
   return (
-  <form
-    ref={formRef}
-    onSubmit={handleSubmit}
-    noValidate
-    className="space-y-6"
-  >
-
-
-  
-
-    {/* -------------------------------------- */}
+ <form onSubmit={handleSubmit} noValidate className="space-y-8">
     {/* INFORMACIÓN BÁSICA */}
-    {/* -------------------------------------- */}
     <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
       <div className="flex items-center gap-3 mb-6">
         <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
           <FileText className="w-5 h-5 text-blue-600" />
         </div>
-        <h2 className="text-lg font-semibold text-gray-800">
-          Información Básica
-        </h2>
+        <h2 className="text-lg font-semibold text-gray-800">Información Básica</h2>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Título */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Título
+            Título <span className="text-red-500">*</span>
           </label>
           <input
             type="text"
             name="titulo"
-            defaultValue={initialData?.titulo ?? ""}
-            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg"
+            value={formValues.titulo}
+            onChange={handleInputChange}
+            className={getInputClass("titulo")}
             required
           />
+          <ErrorMessage field="titulo" />
         </div>
 
         {/* Tipo */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Tipo de propiedad
+            Tipo de propiedad <span className="text-red-500">*</span>
           </label>
           <select
             name="id_tipo_inmueble"
             value={selectedTipo}
-            onChange={(e) => setSelectedTipo(Number(e.target.value))}
-            className="w-full px-4 py-2.5 border rounded-lg"
+            onChange={(e) => {
+              setSelectedTipo(Number(e.target.value));
+              errores.id_tipo_inmueble && setErrores(prev => { const n = { ...prev }; delete n.id_tipo_inmueble; return n; });
+            }}
+            className={getInputClass("id_tipo_inmueble")}
             required
           >
             <option value="" disabled hidden>Seleccione un tipo</option>
@@ -570,18 +654,23 @@ const handleSubmit = (e: React.FormEvent) => {
               </option>
             ))}
           </select>
+          <ErrorMessage field="id_tipo_inmueble" />
         </div>
 
         {/* Operación */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Operación
+            Operación <span className="text-red-500">*</span>
           </label>
           <select
             name="id_operacion"
             value={selectedOperacion}
-            onChange={(e) => setSelectedOperacion(Number(e.target.value))}
-            className="w-full px-4 py-2.5 border rounded-lg"
+            onChange={(e) => {
+              setSelectedOperacion(Number(e.target.value));
+              errores.id_operacion && setErrores(prev => { const n = { ...prev }; delete n.id_operacion; return n; });
+            }}
+            className={getInputClass("id_operacion")}
+            required
           >
             <option value="" disabled hidden>Seleccione una operación</option>
             {operaciones.map((o) => (
@@ -590,18 +679,22 @@ const handleSubmit = (e: React.FormEvent) => {
               </option>
             ))}
           </select>
+          <ErrorMessage field="id_operacion" />
         </div>
 
         {/* Estado */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Estado
+            Estado <span className="text-red-500">*</span>
           </label>
           <select
             name="id_estado"
             value={selectedEstado}
-            onChange={(e) => setSelectedEstado(Number(e.target.value))}
-            className="w-full px-4 py-2.5 border rounded-lg"
+            onChange={(e) => {
+              setSelectedEstado(Number(e.target.value));
+              errores.id_estado && setErrores(prev => { const n = { ...prev }; delete n.id_estado; return n; });
+            }}
+            className={getInputClass("id_estado")}
             required
           >
             <option value="" disabled hidden>Seleccione un estado</option>
@@ -611,18 +704,26 @@ const handleSubmit = (e: React.FormEvent) => {
               </option>
             ))}
           </select>
+          <ErrorMessage field="id_estado" />
         </div>
 
         {/* Propietario */}
         <div className="md:col-span-2">
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Propietario
+            Propietario <span className="text-red-500">*</span>
           </label>
           <select
             name="id_cliente"
             value={selectedCliente}
-            onChange={(e) => setSelectedCliente(Number(e.target.value))}
-            className="w-full px-4 py-2.5 border rounded-lg"
+            onChange={(e) => {
+                const val = e.target.value;
+                setSelectedCliente(val ? Number(val) : "");
+                // limpiar error
+                if (errores.id_cliente) {
+                  setErrores(prev => { const n = { ...prev }; delete n.id_cliente; return n; });
+                }
+              }}
+            className={getInputClass("id_cliente")}
             required
           >
             <option value="" disabled hidden>Seleccione un propietario</option>
@@ -632,13 +733,12 @@ const handleSubmit = (e: React.FormEvent) => {
               </option>
             ))}
           </select>
+          <ErrorMessage field="id_cliente" />
         </div>
       </div>
     </div>
 
-    {/* -------------------------------------- */}
     {/* UBICACIÓN */}
-    {/* -------------------------------------- */}
     <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
       <div className="flex items-center gap-3 mb-6">
         <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -650,44 +750,52 @@ const handleSubmit = (e: React.FormEvent) => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Dirección
+            Dirección <span className="text-red-500">*</span>
           </label>
           <input
             type="text"
             name="direccion"
-            defaultValue={initialData?.ubicacion?.direccion ?? ""}
-            className="w-full px-4 py-2.5 border rounded-lg"
+            value={formValues.direccion}
+            onChange={handleInputChange}
+            className={getInputClass("direccion")}
             required
           />
+          <ErrorMessage field="direccion" />
         </div>
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Ciudad
+            Ciudad <span className="text-red-500">*</span>
           </label>
           <input
             type="text"
             name="ciudad"
-            defaultValue={initialData?.ubicacion?.ciudad ?? ""}
-            className="w-full px-4 py-2.5 border rounded-lg"
+            value={formValues.ciudad}
+            onChange={handleInputChange}
+            className={getInputClass("ciudad")}
+            required
           />
+          <ErrorMessage field="ciudad" />
         </div>
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Provincia
+            Provincia <span className="text-red-500">*</span>
           </label>
           <input
             type="text"
             name="provincia"
-            defaultValue={initialData?.ubicacion?.provincia ?? ""}
-            className="w-full px-4 py-2.5 border rounded-lg"
+            value={formValues.provincia}
+            onChange={handleInputChange}
+            className={getInputClass("provincia")}
+            required
           />
+          <ErrorMessage field="provincia" />
         </div>
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Barrio
+            Barrio <span className="text-red-500">*</span>
           </label>
           <input
             type="hidden"
@@ -698,17 +806,19 @@ const handleSubmit = (e: React.FormEvent) => {
             type="text"
             name="barrio"
             value={barrioText}
-            onChange={(e) => setBarrioText(e.target.value)}
-            className="w-full px-4 py-2.5 border rounded-lg"
+            onChange={(e) => {
+              setBarrioText(e.target.value);
+              errores.barrio && setErrores(prev => { const n = { ...prev }; delete n.barrio; return n; });
+            }}
+            className={getInputClass("barrio")}
             required
           />
+          <ErrorMessage field="barrio" />
         </div>
       </div>
     </div>
 
-    {/* -------------------------------------- */}
     {/* CARACTERÍSTICAS */}
-    {/* -------------------------------------- */}
     <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
       <div className="flex items-center gap-3 mb-6">
         <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -727,116 +837,115 @@ const handleSubmit = (e: React.FormEvent) => {
           { label: "Cocheras", name: "cantidad_cocheras", value: initialData?.cantidad_cocheras },
           { label: "Pisos", name: "cantidad_pisos", value: initialData?.cantidad_pisos },
           { label: "Antigüedad (años)", name: "antiguedad", value: initialData?.antiguedad },
-          { label: "Precio", name: "precio", value: initialData?.precio, step: "0.01" },
+          { label: "Precio", name: "precio", required: true, step: "0.01", value: initialData?.precio },
         ].map((field) => (
           <div key={field.name}>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              {field.label}
+              {field.label}{field.required && <span className="text-red-500 ml-1">*</span>}
             </label>
             <input
               type="number"
               name={field.name}
-              defaultValue={field.value ?? ""}
-              step={field.step}
+              value={formValues[field.name as keyof typeof formValues]}
+              onChange={handleInputChange}
+              step={field.step ?? "1"}
               required={field.required}
-              className="w-full px-4 py-2.5 border rounded-lg"
+              className={getInputClass(field.name)}
             />
+            <ErrorMessage field={field.name} />
           </div>
         ))}
       </div>
     </div>
 
-    {/* -------------------------------------- */}
     {/* DETALLES */}
-    {/* -------------------------------------- */}
     <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
       <label className="block text-sm font-medium text-gray-700 mb-2">
         Descripción
       </label>
       <textarea
         name="detalles"
-        defaultValue={initialData?.detalles ?? ""}
-        rows={4}
-        className="w-full px-4 py-2.5 border rounded-lg"
+        value={formValues.detalles}
+        onChange={handleInputChange}
+        rows={5}
+        className={getInputClass("detalles")}
+        placeholder="Ingrese una descripción detallada del inmueble..."
       />
+      <ErrorMessage field="detalles" />
     </div>
 
-   {/* -------------------------------------- */}
-{/* IMÁGENES */}
-{/* -------------------------------------- */}
-<div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
-  <div className="flex items-center gap-3 mb-6">
-    <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-      <Image className="w-5 h-5 text-blue-600" />
-    </div>
-    <h2 className="text-lg font-semibold text-gray-800">
-      Imágenes
-    </h2>
-  </div>
-
-  {/* Input */}
-  <input
-    type="file"
-    multiple
-    accept="image/*"
-    onChange={handleFileChange}
-    className="block w-full text-sm text-gray-700
-               file:mr-4 file:py-2 file:px-4
-               file:rounded-lg file:border-0
-               file:text-sm file:font-medium
-               file:bg-blue-50 file:text-blue-700
-               hover:file:bg-blue-100"
-  />
-
-  {/* Preview */}
-  {imagenes.length > 0 && (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
-      {imagenes.map((img, index) => (
-        <div
-          key={index}
-          className={`relative group w-full h-32 rounded-xl overflow-hidden border
-            ${img.principal ? "ring-2 ring-blue-500" : ""}`}
-        >
-          <img
-            src={img.preview || img.url}
-            alt={`Imagen ${index + 1}`}
-            className="w-full h-full object-cover"
-          />
-
-
-          {/* Overlay */}
-          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center gap-2">
-            <button
-              type="button"
-              onClick={() => handleSetPrincipal(index)}
-              className="px-3 py-1 text-xs bg-white rounded-md hover:bg-blue-100"
-            >
-              {img.principal ? "Principal" : "Hacer principal"}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleRemoveFile(index)}
-              className="px-3 py-1 text-xs bg-red-600 text-white rounded-md hover:bg-red-700"
-            >
-              Eliminar
-            </button>
-          </div>
+    {/* IMÁGENES */}
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
+      <div className="flex items-center gap-3 mb-6">
+        <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+          <Image className="w-5 h-5 text-blue-600" />
         </div>
-      ))}
+        <h2 className="text-lg font-semibold text-gray-800">Imágenes</h2>
+      </div>
+
+      <input
+        type="file"
+        multiple
+        accept="image/*"
+        onChange={handleFileChange}
+        className="block w-full text-sm text-gray-700
+                 file:mr-4 file:py-2.5 file:px-5
+                 file:rounded-lg file:border-0
+                 file:text-sm file:font-medium
+                 file:bg-blue-50 file:text-blue-700
+                 hover:file:bg-blue-100 file:cursor-pointer
+                 transition"
+      />
+
+      {errores.imagenes && (
+        <p className="mt-3 text-sm text-red-600 font-medium">
+          {errores.imagenes}
+        </p>
+      )}
+
+      {imagenes.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 mt-6">
+          {imagenes.map((img, index) => (
+            <div
+              key={index}
+              className={`relative group aspect-square rounded-xl overflow-hidden border-2 ${
+                img.principal ? "border-blue-500 ring-2 ring-blue-400/50" : "border-gray-200"
+              }`}
+            >
+              <img
+                src={img.preview || img.url}
+                alt={`Imagen ${index + 1}`}
+                className="w-full h-full object-cover"
+              />
+              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleSetPrincipal(index)}
+                  className="px-3 py-1.5 text-xs bg-white text-gray-800 rounded shadow hover:bg-gray-100"
+                >
+                  {img.principal ? "Principal" : "Hacer principal"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleRemoveFile(index)}
+                  className="px-3 py-1.5 text-xs bg-red-600 text-white rounded shadow hover:bg-red-700"
+                >
+                  Eliminar
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
-  )}
-</div>
-
-
 
     {/* BOTONES */}
-    <div className="flex justify-end gap-4 pt-4">
+    <div className="flex justify-end gap-4 pt-6 pb-4">
       {onCancel && (
         <button
           type="button"
           onClick={onCancel}
-          className="h-12 px-6 rounded-xl border border-gray-300 text-gray-600 hover:bg-gray-100 transition"
+          className="px-8 py-3 rounded-xl border border-gray-300 text-gray-700 font-medium hover:bg-gray-50 transition"
         >
           Cancelar
         </button>
@@ -845,36 +954,31 @@ const handleSubmit = (e: React.FormEvent) => {
       <button
         type="submit"
         disabled={loading}
-        className="inline-flex px-6 py-4 rounded-xl font-bold text-white 
-                  items-center justify-center gap-3 
-                  transition-all duration-200 shadow-md hover:shadow-lg
-                  disabled:opacity-50 disabled:cursor-not-allowed"
+        className="inline-flex items-center px-8 py-3 rounded-xl font-semibold text-white gap-2 transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
         style={{ backgroundColor: "#fcc238" }}
       >
-
-      {loading ? (
-        <>
-          <div className="w-5 h-5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-          Creando inmueble...
-        </>
-      ) : (
-        <>
-          <FileText className="w-5 h-5" />
-          {submitLabel ?? "Crear inmueble"}
-        </>
-      )}
-    </button>
+        {loading ? (
+          <>
+            <div className="w-5 h-5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+            Procesando...
+          </>
+        ) : (
+          <>
+            <FileText className="w-5 h-5" />
+            {submitLabel ?? (initialData ? "Guardar cambios" : "Crear inmueble")}
+          </>
+        )}
+      </button>
     </div>
 
     <Modal
-    isOpen={modalOpen}
-    onClose={() => setModalOpen(false)}
-    title={modalConfig.title}
-    message={modalConfig.message}
-    variant={modalConfig.variant}
-    onConfirm={modalConfig.onConfirm}
-  />
-
+      isOpen={modalOpen}
+      onClose={() => setModalOpen(false)}
+      title={modalConfig.title}
+      message={modalConfig.message}
+      variant={modalConfig.variant}
+      onConfirm={modalConfig.onConfirm}
+    />
   </form>
 );
 }

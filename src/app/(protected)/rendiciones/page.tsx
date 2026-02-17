@@ -618,7 +618,10 @@ const total = data?.total ?? 0;
                                   {r.cobranzas.length} cobranza{r.cobranzas.length !== 1 ? 's' : ''}
                                 </span>
                                 <span className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg bg-amber-50 text-amber-700 border border-amber-200">
-                                  Total con IPC: ${totalConIPC.toLocaleString('es-ES')}
+                                  Total con IPC: ${totalConIPC.toLocaleString('es-AR', {
+                                      minimumFractionDigits: 2,
+                                      maximumFractionDigits: 2,
+                                    })}
                                 </span>
 
                                 {/* Nueva etiqueta de estado COBRADO para toda la rendición */}
@@ -712,7 +715,10 @@ const total = data?.total ?? 0;
                                       {c.concepto}
                                     </span>
                                     <span className="font-medium text-[#63bae9]">
-                                      ${c.monto.toLocaleString('es-ES')}
+                                      ${c.monto.toLocaleString('es-AR', {
+                                            minimumFractionDigits: 2,
+                                            maximumFractionDigits: 2,
+                                          })}
                                     </span>
                                   </div>
                                   <div className="flex items-center justify-between text-xs text-[#969696]">

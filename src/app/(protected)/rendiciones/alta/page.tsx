@@ -4,12 +4,14 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import toast from "react-hot-toast";
 import Header from "@/components/ui/Header";
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Loading from '@/components/ui/Loading';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import Modal from "@/components/ui/Modal";
+import Link from "next/link";
+import { Button } from "@/components/ui/button"
+import { ArrowLeft, FileSignature, AlertCircle} from 'lucide-react';
 
 interface Cliente {
   id_cliente: number;
@@ -35,6 +37,7 @@ export default function AltaRendicionPage() {
   const [error, setError] = useState<string | null>(null);
 
   const router = useRouter();
+  const [errores, setErrores] = useState<Record<string, string>>({});
 
   const [seleccionadas, setSeleccionadas] = useState<number[]>([]);
 
@@ -163,18 +166,50 @@ const clientesFiltrados = clientes
 },
 
 
-  onSuccess: () => {
-    setModalConfig({
-      title: "Rendición creada",
-      message: "La rendición se creó correctamente.",
-      variant: "success",
-      onConfirm: () => {
-        setModalOpen(false);
-        router.push("/rendiciones");
-      },
-    });
-    setModalOpen(true);
-  },
+ onSuccess: () => {
+
+  // ✅ eliminar inmediatamente las cobranzas rendidas del cache
+  queryClient.setQueriesData(
+    { queryKey: ["cobranzas"], exact: false },
+    (oldData: any) => {
+
+      if (!oldData) return oldData;
+
+      if (Array.isArray(oldData)) {
+        return oldData.filter(
+          (c: any) => !seleccionadas.includes(c.id_cobranza)
+        );
+      }
+
+      if (oldData.cobranzas) {
+        return {
+          ...oldData,
+          cobranzas: oldData.cobranzas.filter(
+            (c: any) => !seleccionadas.includes(c.id_cobranza)
+          ),
+        };
+      }
+
+      return oldData;
+    }
+  );
+
+  // ✅ actualizar lista de rendiciones instantáneamente
+  queryClient.invalidateQueries({ queryKey: ["rendiciones"] });
+
+  setModalConfig({
+    title: "Rendición creada",
+    message: "La rendición se creó correctamente.",
+    variant: "success",
+    onConfirm: () => {
+      setModalOpen(false);
+      router.push("/rendiciones");
+    },
+  });
+
+  setModalOpen(true);
+},
+
 
   onError: (e: any) => {
     setModalConfig({
@@ -215,28 +250,21 @@ const clientesFiltrados = clientes
   };
 
   const validarGuardar = () => {
-    if (seleccionadas.length === 0) {
-      setModalConfig({
-        title: "Validación",
-        message: "Seleccioná al menos una cobranza.",
-        variant: "warning",
-      });
-      setModalOpen(true);
-      return false;
-    }
+  const nuevosErrores: Record<string, string> = {};
 
-    if ((mesIPC && !anioIPC) || (!mesIPC && anioIPC)) {
-      setModalConfig({
-        title: "Validación",
-        message: "Si usás IPC, debés completar mes y año.",
-        variant: "warning",
-      });
-      setModalOpen(true);
-      return false;
-    }
+  if (seleccionadas.length === 0) {
+    nuevosErrores.general = "Debes seleccionar al menos una cobranza para rendir.";
+  }
 
-    return true;
-  };
+  if ((mesIPC && !anioIPC) || (!mesIPC && anioIPC)) {
+    if (!mesIPC) nuevosErrores.mesIPC = "Completa el mes si usas IPC.";
+    if (!anioIPC) nuevosErrores.anioIPC = "Completa el año si usas IPC.";
+  }
+
+  setErrores(nuevosErrores);
+
+  return Object.keys(nuevosErrores).length === 0;
+};
 
   if (loadingClientes) {
     return (
@@ -246,223 +274,258 @@ const clientesFiltrados = clientes
     );
   }
 
-  return (
-    <div className="min-h-screen" style={{ backgroundColor: '#f8f9fa' }}>
-      <Header />
+  const getInputClass = (fieldName: string) =>
+  `w-full px-4 py-3 rounded-xl border-2 transition-all duration-200 focus:outline-none focus:border-[#63bae9] focus:ring-2 focus:ring-[#63bae9]/30 ${
+    errores[fieldName]
+      ? "border-red-500 bg-red-50/40"
+      : "border-gray-200"
+  }`;
 
-      <div
-        className="bg-gradient-to-br from-white to-gray-50"
-        style={{ borderBottom: '1px solid #e5e7eb' }}
-      >
-        <div className="max-w-4xl mx-auto px-6 py-10">
-          <div className="flex items-start gap-6">
-            <div className="p-4 rounded-2xl shadow-sm" style={{ backgroundColor: '#63bae9' }}>
-              {/* Podrías poner aquí un ícono más específico si tenés uno para rendiciones */}
-              <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-            </div>
-            <div className="flex-1">
-              <h1 className="text-4xl font-bold mb-2" style={{ color: '#686363' }}>
-                Nueva Rendición
-              </h1>
-              <p className="text-base" style={{ color: '#969696' }}>
-                Completa los filtros, selecciona las cobranzas y ajusta IPC si es necesario
-              </p>
-            </div>
-          </div>
+const ErrorMessage = ({ field }: { field: string }) =>
+  errores[field] ? (
+    <p className="text-sm text-red-600 mt-1.5 font-medium">
+      {errores[field]}
+    </p>
+  ) : null;
+
+ return (
+  <div className="min-h-screen" style={{ backgroundColor: '#f8f9fa' }}>
+    <Header />
+
+    <header className="bg-white shadow-sm border-b">
+      <div className="max-w-5xl mx-auto px-8 py-8 flex items-center gap-6">
+        <Button
+          asChild
+          variant="outline"
+          size="sm"
+          className="border-[#63bae9] text-[#63bae9]"
+        >
+          <Link href="/rendiciones">
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Volver
+          </Link>
+        </Button>
+
+        <div className="p-3 rounded-xl bg-[#e8f6fc]">
+          <FileSignature className="w-7 h-7 text-[#63bae9]" />
+        </div>
+
+        <div>
+          <h1 className="text-3xl font-bold text-gray-700">Nueva Rendición</h1>
+          <p className="text-sm mt-1 text-gray-500">
+            Completa los filtros, selecciona las cobranzas y ajusta IPC si es necesario
+          </p>
         </div>
       </div>
+    </header>
 
-      <div className="max-w-4xl mx-auto px-6 py-10">
-        {error && (
-          <Alert className="mb-6" variant="destructive">
-            <AlertTitle>Error</AlertTitle>
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
+    <div className="max-w-5xl mx-auto px-6 py-10">
+      {/* Alerta general de errores */}
+      {Object.keys(errores).length > 0 && (
+        <Alert className="mb-6" variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Error de validación</AlertTitle>
+          <AlertDescription>
+            {errores.general || "Corrige los campos marcados antes de continuar."}
+          </AlertDescription>
+        </Alert>
+      )}
 
-        <div className="bg-white p-8 rounded-2xl shadow-sm border" style={{ borderColor: '#e5e7eb' }}>
-          {loadingClientes && (
-              <div className="mb-8">
-                <Loading message="Cargando formulario..." size="lg" />
-              </div>
-            )}
+      <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-200">
+        {loadingClientes ? (
+          <div className="mb-8">
+            <Loading message="Cargando formulario..." size="lg" />
+          </div>
+        ) : (
+          <>
+            <h2 className="font-bold text-xl mb-6 text-gray-800">
+              Filtrar Cobranzas
+            </h2>
 
-          {!loadingClientes && (
-            <>
-              <h2 className="font-bold text-xl mb-6" style={{ color: '#686363' }}>
-                Filtrar Cobranzas
-              </h2>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-                <div>
-                  <label className="block text-sm font-semibold mb-2" style={{ color: '#686363' }}>
-                    Cliente
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={clienteSearch}
-                      onChange={(e) => {
-                        setClienteSearch(e.target.value);
-                        setClienteOpen(true);
-                      }}
-                      onFocus={() => setClienteOpen(true)}
-                      placeholder="Buscar cliente..."
-                      className="w-full px-4 py-3 rounded-xl border-2 transition-all duration-200 focus:outline-none focus:border-[#63bae9]"
-                      style={{
-                        borderColor: cliente ? '#63bae9' : '#e5e7eb',
-                        backgroundColor: cliente ? '#f0f9ff' : 'white',
-                      }}
-                    />
-
-                    {clienteOpen && clienteSearch && (
-                      <div className="absolute z-10 w-full bg-white border rounded-xl shadow-lg max-h-60 overflow-auto mt-1">
-                        {clientesFiltrados.length === 0 ? (
-                          <div className="px-4 py-3 text-gray-500">Sin resultados</div>
-                        ) : (
-                          clientesFiltrados.map(c => (
-                            <div
-                              key={c.id_cliente}
-                              onClick={() => {
-                                setCliente(String(c.id_cliente));
-                                setClienteSearch(`${c.nombre} ${c.apellido}`);
-                                setClienteOpen(false);
-
-                                setSeleccionadas([]);
-                              }}
-                              className="px-4 py-3 hover:bg-gray-50 cursor-pointer transition-colors"
-                            >
-                              {c.nombre} {c.apellido}
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold mb-2" style={{ color: '#686363' }}>
-                    Año
-                  </label>
-                  <select
-                    className="w-full px-4 py-3 rounded-xl border-2 transition-all duration-200 focus:outline-none focus:border-[#63bae9]"
-                    value={anio}
-                    onChange={(e) => setAnio(e.target.value)}
-                    style={{
-                      borderColor: anio ? '#63bae9' : '#e5e7eb',
-                      backgroundColor: anio ? '#f0f9ff' : 'white',
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+              {/* Cliente */}
+              <div>
+                <label className="block text-sm font-semibold mb-2 text-gray-700">
+                  Cliente
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={clienteSearch}
+                    onChange={(e) => {
+                      setClienteSearch(e.target.value);
+                      setClienteOpen(true);
+                      if (errores.cliente) {
+                        setErrores(prev => { const n = { ...prev }; delete n.cliente; return n; });
+                      }
                     }}
-                  >
-                    <option value="" disabled hidden>Todos</option>
-                    {years.map((y) => (
-                      <option key={y} value={String(y)}>{y}</option>
-                    ))}
-                  </select>
-                </div>
+                    onFocus={() => setClienteOpen(true)}
+                    placeholder="Buscar cliente..."
+                    className={getInputClass("cliente")}
+                  />
+                  <ErrorMessage field="cliente" />
 
-                <div>
-                  <label className="block text-sm font-semibold mb-2" style={{ color: '#686363' }}>
-                    Mes
-                  </label>
-                  <select
-                    className="w-full px-4 py-3 rounded-xl border-2 transition-all duration-200 focus:outline-none focus:border-[#63bae9]"
-                    value={mes}
-                    onChange={(e) => setMes(e.target.value)}
-                    style={{
-                      borderColor: mes ? '#63bae9' : '#e5e7eb',
-                      backgroundColor: mes ? '#f0f9ff' : 'white',
-                    }}
-                  >
-                    <option value="" disabled hidden>Todos</option>
-                    {[...Array(12)].map((_, i) => (
-                      <option key={i + 1} value={String(i + 1)}>
-                        {new Date(0, i).toLocaleString("es-AR", { month: "long" })}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <h2 className="font-bold text-xl mb-6 mt-12" style={{ color: '#686363' }}>
-                Ajuste IPC 
-              </h2>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
-                <div>
-                  <label className="block text-sm font-semibold mb-2" style={{ color: '#686363' }}>
-                    Mes IPC
-                  </label>
-                  <select
-                    className="w-full px-4 py-3 rounded-xl border-2 transition-all duration-200 focus:outline-none focus:border-[#63bae9]"
-                    value={mesIPC}
-                    onChange={(e) => setMesIPC(e.target.value)}
-                    style={{
-                      borderColor: mesIPC ? '#63bae9' : '#e5e7eb',
-                      backgroundColor: mesIPC ? '#f0f9ff' : 'white',
-                    }}
-                  >
-                    <option value="" disabled hidden>Ninguno</option>
-                    {[...Array(12)].map((_, i) => (
-                      <option key={i + 1} value={String(i + 1)}>
-                        {new Date(0, i).toLocaleString("es-AR", { month: "long" })}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold mb-2" style={{ color: '#686363' }}>
-                    Año IPC
-                  </label>
-                  <select
-                    className="w-full px-4 py-3 rounded-xl border-2 transition-all duration-200 focus:outline-none focus:border-[#63bae9]"
-                    value={anioIPC}
-                    onChange={(e) => setAnioIPC(e.target.value)}
-                    style={{
-                      borderColor: anioIPC ? '#63bae9' : '#e5e7eb',
-                      backgroundColor: anioIPC ? '#f0f9ff' : 'white',
-                    }}
-                  >
-                    <option value="" disabled hidden>Ninguno</option>
-                    {years.map((y) => (
-                      <option key={y} value={String(y)}>{y}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <h2 className="font-bold text-xl mb-6 mt-12" style={{ color: '#686363' }}>
-                Seleccionar Cobranzas
-              </h2>
-
-              <div className="space-y-4">
-                {cliente && loadingCobranzas && (
-                    <Loading message="Cargando cobranzas..." size="sm" />
+                  {clienteOpen && clienteSearch && (
+                    <div className="absolute z-10 w-full bg-white border border-gray-200 rounded-xl shadow-lg max-h-60 overflow-auto mt-1">
+                      {clientesFiltrados.length === 0 ? (
+                        <div className="px-4 py-3 text-gray-500">Sin resultados</div>
+                      ) : (
+                        clientesFiltrados.map(c => (
+                          <div
+                            key={c.id_cliente}
+                            onClick={() => {
+                              setCliente(String(c.id_cliente));
+                              setClienteSearch(`${c.nombre} ${c.apellido}`);
+                              setClienteOpen(false);
+                              setSeleccionadas([]); // reset selección al cambiar cliente
+                              if (errores.cliente) {
+                                setErrores(prev => { const n = { ...prev }; delete n.cliente; return n; });
+                              }
+                            }}
+                            className="px-4 py-3 hover:bg-gray-50 cursor-pointer transition-colors"
+                          >
+                            {c.nombre} {c.apellido}
+                          </div>
+                        ))
+                      )}
+                    </div>
                   )}
+                </div>
+              </div>
 
-                {!cliente && (
-                  <div className="text-center py-8 text-gray-400 bg-gray-50 rounded-xl">
-                    Seleccioná un cliente para ver sus cobranzas
-                  </div>
-                )}
+              {/* Año */}
+              <div>
+                <label className="block text-sm font-semibold mb-2 text-gray-700">
+                  Año
+                </label>
+                <select
+                  className={getInputClass("anio")}
+                  value={anio}
+                  onChange={(e) => {
+                    setAnio(e.target.value);
+                    if (errores.anio) {
+                      setErrores(prev => { const n = { ...prev }; delete n.anio; return n; });
+                    }
+                  }}
+                >
+                  <option value="" disabled hidden>Todos</option>
+                  {years.map((y) => (
+                    <option key={y} value={String(y)}>{y}</option>
+                  ))}
+                </select>
+                <ErrorMessage field="anio" />
+              </div>
 
-                {cliente && !loadingCobranzas && cobranzas.length === 0 && (
-                  <div className="text-center py-8 text-gray-500 bg-gray-50 rounded-xl">
-                    Este cliente no tiene cobranzas pendientes
-                  </div>
-                )}
+              {/* Mes */}
+              <div>
+                <label className="block text-sm font-semibold mb-2 text-gray-700">
+                  Mes
+                </label>
+                <select
+                  className={getInputClass("mes")}
+                  value={mes}
+                  onChange={(e) => {
+                    setMes(e.target.value);
+                    if (errores.mes) {
+                      setErrores(prev => { const n = { ...prev }; delete n.mes; return n; });
+                    }
+                  }}
+                >
+                  <option value="" disabled hidden>Todos</option>
+                  {[...Array(12)].map((_, i) => (
+                    <option key={i + 1} value={String(i + 1)}>
+                      {new Date(0, i).toLocaleString("es-AR", { month: "long" })}
+                    </option>
+                  ))}
+                </select>
+                <ErrorMessage field="mes" />
+              </div>
+            </div>
 
-                {!loadingCobranzas && cobranzas.map((c) => {
+            <h2 className="font-bold text-xl mb-6 mt-12 text-gray-800">
+              Ajuste IPC (opcional)
+            </h2>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
+              {/* Mes IPC */}
+              <div>
+                <label className="block text-sm font-semibold mb-2 text-gray-700">
+                  Mes IPC
+                </label>
+                <select
+                  className={getInputClass("mesIPC")}
+                  value={mesIPC}
+                  onChange={(e) => {
+                    setMesIPC(e.target.value);
+                    if (errores.mesIPC) {
+                      setErrores(prev => { const n = { ...prev }; delete n.mesIPC; return n; });
+                    }
+                  }}
+                >
+                  <option value="" disabled hidden>Ninguno</option>
+                  {[...Array(12)].map((_, i) => (
+                    <option key={i + 1} value={String(i + 1)}>
+                      {new Date(0, i).toLocaleString("es-AR", { month: "long" })}
+                    </option>
+                  ))}
+                </select>
+                <ErrorMessage field="mesIPC" />
+              </div>
+
+              {/* Año IPC */}
+              <div>
+                <label className="block text-sm font-semibold mb-2 text-gray-700">
+                  Año IPC
+                </label>
+                <select
+                  className={getInputClass("anioIPC")}
+                  value={anioIPC}
+                  onChange={(e) => {
+                    setAnioIPC(e.target.value);
+                    if (errores.anioIPC) {
+                      setErrores(prev => { const n = { ...prev }; delete n.anioIPC; return n; });
+                    }
+                  }}
+                >
+                  <option value="" disabled hidden>Ninguno</option>
+                  {years.map((y) => (
+                    <option key={y} value={String(y)}>{y}</option>
+                  ))}
+                </select>
+                <ErrorMessage field="anioIPC" />
+              </div>
+            </div>
+
+            <h2 className="font-bold text-xl mb-6 mt-12 text-gray-800">
+              Seleccionar Cobranzas
+            </h2>
+
+            <div className="space-y-4">
+              {cliente && loadingCobranzas && (
+                <Loading message="Cargando cobranzas..." size="sm" />
+              )}
+
+              {!cliente && (
+                <div className="text-center py-8 text-gray-500 bg-gray-50 rounded-xl">
+                  Seleccioná un cliente para ver sus cobranzas pendientes de rendir
+                </div>
+              )}
+
+              {cliente && !loadingCobranzas && cobranzas.length === 0 && (
+                <div className="text-center py-8 text-gray-500 bg-gray-50 rounded-xl">
+                  Este cliente no tiene cobranzas pendientes de rendir
+                </div>
+              )}
+
+              {!loadingCobranzas &&
+                cobranzas.map((c) => {
                   const isSelected = seleccionadas.includes(c.id_cobranza);
                   return (
                     <label
                       key={c.id_cobranza}
                       className={`flex items-start gap-4 p-5 border-2 rounded-xl cursor-pointer transition-all duration-200 ${
-                        isSelected 
-                          ? 'bg-[#f0f9ff] border-[#63bae9]' 
+                        isSelected
+                          ? 'bg-[#f0f9ff] border-[#63bae9] shadow-sm'
                           : 'bg-white border-gray-200 hover:border-gray-300'
                       }`}
                     >
@@ -470,18 +533,19 @@ const clientesFiltrados = clientes
                         type="checkbox"
                         checked={isSelected}
                         onChange={() => toggle(c.id_cobranza)}
-                        className="mt-1.5 w-5 h-5"
+                        className="mt-1.5 w-5 h-5 accent-[#63bae9]"
                       />
                       <div className="flex-1">
-                        <div className="font-semibold text-lg" style={{ color: '#686363' }}>
+                        <div className="font-semibold text-lg text-gray-800">
                           {c.cliente.nombre} {c.cliente.apellido}
                         </div>
                         <div className="text-gray-600 mt-1">
-                          {c.concepto} — <span className="font-bold" style={{ color: '#63bae9' }}>
-                            ${c.monto.toLocaleString('es-AR')}
+                          {c.concepto} —{" "}
+                          <span className="font-bold text-[#63bae9]">
+                            ${c.monto.toLocaleString("es-AR")}
                           </span>
                           {c.fecha_cobranza && (
-                            <span className="ml-3 text-sm text-gray-400">
+                            <span className="ml-3 text-sm text-gray-500">
                               ({new Date(c.fecha_cobranza).toLocaleDateString("es-AR")})
                             </span>
                           )}
@@ -490,52 +554,59 @@ const clientesFiltrados = clientes
                     </label>
                   );
                 })}
-              </div>
+            </div>
 
-              <div className="flex justify-between mt-12 gap-6">
-                <button
-                  onClick={() => router.push("/rendiciones")}
-                  className="w-1/2 px-8 py-4 rounded-xl text-lg font-semibold text-gray-700 bg-white border-2 border-gray-200 hover:bg-gray-50 transition-all"
-                >
-                  Cancelar
-                </button>
+            {/* Botones finales */}
+            <div className="flex justify-between mt-12 gap-6">
+              <button
+                onClick={() => router.push("/rendiciones")}
+                className="w-1/2 px-8 py-4 rounded-xl text-lg font-semibold text-gray-700 bg-white border-2 border-gray-200 hover:bg-gray-50 transition-all"
+              >
+                Cancelar
+              </button>
 
-                <button
-                  onClick={() => {
-                    if (!validarGuardar()) return;
+              <button
+                onClick={() => {
+                  if (!validarGuardar()) return;
 
-                    setModalConfig({
-                      title: "Confirmar rendición",
-                      message: `¿Deseás rendir ${seleccionadas.length} cobranzas?`,
-                      variant: "warning",
-                      onConfirm: () => {
-                        guardarMutation.mutate();
-                        setModalOpen(false);
-                      },
-                    });
-
-                    setModalOpen(true);
-                  }}
-                  disabled={guardarMutation.isPending || seleccionadas.length === 0}
-                  className="w-1/2 px-8 py-4 rounded-xl text-lg font-bold text-white flex items-center justify-center gap-3 transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                  style={{ backgroundColor: '#fcc238' }}
-                >
-                  {guardarMutation.isPending ? 'Guardando...' : 'Guardar Rendición'}
-                </button>
-              </div>
-            </>
-          )}
-        </div>
+                  setModalConfig({
+                    title: "Confirmar rendición",
+                    message: `¿Deseás rendir ${seleccionadas.length} cobranzas?`,
+                    variant: "warning",
+                    onConfirm: () => {
+                      guardarMutation.mutate();
+                      setModalOpen(false);
+                    },
+                  });
+                  setModalOpen(true);
+                }}
+                disabled={guardarMutation.isPending || seleccionadas.length === 0}
+                className="w-1/2 px-8 py-4 rounded-xl text-lg font-bold text-white flex items-center justify-center gap-3 transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{ backgroundColor: "#fcc238" }}
+              >
+                {guardarMutation.isPending ? (
+                  <>
+                    <div className="w-5 h-5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                    Procesando...
+                  </>
+                ) : (
+                  "Guardar Rendición"
+                )}
+              </button>
+            </div>
+          </>
+        )}
       </div>
-
-      <Modal
-        isOpen={modalOpen}
-        onClose={() => setModalOpen(false)}
-        title={modalConfig.title}
-        message={modalConfig.message}
-        variant={modalConfig.variant}
-        onConfirm={modalConfig.onConfirm}
-      />
     </div>
-  );
+
+    <Modal
+      isOpen={modalOpen}
+      onClose={() => setModalOpen(false)}
+      title={modalConfig.title}
+      message={modalConfig.message}
+      variant={modalConfig.variant}
+      onConfirm={modalConfig.onConfirm}
+    />
+  </div>
+);
 }
