@@ -42,103 +42,111 @@ export default function Header() {
   return (
     <>
       <header
-        className="w-full bg-white px-8 py-4 flex justify-between items-center border-b shadow-sm relative z-10"
+        className="
+          sticky top-0 z-50
+          w-full
+          bg-white/95 backdrop-blur-sm
+          border-b shadow-md
+          transition-all duration-300
+        "
         style={{ borderColor: '#e5e7eb' }}
       >
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-xl" style={{ backgroundColor: '#e8f6fc' }}>
-            <Home className="w-6 h-6" style={{ color: '#63bae9' }} />
+        <div className="px-8 py-4 flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-xl" style={{ backgroundColor: '#e8f6fc' }}>
+              <Home className="w-6 h-6" style={{ color: '#63bae9' }} />
+            </div>
+            <span className="text-xl font-bold" style={{ color: '#686363' }}>
+              {/* Podés poner acá el nombre si querés: GBS y Asociados */}
+            </span>
           </div>
-          <span className="text-xl font-bold" style={{ color: '#686363' }}>
-            
-          </span>
-        </div>
 
-        <div className="flex-1 flex justify-center">
-          <button
-            onClick={() => router.push("/")}
-            className="px-6 py-2 rounded-lg font-medium transition-all duration-200"
-            style={{ color: '#686363' }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = '#e8f6fc';
-              e.currentTarget.style.color = '#63bae9';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'transparent';
-              e.currentTarget.style.color = '#686363';
-            }}
-          >
-            Inicio
-          </button>
-        </div>
-
-        <div className="flex items-center gap-3">
-          {session ? (
-            <>
-              <Button
-                variant="outline"
-                size="icon"
-                className="border transition-all duration-200 rounded-lg"
-                style={{
-                  borderColor: '#e5e7eb',
-                  color: '#686363',
-                }}
-                onClick={handleUserSettingsClick}
-                title="Ver perfil"
-                disabled={!session?.user}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = '#63bae9';
-                  e.currentTarget.style.backgroundColor = '#e8f6fc';
-                  e.currentTarget.style.color = '#63bae9';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = '#e5e7eb';
-                  e.currentTarget.style.backgroundColor = 'transparent';
-                  e.currentTarget.style.color = '#686363';
-                }}
-              >
-                <User className="h-5 w-5" />
-              </Button>
-              <Button
-                variant="outline"
-                size="icon"
-                className="border transition-all duration-200 rounded-lg"
-                style={{
-                  borderColor: '#e5e7eb',
-                  color: '#686363',
-                }}
-                onClick={() => setMenuOpen(!menuOpen)}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = '#fcc238';
-                  e.currentTarget.style.backgroundColor = '#fff9e6';
-                  e.currentTarget.style.color = '#fcc238';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = '#e5e7eb';
-                  e.currentTarget.style.backgroundColor = 'transparent';
-                  e.currentTarget.style.color = '#686363';
-                }}
-              >
-                <Menu className="h-5 w-5" />
-              </Button>
-            </>
-          ) : (
-            <Button
-              onClick={() => signIn()}
-              className="font-semibold transition-all duration-200 rounded-lg shadow-sm hover:shadow-md text-white"
-              style={{ backgroundColor: '#63bae9' }}
+          <div className="flex-1 flex justify-center">
+            <button
+              onClick={() => router.push("/")}
+              className="px-6 py-2 rounded-lg font-medium transition-all duration-200"
+              style={{ color: '#686363' }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = '#4ca8d8';
-                e.currentTarget.style.transform = 'translateY(-1px)';
+                e.currentTarget.style.backgroundColor = '#e8f6fc';
+                e.currentTarget.style.color = '#63bae9';
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = '#63bae9';
-                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.backgroundColor = 'transparent';
+                e.currentTarget.style.color = '#686363';
               }}
             >
-              Iniciar sesión
-            </Button>
-          )}
+              Inicio
+            </button>
+          </div>
+
+          <div className="flex items-center gap-3">
+            {session ? (
+              <>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="border transition-all duration-200 rounded-lg"
+                  style={{
+                    borderColor: '#e5e7eb',
+                    color: '#686363',
+                  }}
+                  onClick={handleUserSettingsClick}
+                  title="Ver perfil"
+                  disabled={!session?.user}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = '#63bae9';
+                    e.currentTarget.style.backgroundColor = '#e8f6fc';
+                    e.currentTarget.style.color = '#63bae9';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = '#e5e7eb';
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                    e.currentTarget.style.color = '#686363';
+                  }}
+                >
+                  <User className="h-5 w-5" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="border transition-all duration-200 rounded-lg"
+                  style={{
+                    borderColor: '#e5e7eb',
+                    color: '#686363',
+                  }}
+                  onClick={() => setMenuOpen(!menuOpen)}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = '#fcc238';
+                    e.currentTarget.style.backgroundColor = '#fff9e6';
+                    e.currentTarget.style.color = '#fcc238';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = '#e5e7eb';
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                    e.currentTarget.style.color = '#686363';
+                  }}
+                >
+                  <Menu className="h-5 w-5" />
+                </Button>
+              </>
+            ) : (
+              <Button
+                onClick={() => signIn()}
+                className="font-semibold transition-all duration-200 rounded-lg shadow-sm hover:shadow-md text-white"
+                style={{ backgroundColor: '#63bae9' }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#4ca8d8';
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = '#63bae9';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                }}
+              >
+                Iniciar sesión
+              </Button>
+            )}
+          </div>
         </div>
       </header>
 

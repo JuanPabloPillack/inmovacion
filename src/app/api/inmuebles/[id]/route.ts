@@ -47,7 +47,16 @@ export async function GET(
         tipo_inmueble: true,
         estado: true,
         operacion: true,
-        cliente: true,
+        cliente: {
+  include: {
+    tiposCliente: {
+      include: {
+        tipoCliente: true,
+      },
+    },
+  },
+},
+
         ubicacion: {
           include: {
             barrio: { include: { localidad: true } },

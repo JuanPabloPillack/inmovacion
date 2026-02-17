@@ -63,6 +63,7 @@ export async function GET(req: NextRequest) {
         select: {
           id_inmueble: true,
           titulo: true,
+          detalles: true,
           superficie_total: true,
           superficie_cubierta: true,
           precio: true,
@@ -191,7 +192,31 @@ export async function POST(req: NextRequest) {
   const userId = session.user.id;
 
   try {
-    const body = await req.json();
+    let body: Record<string, any> = {};
+
+  const contentType = req.headers.get("content-type") || "";
+
+  if (contentType.includes("application/json")) {
+    body = await req.json();
+  } 
+  else if (contentType.includes("multipart/form-data")) {
+    const formData = await req.formData();
+    // Convertimos FormData a un objeto plano
+    body = Object.fromEntries(formData);
+
+    // Opcional: si esperas arrays (como imagenes), puedes mejorar el parseo aquí
+    // Por ahora asumimos que los campos llegan como strings simples
+  } 
+  else {
+    return NextResponse.json(
+      { error: "Content-Type no soportado" },
+      { status: 415 }
+    );
+  }
+
+  // ── Para debug (puedes quitarlo después)
+  console.log("Content-Type:", contentType);
+  console.log("Body parseado:", body);
 
     /* =============================================================
        VALIDACIONES GENERALES
@@ -291,19 +316,23 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    /* =============================================================
-       IMÁGENES
-    ============================================================= */
-    const imagenes = Array.isArray(body.imagenes)
-      ? body.imagenes.filter((i: any) => i.url)
-      : [];
+   /* =============================================================
+   IMÁGENES
+=============================================================== */
+const imagenes = Array.isArray(body.imagenes)
+  ? body.imagenes
+      .filter((i: any) => typeof i?.url === 'string' && i.url.startsWith('http'))
+      .map((i: any) => ({
+        url: i.url,
+        principal: !!i.principal,
+      }))
+  : [];
 
-    if (!imagenes.length)
-      throw new Error("Debe subir al menos una imagen");
+if (!imagenes.length) throw new Error("Debe subir al menos una imagen válida (URL http/s)");
 
-    if (!imagenes.some((i: any) => i.principal)) {
-      imagenes[0].principal = true;
-    }
+if (!imagenes.some((i: any) => i.principal)) {
+  imagenes[0].principal = true;
+}
 
     /* =============================================================
        TRANSACCIÓN (CORTA Y SEGURA)

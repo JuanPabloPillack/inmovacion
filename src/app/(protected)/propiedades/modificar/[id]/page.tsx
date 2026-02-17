@@ -12,7 +12,7 @@ import Loading from "@/components/ui/Loading";
 
 // Icono
 import { Home } from "lucide-react";
-import { Building, ArrowLeft, CheckCircle, AlertCircle } from "lucide-react"
+import { Building, ArrowLeft, CheckCircle, AlertCircle, FileSignature } from "lucide-react"
 
 //Alertas
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
@@ -27,6 +27,11 @@ import FormularioInmueble from "@/components/FormularioInmueble";
 import type { InmuebleEdit } from "@/types/inmuebles";
 
 import Modal from "@/components/ui/Modal";
+
+import Link from "next/link";
+
+import { useQueryClient } from "@tanstack/react-query";
+
 
 
 // Tipo para manejar imágenes en el frontend
@@ -44,6 +49,8 @@ export default function EditarInmueblePage() {
   const { id } = useParams();
 
   const router = useRouter();
+  const queryClient = useQueryClient();
+
 
   // Estado del inmueble cargado desde la API
   const [inmueble, setInmueble] = useState<InmuebleEdit | null>(null);
@@ -211,7 +218,7 @@ export default function EditarInmueblePage() {
         imagenes: uploadedImages, // ← imagenes listas para guardar en DB
       };
 
-      console.log("🔄 Frontend - Payload PUT:", payload);
+
 
       // ----------------------------------------------
       // 2.3 Enviar PUT al backend
@@ -238,6 +245,39 @@ export default function EditarInmueblePage() {
     }
 
     console.log("🔄 Frontend - Response PUT:", updatedData);
+    // 🔥 ACTUALIZAR CACHE INMEDIATAMENTE (optimistic)
+queryClient.setQueriesData(
+  { queryKey: ["inmuebles"], exact: false },
+  (oldData: any) => {
+    if (!oldData) return oldData;
+
+    if (oldData.data) {
+      return {
+        ...oldData,
+        data: oldData.data.map((item: any) =>
+          item.id_inmueble == id
+            ? { ...item, ...payload }
+            : item
+        ),
+      };
+    }
+
+    if (Array.isArray(oldData)) {
+      return oldData.map((item: any) =>
+        item.id_inmueble == id
+          ? { ...item, ...payload }
+          : item
+      );
+    }
+
+    return oldData;
+  }
+);
+
+// 🔄 Refetch en background (sin await)
+queryClient.invalidateQueries({ queryKey: ["inmuebles"] });
+queryClient.invalidateQueries({ queryKey: ["inmueblesArchivados"] });
+
 
 
      setModalConfig({
@@ -290,21 +330,40 @@ return (
     <Header />
 
     {/* Header de la página */}
+
     <header className="bg-white shadow-sm border-b">
-      <div className="max-w-5xl mx-auto px-8 py-8 flex items-center gap-4">
-        <div className="p-3 rounded-xl bg-[#e8f6fc]">
-          <Home className="w-7 h-7 text-[#63bae9]" />
-        </div>
-        <div>
-          <h1 className="text-3xl font-bold text-gray-700">
-            Modificar Inmueble
-          </h1>
-          <p className="text-sm mt-1 text-gray-500">
-            Edita la información del inmueble seleccionado
-          </p>
-        </div>
-      </div>
-    </header>
+  <div className="max-w-5xl mx-auto px-8 py-8 flex items-center gap-6">
+
+    {/* 🔹 BOTÓN VOLVER */}
+    <Button
+      asChild
+      variant="outline"
+      size="sm"
+      className="border-[#63bae9] text-[#63bae9]"
+    >
+      <Link href="/propiedades">
+        <ArrowLeft className="h-4 w-4 mr-2" />
+        Volver
+      </Link>
+    </Button>
+
+    {/* 🔹 ICONO */}
+    <div className="p-3 rounded-xl bg-[#e8f6fc]">
+      <FileSignature className="w-7 h-7 text-[#63bae9]" />
+    </div>
+
+    {/* 🔹 TITULO */}
+    <div>
+      <h1 className="text-3xl font-bold text-gray-700">
+        Modificar Inmueble
+      </h1>
+      <p className="text-sm mt-1 text-gray-500">
+        Agrega los detalles del nuevo inmueble
+      </p>
+    </div>
+  </div>
+</header>
+
 
     <main className="max-w-5xl mx-auto px-8 py-10">
       {/* 📝 FORMULARIO */}

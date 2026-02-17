@@ -1,32 +1,63 @@
+// src/app/api/clientes/propietarios/route.ts
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
+    const { searchParams } = new URL(req.url);
+    const includeIdParam = searchParams.get("includeId");
+    const includeId = includeIdParam ? Number(includeIdParam) : null;
+
     const propietarios = await db.cliente.findMany({
       where: {
-        tipoCliente: {
-          is: {
-            nombre: "Propietario",
+        OR: [
+          // ✅ Propietarios activos
+          {
+            AND: [
+              {
+                activo: true,
+              },
+              {
+                tiposCliente: {
+                  some: {
+                    tipoCliente: {
+                      nombre: "Propietario",
+                    },
+                  },
+                },
+              },
+            ],
           },
-        },
+
+          // ✅ Incluir propietario actual aunque esté inactivo
+          ...(includeId
+            ? [
+                {
+                  id_cliente: includeId,
+                },
+              ]
+            : []),
+        ],
       },
+
       select: {
         id_cliente: true,
         nombre: true,
         apellido: true,
-        tipoCliente: {
-          select: {
-            nombre: true,
-          },
-        },
+      },
+
+      orderBy: {
+        nombre: "asc",
       },
     });
 
     return NextResponse.json(propietarios);
+
   } catch (error) {
     console.error("Error al obtener propietarios:", error);
+
     return NextResponse.json(
       { error: "Error al obtener propietarios" },
       { status: 500 }
