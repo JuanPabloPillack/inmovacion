@@ -9,7 +9,6 @@ import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 
-
 // UI
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -33,18 +32,27 @@ export default function PagoDetallePage() {
   const rawId = Array.isArray(params.id) ? params.id[0] : params.id;
   const id = Number(rawId);
 
-  if (isNaN(id)) {
-    return (
-      <div className="p-10 text-center text-red-500 text-xl">
-        Error: ID inválido
-      </div>
-    );
-  }
-
   const [pago, setPago] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
+  // ==============================
+  // Validar ID
+  // ==============================
+  if (isNaN(id)) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <div className="p-10 text-center text-red-500 text-xl">
+          Error: ID inválido
+        </div>
+      </div>
+    );
+  }
+
+  // ==============================
+  // Cargar pago
+  // ==============================
   const loadPago = async () => {
     try {
       const data = await getPagoById(id);
@@ -65,17 +73,37 @@ export default function PagoDetallePage() {
     loadPago().finally(() => setLoading(false));
   }, [session, status]);
 
-  if (loading || !pago) return <Loading message="Cargando pago..." />;
+  // ==============================
+  // LOADING PROFESIONAL CONSISTENTE
+  // ==============================
+  if (loading)
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <Loading message="Cargando pago..." />
+      </div>
+    );
+
+  // ==============================
+  // NO ENCONTRADO
+  // ==============================
+  if (!pago)
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <div className="p-10 text-center text-red-500 text-xl">
+          No se encontró el pago.
+        </div>
+      </div>
+    );
 
   // ==============================
   // DESCARGAR PDF
   // ==============================
-const descargarPDF = () => {
-  if (!pago?.id_pago) return;
-
-  window.open(`/api/pagos/${pago.id_pago}/pdf`, "_blank");
-};
-
+  const descargarPDF = () => {
+    if (!pago?.id_pago) return;
+    window.open(`/api/pagos/${pago.id_pago}/pdf`, "_blank");
+  };
 
   // ==============================
   // Confirmar eliminación
@@ -95,6 +123,7 @@ const descargarPDF = () => {
 
       <div className="container mx-auto px-4 py-8">
 
+        {/* Volver */}
         <Button
           variant="ghost"
           className="mb-6 text-[#686363] hover:text-[#63bae9]"
@@ -104,7 +133,7 @@ const descargarPDF = () => {
           Volver
         </Button>
 
-        {/* CONTENIDO QUE SE VA A EXPORTAR */}
+        {/* CONTENIDO EXPORTABLE */}
         <div id="comprobante-pago">
 
           <Card className="mb-8 border-[#969696]/20 shadow-md">
@@ -170,6 +199,7 @@ const descargarPDF = () => {
           </Button>
 
         </div>
+
       </div>
 
       <ConfirmationModal

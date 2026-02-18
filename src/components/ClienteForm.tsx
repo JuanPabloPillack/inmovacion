@@ -45,9 +45,10 @@ const schema = z
     descripcion: z.string().optional(),
   })
   .superRefine((data, ctx) => {
-    if (!data.tipoDocumentoId) return;
-
+    const tipo = data.tipoDocumentoId;
     const numero = data.numeroDocumento?.trim() || "";
+
+    if (!tipo) return;
 
     if (!numero) {
       ctx.addIssue({
@@ -58,30 +59,88 @@ const schema = z
       return;
     }
 
-    if (!/^\d+$/.test(numero)) {
-      ctx.addIssue({
-        path: ["numeroDocumento"],
-        code: z.ZodIssueCode.custom,
-        message: "Solo se permiten números",
-      });
+    // ============================
+    // DNI (ID 2)
+    // ============================
+    if (tipo === "2") {
+      if (!/^\d+$/.test(numero)) {
+        ctx.addIssue({
+          path: ["numeroDocumento"],
+          code: z.ZodIssueCode.custom,
+          message: "El DNI debe contener solo números",
+        });
+      }
+
+      if (numero.length < 7 || numero.length > 8) {
+        ctx.addIssue({
+          path: ["numeroDocumento"],
+          code: z.ZodIssueCode.custom,
+          message: "El DNI debe tener entre 7 y 8 dígitos",
+        });
+      }
     }
 
-    if (numero.length < 7) {
-      ctx.addIssue({
-        path: ["numeroDocumento"],
-        code: z.ZodIssueCode.custom,
-        message: "Debe tener al menos 7 caracteres",
-      });
+    // ============================
+    // CUIT / CUIL (ID 3)
+    // ============================
+    if (tipo === "3") {
+      if (!/^\d+$/.test(numero)) {
+        ctx.addIssue({
+          path: ["numeroDocumento"],
+          code: z.ZodIssueCode.custom,
+          message: "El CUIT/CUIL debe contener solo números",
+        });
+      }
+
+      if (numero.length !== 11) {
+        ctx.addIssue({
+          path: ["numeroDocumento"],
+          code: z.ZodIssueCode.custom,
+          message: "El CUIT/CUIL debe tener exactamente 11 dígitos",
+        });
+      }
+
+      // Validación real del CUIT/CUIL (algoritmo AFIP)
+      if (numero.length === 11) {
+        const mult = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2];
+        const nums = numero.split("").map(Number);
+
+        const suma = mult.reduce((acc, m, i) => acc + m * nums[i], 0);
+        const resto = suma % 11;
+        const verificador = resto === 0 ? 0 : resto === 1 ? 9 : 11 - resto;
+
+        if (verificador !== nums[10]) {
+          ctx.addIssue({
+            path: ["numeroDocumento"],
+            code: z.ZodIssueCode.custom,
+            message: "CUIT/CUIL inválido",
+          });
+        }
+      }
     }
 
-    if (numero.length > 10) {
-      ctx.addIssue({
-        path: ["numeroDocumento"],
-        code: z.ZodIssueCode.custom,
-        message: "No puede tener más de 10 caracteres",
-      });
+    // ============================
+    // PASAPORTE (ID 5)
+    // ============================
+    if (tipo === "5") {
+      if (!/^[a-zA-Z0-9]+$/.test(numero)) {
+        ctx.addIssue({
+          path: ["numeroDocumento"],
+          code: z.ZodIssueCode.custom,
+          message: "El pasaporte debe ser alfanumérico",
+        });
+      }
+
+      if (numero.length < 6 || numero.length > 15) {
+        ctx.addIssue({
+          path: ["numeroDocumento"],
+          code: z.ZodIssueCode.custom,
+          message: "El pasaporte debe tener entre 6 y 15 caracteres",
+        });
+      }
     }
   });
+
 
 type FormData = z.infer<typeof schema>;
 
@@ -251,11 +310,10 @@ export default function ClienteForm({
                       return (
                         <label
                           key={tc.id_tipo_cliente}
-                          className={`px-4 py-2 rounded-xl border cursor-pointer transition ${
-                            isSelected
+                          className={`px-4 py-2 rounded-xl border cursor-pointer transition ${isSelected
                               ? "bg-[#63bae9] text-white border-[#63bae9]"
                               : "bg-white text-[#686363] border-gray-300 hover:border-[#63bae9]"
-                          }`}
+                            }`}
                         >
                           <input
                             type="checkbox"

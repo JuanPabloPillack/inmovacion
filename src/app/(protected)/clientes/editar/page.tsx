@@ -1,7 +1,6 @@
 // =============================================================
 // Archivo: src/app/(protected)/clientes/editar/page.tsx
-// Descripción: Editar cliente (estilo idéntico a Proveedores)
-//              Carga cliente + catálogos y permite actualizar.
+// Descripción: Editar cliente
 // =============================================================
 
 "use client";
@@ -12,6 +11,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
 import Header from "@/components/ui/Header";
+import Loading from "@/components/ui/Loading"; // ✅ AGREGADO
+
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
@@ -109,15 +110,24 @@ export default function EditarClientePage() {
   };
 
   // ================================
-  // Estados
+  // LOADING PROFESIONAL (CONSISTENTE)
   // ================================
-  if (loading) return <p className="p-6">Cargando datos...</p>;
+  if (loading)
+    return (
+      <div className="min-h-screen bg-white font-sans">
+        <Header />
+        <Loading message="Cargando datos del cliente..." />
+      </div>
+    );
 
   if (!cliente) {
     return (
-      <p className="p-6 text-red-600">
-        No se encontró el cliente o hubo un error.
-      </p>
+      <div className="min-h-screen bg-white font-sans">
+        <Header />
+        <p className="p-6 text-red-600">
+          No se encontró el cliente o hubo un error.
+        </p>
+      </div>
     );
   }
 
@@ -130,9 +140,9 @@ export default function EditarClientePage() {
     email: cliente.email || "",
     telefono: cliente.telefono || "",
     tipoDocumentoId: cliente.tipoDocumentoId || "",
-    numeroDocumento: cliente.numeroDocumento || "",
+    numeroDocumento: cliente.numero_documento || "",
     tipoClienteIds: cliente.tiposCliente
-      ? cliente.tiposCliente.map((tc: any) => tc.tipoClienteId)
+      ? cliente.tiposCliente.map((tc: any) => tc.id_tipo_cliente)
       : [],
     descripcion: cliente.descripcion || "",
   };
@@ -144,6 +154,7 @@ export default function EditarClientePage() {
       </div>
 
       <div className="container mx-auto p-4 max-w-5xl">
+
         {/* Volver */}
         <div className="flex items-center gap-3 mb-6">
           <Button

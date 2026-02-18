@@ -244,8 +244,7 @@ export default function ClientesPage() {
                     <td className="px-6 py-5">
                       <span className="inline-flex px-3 py-1 rounded-full text-xs font-semibold bg-[#63bae9]/15 text-[#63bae9]">
                         {c.tiposCliente?.length > 0
-                          ? c.tiposCliente.map((tc: any) => tc.tipoCliente.nombre).join(", ")
-                          : "Sin tipo"}
+                          ? c.tiposCliente.map((tc: any) => tc.nombre).join(", ")                          : "Sin tipo"}
                       </span>
                     </td>
 

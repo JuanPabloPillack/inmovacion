@@ -1,6 +1,6 @@
 // =============================================================
 // Archivo: src/app/(protected)/proveedores/editar/page.tsx
-// Descripción: Editar proveedor (estructura idéntica a Clientes)
+// Descripción: Editar proveedor
 // =============================================================
 
 "use client";
@@ -10,7 +10,10 @@ import { useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
+
 import Header from "@/components/ui/Header";
+import Loading from "@/components/ui/Loading"; // ✅ AGREGADO
+
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
@@ -107,15 +110,24 @@ export default function EditarProveedorPage() {
   };
 
   // ================================
-  // Estados
+  // LOADING PROFESIONAL CONSISTENTE
   // ================================
-  if (loading) return <p className="p-6">Cargando datos...</p>;
+  if (loading)
+    return (
+      <div className="min-h-screen bg-white font-sans">
+        <Header />
+        <Loading message="Cargando datos del proveedor..." />
+      </div>
+    );
 
   if (!proveedor) {
     return (
-      <p className="p-6 text-red-600">
-        No se encontró el proveedor o hubo un error.
-      </p>
+      <div className="min-h-screen bg-white font-sans">
+        <Header />
+        <p className="p-6 text-red-600">
+          No se encontró el proveedor o hubo un error.
+        </p>
+      </div>
     );
   }
 

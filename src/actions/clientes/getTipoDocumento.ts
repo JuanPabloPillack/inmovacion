@@ -10,7 +10,7 @@ export async function getTiposDocumento() {
       select: {
         id_tipo_documento: true,
         nombre: true,
-        descripcion: true, // 👈 IMPORTANTE
+        descripcion: true, 
       },
     });
   } catch (error) {

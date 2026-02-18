@@ -9,6 +9,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 import Header from "@/components/ui/Header";
+import Loading from "@/components/ui/Loading"; // ✅ AGREGADO
+
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
@@ -96,8 +98,11 @@ export default function CrearClientePage() {
     }
   };
 
+  // ✅ MISMO LOADING QUE EN LOS OTROS PAGES
   if (loading) {
-    return <p className="p-6">Cargando datos...</p>;
+    return (
+      <Loading message="Cargando formulario de cliente..." />
+    );
   }
 
   return (

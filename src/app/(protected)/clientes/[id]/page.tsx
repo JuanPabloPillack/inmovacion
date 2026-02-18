@@ -11,6 +11,8 @@ import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 
 import Header from "@/components/ui/Header";
+import Loading from "@/components/ui/Loading"; // ✅ AGREGADO
+
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -58,7 +60,11 @@ export default function ClienteDetallePage() {
     if (id) loadCliente();
   }, [id]);
 
-  if (loading) return <p className="p-6">Cargando datos...</p>;
+  // ✅ MISMO LOADING QUE EN LA LISTA
+  if (loading)
+    return (
+      <Loading message="Cargando detalle del cliente..." />
+    );
 
   if (errorMessage)
     return (
@@ -71,7 +77,11 @@ export default function ClienteDetallePage() {
     );
 
   if (!cliente)
-    return <p className="p-6 text-red-600">Cliente no encontrado.</p>;
+    return (
+      <p className="p-6 text-red-600">
+        Cliente no encontrado.
+      </p>
+    );
 
   return (
     <div className="flex flex-col min-h-screen bg-white font-sans">
@@ -134,13 +144,11 @@ export default function ClienteDetallePage() {
                 value={cliente.tipoDocumento?.nombre}
               />
 
-              {/* 🔥 CORREGIDO: dumero_documento */}
               <Data
                 label="Número de documento"
                 value={cliente.numero_documento}
               />
 
-              {/* 🔥 CORREGIDO: relación N:N */}
               <Data
                 label="Tipo(s) de Cliente"
                 value={
