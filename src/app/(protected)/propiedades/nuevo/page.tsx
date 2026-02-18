@@ -12,6 +12,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
+import Modal from "@/components/ui/Modal";
 
 
 export default function NuevoInmueblePage() {
@@ -28,10 +29,14 @@ interface ModalConfig {
   onCancel?: () => void;
 }
   const [modalOpen, setModalOpen] = useState(false);
-  const [modalConfig, setModalConfig] = useState<ModalConfig>({
+  const [modalConfig, setModalConfig] = useState<{
+    title: string;
+    message: string;
+    variant?: "success" | "error" | "warning" | "info" | "danger";
+    onConfirm?: () => void;
+  }>({
     title: "",
     message: "",
-    variant: "info",
   });
 
   const crearInmuebleMutation = useMutation({
@@ -152,13 +157,22 @@ interface ModalConfig {
       });
 
       if (!res.ok) {
-        let errMsg = "Error al subir imagen";
-        try {
-          const errData = await res.json();
-          errMsg = errData.error || errMsg;
-        } catch {}
-        throw new Error(errMsg);
-      }
+  let errMsg = "Error al subir imagen";
+  try {
+    const errData = await res.json();
+    errMsg = errData.error || errMsg;
+  } catch {}
+
+  setModalConfig({
+    title: "Error",
+    message: errMsg,
+    variant: "error",
+  });
+
+  setModalOpen(true);
+  return;
+}
+
 
       const data = await res.json();
 
@@ -239,32 +253,44 @@ interface ModalConfig {
 
   // 5. Guardar y manejar éxito/error con modal
   try {
-    await crearInmuebleMutation.mutateAsync(payload);
+  await crearInmuebleMutation.mutateAsync(payload);
 
-    // ¡Éxito! → mostrar modal y redirigir solo al confirmar
-    setModalConfig({
-      title: "¡Inmueble creado con éxito!",
-      message: "El inmueble ha sido creado correctamente y ya está disponible en la lista.",
-      variant: "success",
-      onConfirm: () => {
-        setModalOpen(false);
-        router.push("/propiedades"); // o "/inmuebles" según tu ruta
-      },
-      // Opcional: botón "Cancelar" para quedarse en la página
-      onCancel: () => setModalOpen(false),
-    });
+  setModalConfig({
+    title: "Inmueble creado",
+    message: "El inmueble se creó correctamente.",
+    variant: "success",
+    onConfirm: () => {
+      setModalOpen(false);
+      router.push("/propiedades");
+    },
+  });
 
-    setModalOpen(true);
-  } catch (err: any) {
-    // Error → mostrar en modal (ya lo tenés en el catch del submitHandler padre)
-    throw err; // Deja que el catch de FormularioInmueble lo maneje
-  }
+  setModalOpen(true);
+
+} catch (err: any) {
+  setModalConfig({
+    title: "Error",
+    message: err.message || "No se pudo crear el inmueble",
+    variant: "error",
+  });
+
+  setModalOpen(true);
+}
+
 }}
   onCancel={() => router.push("/propiedades")}
 />
 
         </div>
       </main>
+      <Modal
+      isOpen={modalOpen}
+      onClose={() => setModalOpen(false)}
+      title={modalConfig.title}
+      message={modalConfig.message}
+      variant={modalConfig.variant}
+      onConfirm={modalConfig.onConfirm}
+    />
     </div>
   );
 }
