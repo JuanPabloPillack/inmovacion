@@ -1,8 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // ===============================================
 // Archivo: src/app/(protected)/proveedores/[id]/page.tsx
-// Descripción: Vista detallada de un proveedor (leer + editar + eliminar soft)
-// Proyecto: inmovacion (GBS y Asociados)
+// Vista detallada de un proveedor
 // ===============================================
 
 "use client";
@@ -62,7 +61,29 @@ export default function ProveedorDetallePage() {
     loadProveedor().finally(() => setLoading(false));
   }, [session, status]);
 
-  if (loading || !proveedor) return <Loading message="Cargando proveedor..." />;
+  // ==============================
+  // LOADING PROFESIONAL CONSISTENTE
+  // ==============================
+  if (loading)
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <Loading message="Cargando proveedor..." />
+      </div>
+    );
+
+  // ==============================
+  // ERROR / NO ENCONTRADO
+  // ==============================
+  if (!proveedor)
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <p className="p-6 text-red-600">
+          No se encontró el proveedor.
+        </p>
+      </div>
+    );
 
   // ==============================
   // Confirmar eliminación soft
@@ -70,7 +91,7 @@ export default function ProveedorDetallePage() {
   const confirmDelete = async () => {
     try {
       await softDeleteProveedor(id);
-      router.push("/proveedores"); // vuelve a la lista sin mostrarlo
+      router.push("/proveedores");
     } catch (error) {
       console.error("Error eliminando proveedor:", error);
     }
@@ -143,7 +164,6 @@ export default function ProveedorDetallePage() {
         {/* Acciones */}
         <div className="flex gap-4">
 
-          {/* Editar */}
           <Button
             className="bg-[#fcc238] text-[#686363] hover:bg-[#fcc238]/80"
             onClick={() =>
@@ -154,7 +174,6 @@ export default function ProveedorDetallePage() {
             Editar
           </Button>
 
-          {/* Eliminar (soft delete) */}
           <Button
             variant="destructive"
             className="gap-2 bg-red-500/80 hover:bg-red-600"
@@ -164,9 +183,9 @@ export default function ProveedorDetallePage() {
             Eliminar
           </Button>
         </div>
+
       </div>
 
-      {/* Modal de confirmación */}
       <ConfirmationModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}

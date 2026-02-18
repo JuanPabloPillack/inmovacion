@@ -19,6 +19,25 @@ import {
 } from "lucide-react";
 
 // ==========================
+// FORMATO EUROPEO (es-AR)
+// ==========================
+function formatEuropeanNumber(value: string): string {
+
+  // eliminar todo excepto números
+  const digits = value.replace(/\D/g, "");
+
+  if (!digits) return "";
+
+  const number = Number(digits) / 100;
+
+  return new Intl.NumberFormat("es-AR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(number);
+}
+
+
+// ==========================
 // VALIDACIÓN
 // ==========================
 const pagoSchema = z.object({
@@ -31,7 +50,8 @@ const pagoSchema = z.object({
   comprobante: z.string().optional().or(z.literal("")),
 });
 
-type PagoProveedorFormValues = z.infer<typeof pagoSchema>;
+export type PagoProveedorFormValues = z.infer<typeof pagoSchema>;
+
 
 interface Props {
   proveedores: any[];
@@ -74,15 +94,23 @@ export default function PagoProveedorForm({
     onFormDirtyChange?.(isDirty);
   }, [isDirty]);
 
-  const submitHandler = (data: any) => {
-    onSubmit({
-      ...data,
-      proveedorId: Number(data.proveedorId),
-      medioPagoId: Number(data.medioPagoId),
-      estadoPagoId: Number(data.estadoPagoId),
-      importe: Number(data.importe),
-    });
-  };
+  const submitHandler = (data: PagoProveedorFormValues) => {
+
+  const importeNumero = Number(
+    data.importe
+      .replace(/\./g, "") // eliminar miles
+      .replace(",", ".")  // convertir decimal
+  );
+
+  onSubmit({
+    ...data,
+    proveedorId: Number(data.proveedorId),
+    medioPagoId: Number(data.medioPagoId),
+    estadoPagoId: Number(data.estadoPagoId),
+    importe: importeNumero,
+  });
+};
+
 
   return (
     <div className="max-w-3xl mx-auto shadow-xl border-0 bg-white/80 backdrop-blur-sm transition-all duration-300 hover:shadow-2xl rounded-xl">
@@ -113,7 +141,7 @@ export default function PagoProveedorForm({
                 className="h-12 w-full rounded-xl border border-[#969696]/20 bg-slate-50/50 px-3 focus:border-[#63bae9] focus:ring-2 focus:ring-[#63bae9]/20 text-[#686363]"
               >
                 <option value="">Seleccionar</option>
-                {proveedores.map((p) => (
+                {(proveedores ?? []).map((p) => (
                   <option key={p.id_proveedor} value={p.id_proveedor}>
                     {p.nombre_razon_social}
                   </option>
@@ -138,7 +166,7 @@ export default function PagoProveedorForm({
                 className="h-12 w-full rounded-xl border border-[#969696]/20 bg-slate-50/50 px-3 focus:border-[#63bae9] focus:ring-2 focus:ring-[#63bae9]/20 text-[#686363]"
               >
                 <option value="">Seleccionar</option>
-                {mediosPago.map((m) => (
+                {(mediosPago ?? []).map((m) => (
                   <option key={m.id_medio_pago} value={m.id_medio_pago}>
                     {m.nombre}
                   </option>
@@ -163,7 +191,8 @@ export default function PagoProveedorForm({
                 className="h-12 w-full rounded-xl border border-[#969696]/20 bg-slate-50/50 px-3 focus:border-[#63bae9] focus:ring-2 focus:ring-[#63bae9]/20 text-[#686363]"
               >
                 <option value="">Seleccionar</option>
-                {estadosPago.map((e) => (
+                {(estadosPago ?? []).map((e) => (
+
                   <option key={e.id_estado_pago} value={e.id_estado_pago}>
                     {e.nombre}
                   </option>
@@ -184,11 +213,16 @@ export default function PagoProveedorForm({
                 Importe *
               </label>
               <Input
-                type="number"
-                step="0.01"
+                type="text"
+                inputMode="decimal"
                 {...register("importe")}
+                onChange={(e) => {
+                  const formatted = formatEuropeanNumber(e.target.value);
+                  e.target.value = formatted;
+                }}
                 className="h-12 rounded-xl border-[#969696]/20 focus:border-[#63bae9] focus:ring-[#63bae9]/20 bg-slate-50/50"
               />
+
               {errors.importe && (
                 <p className="text-red-500 text-sm flex items-center gap-1 mt-1">
                   <AlertCircle className="h-3 w-3" />

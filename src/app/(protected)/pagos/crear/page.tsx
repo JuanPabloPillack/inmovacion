@@ -10,6 +10,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 import Header from "@/components/ui/Header";
+import Loading from "@/components/ui/Loading"; // ✅ AGREGADO
+
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
@@ -42,11 +44,17 @@ export default function CrearPagoProveedorPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isDirty, setIsDirty] = useState(false);
 
+  // ---------------------------
+  // Validar sesión
+  // ---------------------------
   useEffect(() => {
     if (status === "loading") return;
     if (!session) router.push("/");
   }, [status, session, router]);
 
+  // ---------------------------
+  // Cargar catálogos
+  // ---------------------------
   useEffect(() => {
     async function loadData() {
       try {
@@ -59,6 +67,9 @@ export default function CrearPagoProveedorPage() {
         setProveedores(await proveRes.json());
         setMediosPago(await medioRes.json());
         setEstadosPago(await estadoRes.json());
+      } catch (e) {
+        console.error("Error cargando datos:", e);
+        setErrorMessage("No se pudieron cargar los datos del formulario.");
       } finally {
         setLoading(false);
       }
@@ -67,8 +78,24 @@ export default function CrearPagoProveedorPage() {
     loadData();
   }, []);
 
+  // ---------------------------
+  // LOADING PROFESIONAL CONSISTENTE
+  // ---------------------------
+  if (loading)
+    return (
+      <div className="min-h-screen bg-white font-sans">
+        <Header />
+        <Loading message="Cargando formulario de pago..." />
+      </div>
+    );
+
+  // ---------------------------
+  // Submit
+  // ---------------------------
   const handleSubmit = async (data: PagoProveedorFormValues) => {
     try {
+      setErrorMessage(null);
+
       const res = await fetch("/api/pagos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -90,18 +117,20 @@ export default function CrearPagoProveedorPage() {
 
       setShowSuccess(true);
       setTimeout(() => router.push("/pagos"), 1500);
+
     } catch (e: any) {
       setErrorMessage(e.message);
     }
   };
 
-  if (loading) return <p className="p-6">Cargando datos...</p>;
-
   return (
     <div className="flex flex-col min-h-screen bg-white font-sans">
+
       <Header />
 
       <div className="container mx-auto p-4 max-w-5xl">
+
+        {/* Volver */}
         <div className="flex items-center gap-3 mb-6">
           <Button
             asChild
@@ -123,13 +152,17 @@ export default function CrearPagoProveedorPage() {
           </div>
         </div>
 
+        {/* Éxito */}
         {showSuccess && (
           <Alert className="mb-6 bg-[#63bae9]/10 border-[#63bae9]/30">
             <CheckCircle className="h-4 w-4 text-[#63bae9]" />
-            <AlertDescription>Pago registrado correctamente.</AlertDescription>
+            <AlertDescription>
+              Pago registrado correctamente.
+            </AlertDescription>
           </Alert>
         )}
 
+        {/* Error */}
         {errorMessage && (
           <Alert variant="destructive" className="mb-6">
             <AlertCircle className="h-4 w-4" />
@@ -137,6 +170,7 @@ export default function CrearPagoProveedorPage() {
           </Alert>
         )}
 
+        {/* Formulario */}
         {!showSuccess && (
           <PagoProveedorForm
             proveedores={proveedores}
@@ -147,6 +181,7 @@ export default function CrearPagoProveedorPage() {
             onFormDirtyChange={setIsDirty}
           />
         )}
+
       </div>
     </div>
   );

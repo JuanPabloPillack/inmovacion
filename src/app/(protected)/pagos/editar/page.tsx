@@ -1,7 +1,6 @@
 // ===============================================
 // Archivo: src/app/(protected)/pagos/editar/page.tsx
 // Descripción: Editar pago a proveedor existente
-// Proyecto: inmovacion (GBS y Asociados)
 // ===============================================
 
 "use client";
@@ -69,18 +68,28 @@ export default function EditarPagoProveedorPage() {
           getPagoById(id_pago),
         ]);
 
-        setProveedores(await resProv.json());
-        setMediosPago(await resMedios.json());
-        setEstadosPago(await resEstados.json());
+        const provJson = await resProv.json();
+        const mediosJson = await resMedios.json();
+        const estadosJson = await resEstados.json();
+
+        setProveedores(Array.isArray(provJson) ? provJson : provJson.data ?? []);
+        setMediosPago(Array.isArray(mediosJson) ? mediosJson : mediosJson.data ?? []);
+        setEstadosPago(Array.isArray(estadosJson) ? estadosJson : estadosJson.data ?? []);
+
 
         if (!pagoDB) {
           setErrorMessage("No se encontró el pago.");
           return;
         }
 
-        const importeString = pagoDB.importe?.toString() ?? "";
+        const importeString = pagoDB.importe
+          ? new Intl.NumberFormat("es-AR", {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          }).format(pagoDB.importe)
+          : "";
 
-        // No pasamos fecha_pago al formulario → se mantiene automática
+
         setPago({
           proveedorId: pagoDB.proveedorId.toString(),
           medioPagoId: pagoDB.medioPagoId.toString(),
@@ -102,15 +111,23 @@ export default function EditarPagoProveedorPage() {
     loadData();
   }, [id_pago]);
 
+  // ---------------------------
+  // LOADING PROFESIONAL CONSISTENTE
+  // ---------------------------
   if (loading)
-    return <Loading message="Cargando datos del pago..." />;
+    return (
+      <div className="min-h-screen bg-white font-sans">
+        <Header />
+        <Loading message="Cargando datos del pago..." />
+      </div>
+    );
 
   // ---------------------------
   // Guardar cambios
   // ---------------------------
   const handleSubmit = async (data: PagoProveedorFormValues) => {
     setSaving(true);
-    setErrorMessage(null); // limpiar errores previos
+    setErrorMessage(null);
 
     try {
       const result = await updatePago(id_pago, {
@@ -118,10 +135,13 @@ export default function EditarPagoProveedorPage() {
         medioPagoId: Number(data.medioPagoId),
         estadoPagoId: Number(data.estadoPagoId),
         concepto: data.concepto,
-        importe: Number(data.importe),
+        importe: Number(
+          data.importe
+            .replace(/\./g, "")
+            .replace(",", ".")
+        ),
         responsable: data.responsable,
         comprobante: data.comprobante || null,
-        // No enviamos fecha_pago (se mantiene original)
       });
 
       if (!result.success)
@@ -144,6 +164,7 @@ export default function EditarPagoProveedorPage() {
 
       <div className="container mx-auto px-4 py-6 max-w-4xl">
 
+        {/* Volver */}
         <div className="flex items-center gap-3 mb-6">
           <Button
             asChild
@@ -183,18 +204,19 @@ export default function EditarPagoProveedorPage() {
           </Alert>
         )}
 
-        {/* Form ALWAYS visible while no success */}
+        {/* Formulario */}
         {!showSuccess && (
           <PagoProveedorForm
             proveedores={proveedores}
             mediosPago={mediosPago}
             estadosPago={estadosPago}
             modo="editar"
-            initialData={pago} 
+            initialData={pago}
             onSubmit={handleSubmit}
             onFormDirtyChange={setIsDirty}
           />
         )}
+
       </div>
     </div>
   );
