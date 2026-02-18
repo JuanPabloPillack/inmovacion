@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // src/app/(protected)/contratos/editar/[id]/page.tsx
 'use client';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -15,12 +16,12 @@ interface Cliente {
   apellido?: string;
   email?: string;
   telefono?: string;
-  tipo_documento?: string;
+  numero_documento?: string;
   descripcion?: string;
   activo?: boolean;
-  tipoCliente?: { nombre: string };
+  tipoDocumento?: { nombre: string };
+  tiposCliente?: { tipoCliente: { nombre: string } }[];
 }
-
 interface Inmueble {
   id_inmueble: number;
   titulo: string;
@@ -330,37 +331,41 @@ useEffect(() => {
       if (lowerCampo.includes('locador_apellido') && stableSelectedLocador?.apellido) return stableSelectedLocador.apellido || '';
       if (lowerCampo.includes('locador_email') && stableSelectedLocador?.email) return stableSelectedLocador.email || '';
       if (lowerCampo.includes('locador_telefono') && stableSelectedLocador?.telefono) return stableSelectedLocador.telefono || '';
-      if (lowerCampo.includes('locador_tipo_documento') && stableSelectedLocador?.tipo_documento) return stableSelectedLocador.tipo_documento || '';
+if (lowerCampo.includes('locador_tipo_documento') && stableSelectedLocador?.tipoDocumento?.nombre) return stableSelectedLocador.tipoDocumento.nombre;
+if (lowerCampo.includes('locador_numero_documento') && stableSelectedLocador?.numero_documento) return stableSelectedLocador.numero_documento;
       if (lowerCampo.includes('locador_descripcion') && stableSelectedLocador?.descripcion) return stableSelectedLocador.descripcion || '';
       if (lowerCampo.includes('locador_activo') && stableSelectedLocador?.activo !== undefined) return stableSelectedLocador.activo.toString();
-      if (lowerCampo.includes('locador_tipo') && stableSelectedLocador?.tipoCliente?.nombre) return stableSelectedLocador.tipoCliente.nombre || '';
+if (lowerCampo.includes('locador_tipo') && stableSelectedLocador?.tiposCliente?.[0]?.tipoCliente?.nombre) return stableSelectedLocador.tiposCliente[0].tipoCliente.nombre;
 
       if (lowerCampo.includes('locatario_nombre') && stableSelectedLocatario?.nombre) return stableSelectedLocatario.nombre;
       if (lowerCampo.includes('locatario_apellido') && stableSelectedLocatario?.apellido) return stableSelectedLocatario.apellido || '';
       if (lowerCampo.includes('locatario_email') && stableSelectedLocatario?.email) return stableSelectedLocatario.email || '';
       if (lowerCampo.includes('locatario_telefono') && stableSelectedLocatario?.telefono) return stableSelectedLocatario.telefono || '';
-      if (lowerCampo.includes('locatario_tipo_documento') && stableSelectedLocatario?.tipo_documento) return stableSelectedLocatario.tipo_documento || '';
+if (lowerCampo.includes('locatario_tipo_documento') && stableSelectedLocatario?.tipoDocumento?.nombre) return stableSelectedLocatario.tipoDocumento.nombre;
+if (lowerCampo.includes('locatario_numero_documento') && stableSelectedLocatario?.numero_documento) return stableSelectedLocatario.numero_documento;
       if (lowerCampo.includes('locatario_descripcion') && stableSelectedLocatario?.descripcion) return stableSelectedLocatario.descripcion || '';
       if (lowerCampo.includes('locatario_activo') && stableSelectedLocatario?.activo !== undefined) return stableSelectedLocatario.activo.toString();
-      if (lowerCampo.includes('locatario_tipo') && stableSelectedLocatario?.tipoCliente?.nombre) return stableSelectedLocatario.tipoCliente.nombre || '';
+      if (lowerCampo.includes('locatario_tipo') && stableSelectedLocatario?.tiposCliente?.[0]?.tipoCliente?.nombre) return stableSelectedLocatario.tiposCliente[0].tipoCliente.nombre;
 
       if (lowerCampo.includes('comprador_nombre') && stableSelectedComprador?.nombre) return stableSelectedComprador.nombre;
       if (lowerCampo.includes('comprador_apellido') && stableSelectedComprador?.apellido) return stableSelectedComprador.apellido || '';
       if (lowerCampo.includes('comprador_email') && stableSelectedComprador?.email) return stableSelectedComprador.email || '';
       if (lowerCampo.includes('comprador_telefono') && stableSelectedComprador?.telefono) return stableSelectedComprador.telefono || '';
-      if (lowerCampo.includes('comprador_tipo_documento') && stableSelectedComprador?.tipo_documento) return stableSelectedComprador.tipo_documento || '';
+      if (lowerCampo.includes('comprador_tipo_documento') && stableSelectedComprador?.tipoDocumento?.nombre) return stableSelectedComprador.tipoDocumento.nombre;
+if (lowerCampo.includes('comprador_numero_documento') && stableSelectedComprador?.numero_documento) return stableSelectedComprador.numero_documento;
       if (lowerCampo.includes('comprador_descripcion') && stableSelectedComprador?.descripcion) return stableSelectedComprador.descripcion || '';
       if (lowerCampo.includes('comprador_activo') && stableSelectedComprador?.activo !== undefined) return stableSelectedComprador.activo.toString();
-      if (lowerCampo.includes('comprador_tipo') && stableSelectedComprador?.tipoCliente?.nombre) return stableSelectedComprador.tipoCliente.nombre || '';
+if (lowerCampo.includes('comprador_tipo') && stableSelectedComprador?.tiposCliente?.[0]?.tipoCliente?.nombre) return stableSelectedComprador.tiposCliente[0].tipoCliente.nombre;
 
       if (lowerCampo.includes('vendedor_nombre') && stableSelectedVendedor?.nombre) return stableSelectedVendedor.nombre;
       if (lowerCampo.includes('vendedor_apellido') && stableSelectedVendedor?.apellido) return stableSelectedVendedor.apellido || '';
       if (lowerCampo.includes('vendedor_email') && stableSelectedVendedor?.email) return stableSelectedVendedor.email || '';
       if (lowerCampo.includes('vendedor_telefono') && stableSelectedVendedor?.telefono) return stableSelectedVendedor.telefono || '';
-      if (lowerCampo.includes('vendedor_tipo_documento') && stableSelectedVendedor?.tipo_documento) return stableSelectedVendedor.tipo_documento || '';
+ if (lowerCampo.includes('vendedor_tipo_documento') && stableSelectedVendedor?.tipoDocumento?.nombre) return stableSelectedVendedor.tipoDocumento.nombre;
+if (lowerCampo.includes('vendedor_numero_documento') && stableSelectedVendedor?.numero_documento) return stableSelectedVendedor.numero_documento;
       if (lowerCampo.includes('vendedor_descripcion') && stableSelectedVendedor?.descripcion) return stableSelectedVendedor.descripcion || '';
       if (lowerCampo.includes('vendedor_activo') && stableSelectedVendedor?.activo !== undefined) return stableSelectedVendedor.activo.toString();
-      if (lowerCampo.includes('vendedor_tipo') && stableSelectedVendedor?.tipoCliente?.nombre) return stableSelectedVendedor.tipoCliente.nombre || '';
+if (lowerCampo.includes('vendedor_tipo') && stableSelectedVendedor?.tiposCliente?.[0]?.tipoCliente?.nombre) return stableSelectedVendedor.tiposCliente[0].tipoCliente.nombre;
 
       if (lowerCampo.includes('inmueble_titulo') && stableSelectedInmueble?.titulo) return stableSelectedInmueble.titulo;
       if (lowerCampo.includes('inmueble_superficie_total') && stableSelectedInmueble?.superficie_total) return stableSelectedInmueble.superficie_total.toString();

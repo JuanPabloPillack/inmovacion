@@ -47,12 +47,18 @@ export async function GET(req: NextRequest) {
       if (precioMax) where.precio.lte = toDecimalOrUndefined(precioMax);
     }
 
-    if (archivadoParam !== null) {
-  where.archivado = archivadoParam === "true";
-} else {
-  // por defecto solo mostrar activos
+    // archivado puede ser: true, false o all
+if (archivadoParam === "true") {
+  where.archivado = true;
+} 
+else if (archivadoParam === "false") {
   where.archivado = false;
+} 
+else {
+  // all → no filtrar
+  // no agregamos where.archivado
 }
+
 
     const [inmuebles, total] = await Promise.all([
       db.inmueble.findMany({

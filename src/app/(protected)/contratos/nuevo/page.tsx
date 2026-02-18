@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // src/app/(protected)/contratos/nuevo/page.tsx
 'use client';
 import { useState, useEffect, useCallback } from 'react';
@@ -14,10 +15,11 @@ interface Cliente {
   apellido?: string;
   email?: string;
   telefono?: string;
-  tipo_documento?: string;
+  numero_documento?: string;
   descripcion?: string;
   activo?: boolean;
-  tipoCliente?: { nombre: string };
+  tipoDocumento?: { nombre: string };          // ← era tipo_documento: string
+  tiposCliente?: { tipoCliente: { nombre: string } }[];  // ← era tipoCliente: { nombre }
 }
 
 interface Inmueble {
@@ -189,18 +191,21 @@ setInmuebles(inmueblesList);
 
   useEffect(() => {
     const fetchCliente = async (id: number | undefined, setCliente: (cliente: Cliente | null) => void) => {
-      if (id) {
-        try {
-          const res = await fetch(`/api/clientes/${id}`);
-          if (!res.ok) throw new Error('Error al cargar cliente');
-          setCliente(await res.json());
-        } catch (err) {
-          setError('Error al cargar cliente');
-        }
-      } else {
-        setCliente(null);
-      }
-    };
+  if (id) {
+    try {
+      const res = await fetch(`/api/clientes/${id}`);
+      if (!res.ok) throw new Error('Error al cargar cliente');
+      
+      const data = await res.json();
+      console.log('CLIENTE DATA:', JSON.stringify(data, null, 2));  // ← agregá esto
+      setCliente(data);
+    } catch (err) {
+      setError('Error al cargar cliente');
+    }
+  } else {
+    setCliente(null);
+  }
+};
     fetchCliente(id_locador, setSelectedLocador);
     fetchCliente(id_locatario, setSelectedLocatario);
     fetchCliente(id_comprador, setSelectedComprador);
@@ -246,41 +251,51 @@ useEffect(() => {
   const autoCompleteField = useCallback((campo: string): string | null => {
     const lowerCampo = campo.toLowerCase();
 
-    if (lowerCampo.includes('locador_nombre') && selectedLocador?.nombre) return selectedLocador.nombre;
-    if (lowerCampo.includes('locador_apellido') && selectedLocador?.apellido) return selectedLocador.apellido || '';
-    if (lowerCampo.includes('locador_email') && selectedLocador?.email) return selectedLocador.email || '';
-    if (lowerCampo.includes('locador_telefono') && selectedLocador?.telefono) return selectedLocador.telefono || '';
-    if (lowerCampo.includes('locador_tipo_documento') && selectedLocador?.tipo_documento) return selectedLocador.tipo_documento || '';
-    if (lowerCampo.includes('locador_descripcion') && selectedLocador?.descripcion) return selectedLocador.descripcion || '';
-    if (lowerCampo.includes('locador_activo') && selectedLocador?.activo !== undefined) return selectedLocador.activo.toString();
-    if (lowerCampo.includes('locador_tipo') && selectedLocador?.tipoCliente?.nombre) return selectedLocador.tipoCliente.nombre || '';
+// LOCADOR
+if (lowerCampo.includes('locador_nombre') && selectedLocador?.nombre) return selectedLocador.nombre;
+if (lowerCampo.includes('locador_apellido') && selectedLocador?.apellido) return selectedLocador.apellido;
+if (lowerCampo.includes('locador_email') && selectedLocador?.email) return selectedLocador.email;
+if (lowerCampo.includes('locador_telefono') && selectedLocador?.telefono) return selectedLocador.telefono;
+if (lowerCampo.includes('locador_tipo_documento') && selectedLocador?.tipoDocumento?.nombre) return selectedLocador.tipoDocumento.nombre;
+if (lowerCampo.includes('locador_numero_documento') && selectedLocador?.numero_documento) return selectedLocador.numero_documento;
+if (lowerCampo.includes('locador_descripcion') && selectedLocador?.descripcion) return selectedLocador.descripcion;
+if (lowerCampo.includes('locador_activo') && selectedLocador?.activo !== undefined) return selectedLocador.activo.toString();
+if (lowerCampo.includes('locador_tipo') && selectedLocador?.tiposCliente?.[0]?.tipoCliente?.nombre) return selectedLocador.tiposCliente[0].tipoCliente.nombre;
 
-    if (lowerCampo.includes('locatario_nombre') && selectedLocatario?.nombre) return selectedLocatario.nombre;
-    if (lowerCampo.includes('locatario_apellido') && selectedLocatario?.apellido) return selectedLocatario.apellido || '';
-    if (lowerCampo.includes('locatario_email') && selectedLocatario?.email) return selectedLocatario.email || '';
-    if (lowerCampo.includes('locatario_telefono') && selectedLocatario?.telefono) return selectedLocatario.telefono || '';
-    if (lowerCampo.includes('locatario_tipo_documento') && selectedLocatario?.tipo_documento) return selectedLocatario.tipo_documento || '';
-    if (lowerCampo.includes('locatario_descripcion') && selectedLocatario?.descripcion) return selectedLocatario.descripcion || '';
-    if (lowerCampo.includes('locatario_activo') && selectedLocatario?.activo !== undefined) return selectedLocatario.activo.toString();
-    if (lowerCampo.includes('locatario_tipo') && selectedLocatario?.tipoCliente?.nombre) return selectedLocatario.tipoCliente.nombre || '';
+   // LOCATARIO
+if (lowerCampo.includes('locatario_nombre') && selectedLocatario?.nombre) return selectedLocatario.nombre;
+if (lowerCampo.includes('locatario_apellido') && selectedLocatario?.apellido) return selectedLocatario.apellido;
+if (lowerCampo.includes('locatario_email') && selectedLocatario?.email) return selectedLocatario.email;
+if (lowerCampo.includes('locatario_telefono') && selectedLocatario?.telefono) return selectedLocatario.telefono;
+if (lowerCampo.includes('locatario_tipo_documento') && selectedLocatario?.tipoDocumento?.nombre) return selectedLocatario.tipoDocumento.nombre;
+if (lowerCampo.includes('locatario_numero_documento') && selectedLocatario?.numero_documento) return selectedLocatario.numero_documento;
+if (lowerCampo.includes('locatario_descripcion') && selectedLocatario?.descripcion) return selectedLocatario.descripcion;
+if (lowerCampo.includes('locatario_activo') && selectedLocatario?.activo !== undefined) return selectedLocatario.activo.toString();
+if (lowerCampo.includes('locatario_tipo') && selectedLocatario?.tiposCliente?.[0]?.tipoCliente?.nombre) return selectedLocatario.tiposCliente[0].tipoCliente.nombre;
 
-    if (lowerCampo.includes('comprador_nombre') && selectedComprador?.nombre) return selectedComprador.nombre;
-    if (lowerCampo.includes('comprador_apellido') && selectedComprador?.apellido) return selectedComprador.apellido || '';
-    if (lowerCampo.includes('comprador_email') && selectedComprador?.email) return selectedComprador.email || '';
-    if (lowerCampo.includes('comprador_telefono') && selectedComprador?.telefono) return selectedComprador.telefono || '';
-    if (lowerCampo.includes('comprador_tipo_documento') && selectedComprador?.tipo_documento) return selectedComprador.tipo_documento || '';
-    if (lowerCampo.includes('comprador_descripcion') && selectedComprador?.descripcion) return selectedComprador.descripcion || '';
-    if (lowerCampo.includes('comprador_activo') && selectedComprador?.activo !== undefined) return selectedComprador.activo.toString();
-    if (lowerCampo.includes('comprador_tipo') && selectedComprador?.tipoCliente?.nombre) return selectedComprador.tipoCliente.nombre || '';
 
-    if (lowerCampo.includes('vendedor_nombre') && selectedVendedor?.nombre) return selectedVendedor.nombre;
-    if (lowerCampo.includes('vendedor_apellido') && selectedVendedor?.apellido) return selectedVendedor.apellido || '';
-    if (lowerCampo.includes('vendedor_email') && selectedVendedor?.email) return selectedVendedor.email || '';
-    if (lowerCampo.includes('vendedor_telefono') && selectedVendedor?.telefono) return selectedVendedor.telefono || '';
-    if (lowerCampo.includes('vendedor_tipo_documento') && selectedVendedor?.tipo_documento) return selectedVendedor.tipo_documento || '';
-    if (lowerCampo.includes('vendedor_descripcion') && selectedVendedor?.descripcion) return selectedVendedor.descripcion || '';
-    if (lowerCampo.includes('vendedor_activo') && selectedVendedor?.activo !== undefined) return selectedVendedor.activo.toString();
-    if (lowerCampo.includes('vendedor_tipo') && selectedVendedor?.tipoCliente?.nombre) return selectedVendedor.tipoCliente.nombre || '';
+    // COMPRADOR
+if (lowerCampo.includes('comprador_nombre') && selectedComprador?.nombre) return selectedComprador.nombre;
+if (lowerCampo.includes('comprador_apellido') && selectedComprador?.apellido) return selectedComprador.apellido;
+if (lowerCampo.includes('comprador_email') && selectedComprador?.email) return selectedComprador.email;
+if (lowerCampo.includes('comprador_telefono') && selectedComprador?.telefono) return selectedComprador.telefono;
+if (lowerCampo.includes('comprador_tipo_documento') && selectedComprador?.tipoDocumento?.nombre) return selectedComprador.tipoDocumento.nombre;
+if (lowerCampo.includes('comprador_numero_documento') && selectedComprador?.numero_documento) return selectedComprador.numero_documento;
+if (lowerCampo.includes('comprador_descripcion') && selectedComprador?.descripcion) return selectedComprador.descripcion;
+if (lowerCampo.includes('comprador_activo') && selectedComprador?.activo !== undefined) return selectedComprador.activo.toString();
+if (lowerCampo.includes('comprador_tipo') && selectedComprador?.tiposCliente?.[0]?.tipoCliente?.nombre) return selectedComprador.tiposCliente[0].tipoCliente.nombre;
+
+
+   // VENDEDOR
+if (lowerCampo.includes('vendedor_nombre') && selectedVendedor?.nombre) return selectedVendedor.nombre;
+if (lowerCampo.includes('vendedor_apellido') && selectedVendedor?.apellido) return selectedVendedor.apellido;
+if (lowerCampo.includes('vendedor_email') && selectedVendedor?.email) return selectedVendedor.email;
+if (lowerCampo.includes('vendedor_telefono') && selectedVendedor?.telefono) return selectedVendedor.telefono;
+if (lowerCampo.includes('vendedor_tipo_documento') && selectedVendedor?.tipoDocumento?.nombre) return selectedVendedor.tipoDocumento.nombre;
+if (lowerCampo.includes('vendedor_numero_documento') && selectedVendedor?.numero_documento) return selectedVendedor.numero_documento;
+if (lowerCampo.includes('vendedor_descripcion') && selectedVendedor?.descripcion) return selectedVendedor.descripcion;
+if (lowerCampo.includes('vendedor_activo') && selectedVendedor?.activo !== undefined) return selectedVendedor.activo.toString();
+if (lowerCampo.includes('vendedor_tipo') && selectedVendedor?.tiposCliente?.[0]?.tipoCliente?.nombre) return selectedVendedor.tiposCliente[0].tipoCliente.nombre;
 
     if (lowerCampo.includes('inmueble_titulo') && selectedInmueble?.titulo) return selectedInmueble.titulo;
     if (lowerCampo.includes('inmueble_superficie_total') && selectedInmueble?.superficie_total) return selectedInmueble.superficie_total.toString();

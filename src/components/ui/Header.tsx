@@ -15,16 +15,17 @@ export default function Header() {
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const titulo = "GBS & Asociados"; // ← este texto lo podés cambiar dinámicamente
+
 
   const modules: [string, string, any][] = [
     ["Clientes", "/clientes", User],
     ["Propiedades", "/propiedades", Home],
     ["Proveedores", "/proveedores", CreditCard],
-    ["Pagos", "/pagos", CreditCard],
+    ["Pagos a Proveedores", "/pagos", CreditCard],
     ["Rendiciones", "/rendiciones", FileText],
     ["Contratos", "/contratos", FileSignature],
-    ["Servicios", "/servicios", Settings],
-    ["Cobranzas", "/cobranzas", DollarSign],
+    ["Cobranzas a Clientes", "/cobranzas", DollarSign],
     ["Usuarios", "/usuarios", Users],
   ];
 
@@ -45,39 +46,39 @@ export default function Header() {
         className="
           sticky top-0 z-50
           w-full
-          bg-white/95 backdrop-blur-sm
-          border-b shadow-md
+          border-b shadow-sm
           transition-all duration-300
         "
-        style={{ borderColor: '#e5e7eb' }}
+        style={{
+          background: 'linear-gradient(to right, rgba(99,186,233,0.05), rgba(252,194,56,0.05), transparent)',
+          backdropFilter: 'blur(8px)',           // ← mantiene el efecto vidrio
+          WebkitBackdropFilter: 'blur(8px)',
+          borderColor: '#e5e7eb',
+        }}
       >
         <div className="px-8 py-4 flex justify-between items-center">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl" style={{ backgroundColor: '#e8f6fc' }}>
+            <button
+              onClick={() => router.push("/")}
+              className="p-2 rounded-xl transition-all duration-200"
+              style={{ backgroundColor: '#e8f6fc' }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = '#d8eef9';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = '#e8f6fc';
+              }}
+            >
               <Home className="w-6 h-6" style={{ color: '#63bae9' }} />
-            </div>
+            </button>
+
             <span className="text-xl font-bold" style={{ color: '#686363' }}>
-              {/* Podés poner acá el nombre si querés: GBS y Asociados */}
+              {titulo}
             </span>
           </div>
 
-          <div className="flex-1 flex justify-center">
-            <button
-              onClick={() => router.push("/")}
-              className="px-6 py-2 rounded-lg font-medium transition-all duration-200"
-              style={{ color: '#686363' }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = '#e8f6fc';
-                e.currentTarget.style.color = '#63bae9';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = 'transparent';
-                e.currentTarget.style.color = '#686363';
-              }}
-            >
-              Inicio
-            </button>
-          </div>
+
+          
 
           <div className="flex items-center gap-3">
             {session ? (
