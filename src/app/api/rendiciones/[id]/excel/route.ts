@@ -125,24 +125,26 @@ export async function GET(
        ---------------------------------------------------------------------- */
     const cobranzasForExcel = rend.cobranzas.map((c) => {
 
-        const montoBase = Number(c.monto ?? 0);
+        let ipcValor = ipc.valor;
 
-      // ✅ IPC correcto (valor congelado en DB)
-      const montoActualizado =
-        (c as any).monto_actualizado != null
-          ? Number((c as any).monto_actualizado)
-          : montoBase;
+if (ipcValor != null && ipcValor > 1) {
+  ipcValor = ipcValor / 100;
+}
 
-      const totalCobrar = montoActualizado;
+const montoBase = Number(c.monto ?? 0);
 
-      const totalCobr =
-        c.pagado
-          ? totalCobrar
-          : 0;
+const totalCobrar =
+  ipcValor != null
+    ? Number((montoBase * (1 + ipcValor)).toFixed(2))
+    : montoBase;
 
-      const aCobrar =
-        totalCobrar - totalCobr;
+const totalCobr =
+  c.pagado
+    ? totalCobrar
+    : 0;
 
+const aCobrar =
+  totalCobrar - totalCobr;
 
         const unFunc = c.inmueble
           ? `${c.inmueble.ubicacion?.direccion || ""}: ${
