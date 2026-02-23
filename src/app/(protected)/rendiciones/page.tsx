@@ -4,7 +4,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client'; 
 
-import { FileText, PlusCircle, Trash2, Pencil, FileSignature, User, Filter, X, Calendar, AlertCircle, ArrowLeft, Home, CheckCircle, XCircle, MapPin } from 'lucide-react';
+import { FileText, PlusCircle, Trash2, Pencil, FileSignature, User, Filter, X, Calendar, AlertCircle, ArrowLeft, Home, CheckCircle, XCircle, MapPin, MoreVertical } from 'lucide-react';
 // 🔹 Iconos SVG usados en los botones y elementos visuales.
 
 import Header from '@/components/ui/Header';
@@ -337,7 +337,43 @@ const total = data?.total ?? 0;
   };
 
 
+const handleDownloadExcel = async (id: number) => {
+  try {
+    const res = await fetch(`/api/rendiciones/${id}/excel`);
 
+    if (!res.ok) throw new Error();
+
+    const blob = await res.blob();
+
+    const contentDisposition = res.headers.get("Content-Disposition");
+    let filename = `Rendicion_${id}.xlsx`;
+
+    if (contentDisposition) {
+      const match = contentDisposition.match(/filename="?(.+?)"?$/);
+      if (match?.[1]) {
+        filename = match[1];
+      }
+    }
+
+    const url = window.URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+
+    window.URL.revokeObjectURL(url);
+  } catch {
+    setModalConfig({
+      title: "Error",
+      message: "No se pudo descargar el Excel.",
+      variant: "error",
+    });
+    setModalOpen(true);
+  }
+};
 
 
   return (
@@ -663,20 +699,72 @@ const total = data?.total ?? 0;
                           </div>
 
                           {/* Botones visibles de Modificar y Eliminar */}
-                          <div className="flex gap-3">
-                            <button
-                              onClick={() => router.push(`/rendiciones/modificar/${r.id_rendicion}`)}
-                              className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-100 text-blue-700 hover:bg-blue-200 transition"
-                            >
-                              <Pencil className="w-4 h-4" /> Modificar
-                            </button>
-                            <button
-                              onClick={() => handleDelete(r)}
-                              className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-red-100 text-red-700 hover:bg-red-200 transition"
-                            >
-                              <Trash2 className="w-4 h-4" /> Eliminar
-                            </button>
-                          </div>
+                          <div className="relative">
+  {/* BOTÓN 3 PUNTOS PRO */}
+  <button
+    onClick={() =>
+      setOpenMenuId(
+        openMenuId === r.id_rendicion ? null : r.id_rendicion
+      )
+    }
+    className="p-2.5 rounded-lg bg-white border border-gray-200 
+               hover:border-[#63bae9] hover:bg-[#63bae9]/5 
+               transition-colors shadow-sm"
+  >
+    <MoreVertical className="w-5 h-5 text-[#686363]" />
+  </button>
+
+  {/* MENÚ ESTILO CONTRATOS */}
+  {openMenuId === r.id_rendicion && (
+    <div className="absolute right-0 mt-2 w-56 bg-white 
+                    border border-gray-200 rounded-xl 
+                    shadow-2xl z-50 overflow-hidden
+                    animate-in fade-in zoom-in-95 duration-200">
+
+      {/* DESCARGAR */}
+      <button
+        onClick={() => {
+          handleDownloadExcel(r.id_rendicion);
+          setOpenMenuId(null);
+        }}
+        className="flex items-center gap-2 px-4 py-3 text-sm w-full text-left
+                   text-[#686363] hover:bg-[#63bae9] hover:text-white 
+                   transition-colors"
+      >
+        <FileText className="w-4 h-4" />
+        Descargar Excel
+      </button>
+
+      {/* MODIFICAR */}
+      <button
+        onClick={() => {
+          router.push(`/rendiciones/modificar/${r.id_rendicion}`);
+          setOpenMenuId(null);
+        }}
+        className="flex items-center gap-2 px-4 py-3 text-sm w-full text-left
+                   text-[#686363] hover:bg-[#10b981] hover:text-white 
+                   transition-colors"
+      >
+        <Pencil className="w-4 h-4" />
+        Modificar
+      </button>
+
+      {/* ELIMINAR */}
+      <button
+        onClick={() => {
+          handleDelete(r);
+          setOpenMenuId(null);
+        }}
+        className="flex items-center gap-2 px-4 py-3 text-sm w-full text-left
+                   text-[#686363] hover:bg-[#ef4444] hover:text-white 
+                   transition-colors"
+      >
+        <Trash2 className="w-4 h-4" />
+        Eliminar
+      </button>
+    </div>
+  )}
+</div>
                         </div>
                       </div>
 
